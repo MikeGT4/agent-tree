@@ -1,0 +1,527 @@
+// © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
+import type {
+  AgentTreeChoices,
+  AgentTreeCounts,
+  AgentTreeGroup,
+  AgentTreeLogSource,
+  AgentTreeNode,
+  AgentTreePhase,
+  AgentTreeState,
+  AgentTreeStatus,
+} from '../types'
+
+export const LOG_LIMIT = 40
+export const LOG_EXCERPT = 60
+export const DESCRIPTION_LIMIT = 80
+export const LABEL_LIMIT = 40
+export const ADVISOR_CALLS_KEPT = 20
+
+export type AdvisorUse = { id: string; startedAt: number; endedAt?: number }
+
+export type StepInput = {
+  agentId?: string
+  model: string
+  effort?: string | number
+  contextTokens?: number
+  advisorUses?: readonly AdvisorUse[]
+}
+
+export type SpawnInput = {
+  agentId: string
+  parentAgentId?: string
+  agentType: string
+  description: string
+  model?: string
+  background: boolean
+  fork: boolean
+  workflowRunId?: string
+}
+
+export type CompleteInput = {
+  agentId?: string
+  answer: string
+  reason: string
+  isAborted: boolean
+  durationMs: number
+}
+
+type WorkflowGroup = Extract<AgentTreeGroup, { kind: 'workflow' }>
+
+const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
+
+const ENGINE_STATUS: Record<string, AgentTreeStatus> = {
+  completed: 'done',
+  failed: 'failed',
+  killed: 'stopped',
+}
+
+export const MODEL_CHOICES = [
+  { family: 'haiku', label: 'Haiku', id: 'claude-haiku-5-5' },
+  { family: 'sonnet', label: 'Sonnet', id: 'claude-sonnet-5-5' },
+  { family: 'opus', label: 'Opus', id: 'claude-opus-5-5' },
+  { family: 'fable', label: 'Fable', id: 'claude-fable-5-1' },
+] as const
+
+export const NEW_AGENTS = 'new'
+
+export function choicesOf(s: AgentTreeState): AgentTreeChoices {
+  return s.choices ?? { agents: {} }
+}
+
+export function familyLabel(family: string | undefined): string {
+  return MODEL_CHOICES.find(c => c.family === family)?.label ?? 'Standard'
+}
+
+export function pickerOpened(s: AgentTreeState, target: string | undefined): AgentTreeState {
+  return { ...s, choices: { ...choicesOf(s), picker: target } }
+}
+
+export function chosen(s: AgentTreeState, target: string, family: string | undefined, now: number): AgentTreeState {
+  const current = choicesOf(s)
+  const agents = { ...current.agents }
+  let choices: AgentTreeChoices
+  let text: string
+  if (target === NEW_AGENTS) {
+    choices = { ...current, newAgents: family, agents, picker: undefined }
+    text = `Modell für neue Unteragenten: ${familyLabel(family)}`
+  } else {
+    if (family === undefined) delete agents[target]
+    else agents[target] = family
+    choices = { ...current, agents, picker: undefined }
+    const node = findAgent(s, target)
+    text = `Modell für ${node ? node.type : 'Unteragent'}: ${familyLabel(family)}`
+  }
+  return logged({ ...s, choices }, 'session', text, now)
+}
+
+export function stepModelFor(s: AgentTreeState, family: string): string {
+  const seen = [s.main.model, ...s.agents.map(n => n.model)]
+  const match = seen.find(model => model !== undefined && new RegExp(`claude-${family}-\\d`).test(model))
+  return match ?? MODEL_CHOICES.find(c => c.family === family)?.id ?? family
+}
+
+export function createTree(now: number): AgentTreeState {
+  return {
+    startedAt: now,
+    main: { active: false, turn: 0, returned: 0, returnedTokens: 0 },
+    agents: [],
+    advisor: { total: 0, fromMain: 0, fromAgents: 0, calls: [] },
+    log: [],
+  }
+}
+
+const AGENT_MESSAGE = /^\s*<(agent-message|task-notification)\b/
+
+function logged(s: AgentTreeState, source: AgentTreeLogSource, text: string, at: number): AgentTreeState {
+  const log = [...s.log]
+  let place = log.length
+  while (place > 0 && (log[place - 1]?.at ?? 0) > at) place -= 1
+  log.splice(place, 0, { at, source, text })
+  return { ...s, log: log.slice(-LOG_LIMIT) }
+}
+
+function findAgent(s: AgentTreeState, id: string | undefined): AgentTreeNode | undefined {
+  return id === undefined ? undefined : s.agents.find(n => n.id === id)
+}
+
+function withAgent(s: AgentTreeState, id: string, change: (n: AgentTreeNode) => AgentTreeNode): AgentTreeState {
+  return { ...s, agents: s.agents.map(n => (n.id === id ? change(n) : n)) }
+}
+
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g
+
+const SECRET =
+  /\b(?:ghp_|gho_|ghu_|ghs_|github_pat_|sk-|xox[abprs]-|AKIA|eyJ)[A-Za-z0-9_\-.]{6,}|\bBearer\s+\S+|\b(?:password|passwort|token|secret|api[_-]?key)\s*[=:]\s*\S+/gi
+
+function oneLine(text: string): string {
+  return text.replace(CONTROL, ' ').replace(SECRET, '•••').replace(/\s+/g, ' ').trim()
+}
+
+export function counts(s: AgentTreeState): AgentTreeCounts {
+  const tally: AgentTreeCounts = { running: 0, done: 0, failed: 0, stopped: 0 }
+  for (const n of s.agents) tally[n.status] += 1
+  return tally
+}
+
+export function phaseOf(s: AgentTreeState): AgentTreePhase {
+  if (s.agents.some(n => n.status === 'running')) return 'delegating'
+  if (!s.main.active) return 'idle'
+  return s.main.returned > 0 ? 'reviewing' : 'planning'
+}
+
+export function withAdvisorModel(s: AgentTreeState, model: string | undefined): AgentTreeState {
+  return { ...s, advisor: { ...s.advisor, model } }
+}
+
+export function turnStarted(s: AgentTreeState, input: { text: string; agentId?: string }, now: number): AgentTreeState {
+  if (input.agentId !== undefined) {
+    const node = findAgent(s, input.agentId)
+    if (!node || node.status === 'running') return s
+    const reopened = withAgent(s, node.id, n => ({ ...n, status: 'running', endedAt: undefined, startedAt: now }))
+    return logged(reopened, 'agent', `${node.type} fortgesetzt: ${node.description}`, now)
+  }
+  if (AGENT_MESSAGE.test(input.text) || input.text.trim() === '') {
+    return { ...s, main: { ...s.main, active: true, resumed: true, turnStartedAt: now } }
+  }
+  const turn = s.main.turn + 1
+  const excerpt = oneLine(input.text).slice(0, LOG_EXCERPT)
+  const next: AgentTreeState = {
+    ...s,
+    startedAt: s.startedAt || now,
+    main: { ...s.main, active: true, resumed: false, turn, turnStartedAt: now, roundStartedAt: now, returned: 0, returnedTokens: 0 },
+  }
+  return logged(next, 'main', `Runde ${turn}: ${excerpt}`, now)
+}
+
+function advised(s: AgentTreeState, use: AdvisorUse, agentId: string | undefined, now: number): AgentTreeState {
+  const durationMs = use.endedAt === undefined ? undefined : Math.max(0, use.endedAt - use.startedAt)
+  const known = s.advisor.calls.find(c => c.id === use.id)
+  if (known) {
+    if (known.durationMs !== undefined || durationMs === undefined) return s
+    const calls = s.advisor.calls.map(c => (c.id === use.id ? { ...c, durationMs } : c))
+    return { ...s, advisor: { ...s.advisor, calls } }
+  }
+  const fromMain = agentId === undefined
+  const advisor = {
+    ...s.advisor,
+    total: s.advisor.total + 1,
+    fromMain: s.advisor.fromMain + (fromMain ? 1 : 0),
+    fromAgents: s.advisor.fromAgents + (fromMain ? 0 : 1),
+    calls: [...s.advisor.calls, { id: use.id, at: use.startedAt, durationMs, agentId }].slice(-ADVISOR_CALLS_KEPT),
+  }
+  const where = fromMain ? 'Hauptsitzung' : findAgent(s, agentId)?.type ?? 'Unteragent'
+  return logged({ ...s, advisor }, 'advisor', `gefragt aus ${where}`, Math.min(use.startedAt, now))
+}
+
+export function stepped(s: AgentTreeState, input: StepInput, now: number): AgentTreeState {
+  const effort = input.effort === undefined ? undefined : String(input.effort)
+  let next = s
+  if (input.agentId === undefined) {
+    next = {
+      ...next,
+      main: {
+        ...next.main,
+        model: input.model,
+        effort: effort ?? next.main.effort,
+        contextTokens: input.contextTokens ?? next.main.contextTokens,
+      },
+    }
+  } else if (findAgent(next, input.agentId)) {
+    next = withAgent(next, input.agentId, n => ({
+      ...n,
+      model: input.model,
+      effort: effort ?? n.effort,
+      contextTokens: input.contextTokens ?? n.contextTokens,
+    }))
+  }
+  for (const use of input.advisorUses ?? []) next = advised(next, use, input.agentId, now)
+  return next
+}
+
+export const ORPHANS_KEPT = 20
+
+function returnedTo(s: AgentTreeState, node: AgentTreeNode, answerTokens: number): AgentTreeState {
+  if (node.parentId !== undefined) return s
+  return {
+    ...s,
+    main: { ...s.main, returned: s.main.returned + 1, returnedTokens: s.main.returnedTokens + answerTokens },
+  }
+}
+
+export function spawned(s: AgentTreeState, input: SpawnInput, now: number): AgentTreeState {
+  const existing = findAgent(s, input.agentId)
+  if (existing) {
+    const resumed = withAgent(s, existing.id, n => ({
+      ...n,
+      parentId: input.parentAgentId ?? n.parentId,
+      model: input.model ?? n.model,
+      status: 'running',
+      startedAt: now,
+      endedAt: undefined,
+    }))
+    return logged(resumed, 'agent', `${existing.type} fortgesetzt: ${existing.description}`, now)
+  }
+  const orphan = s.orphans?.[input.agentId]
+  const node: AgentTreeNode = {
+    id: input.agentId,
+    parentId: input.parentAgentId,
+    type: input.fork ? 'Fork' : input.agentType,
+    description: oneLine(input.description).slice(0, DESCRIPTION_LIMIT),
+    model: input.model,
+    background: input.background,
+    fork: input.fork,
+    workflowRunId: input.workflowRunId,
+    status: orphan?.status ?? 'running',
+    startedAt: now,
+    endedAt: orphan?.at,
+    answerTokens: orphan?.answerTokens,
+    toolCount: 0,
+  }
+  const runSeen = node.workflowRunId !== undefined && s.agents.some(n => n.workflowRunId === node.workflowRunId)
+  const orphans = { ...s.orphans }
+  delete orphans[node.id]
+  let next: AgentTreeState = {
+    ...s,
+    startedAt: s.startedAt || now,
+    orphans,
+    agents: [...s.agents, node],
+  }
+  if (orphan) next = returnedTo(next, node, orphan.answerTokens)
+  if (runSeen) return next
+  const text = node.workflowRunId === undefined ? `${node.type} gestartet: ${node.description}` : `Workflow gestartet: ${node.description}`
+  return logged(next, 'agent', text, now)
+}
+
+export function toolRan(s: AgentTreeState, input: { agentId?: string; label: string }, now: number): AgentTreeState {
+  if (input.agentId === undefined || !findAgent(s, input.agentId)) return s
+  return withAgent(s, input.agentId, n => ({ ...n, toolCount: n.toolCount + 1, lastTool: input.label }))
+}
+
+function statusOf(input: CompleteInput): AgentTreeStatus {
+  if (input.isAborted || input.reason === 'aborted') return 'stopped'
+  if (input.reason === 'refusal' || input.reason === 'error') return 'failed'
+  return 'done'
+}
+
+const STATUS_WORD: Record<AgentTreeStatus, string> = {
+  running: 'läuft',
+  done: 'fertig',
+  failed: 'fehlgeschlagen',
+  stopped: 'gestoppt',
+}
+
+const MAIN_END_WORD: Record<AgentTreeStatus, string> = {
+  running: 'läuft',
+  done: 'fertig',
+  failed: 'fehlgeschlagen',
+  stopped: 'abgebrochen',
+}
+
+export function completed(s: AgentTreeState, input: CompleteInput, now: number): AgentTreeState {
+  const status = statusOf(input)
+  if (input.agentId === undefined) {
+    const next: AgentTreeState = { ...s, main: { ...s.main, active: false } }
+    if (s.main.resumed) return next
+    return logged(next, 'main', `Hauptsitzung ${MAIN_END_WORD[status]} nach ${fmtDuration(input.durationMs)}`, now)
+  }
+  const answerTokens = estimateTokens(input.answer)
+  const node = findAgent(s, input.agentId)
+  if (!node) {
+    const kept = Object.entries({ ...s.orphans, [input.agentId]: { status, at: now, answerTokens } }).slice(-ORPHANS_KEPT)
+    return { ...s, orphans: Object.fromEntries(kept) }
+  }
+  if (node.status !== 'running') return s
+  let next = withAgent(s, node.id, n => ({ ...n, status, endedAt: now, answerTokens }))
+  next = returnedTo(next, node, answerTokens)
+  if (node.workflowRunId !== undefined) {
+    const stillRunning = next.agents.some(n => n.workflowRunId === node.workflowRunId && n.status === 'running')
+    if (stillRunning) return next
+    const size = next.agents.filter(n => n.workflowRunId === node.workflowRunId).length
+    return logged(next, 'agent', `Workflow fertig: ${size} Agenten`, now)
+  }
+  const detail = status === 'done' ? ` nach ${fmtDuration(input.durationMs)} · ↑ ${fmtTokens(answerTokens)}` : ''
+  return logged(next, 'agent', `${node.type} ${STATUS_WORD[status]}${detail}`, now)
+}
+
+export function measured(s: AgentTreeState, input: { tokens?: number; window: number; percent?: number }): AgentTreeState {
+  return {
+    ...s,
+    main: {
+      ...s.main,
+      contextTokens: input.tokens ?? s.main.contextTokens,
+      window: input.window,
+      percent: input.percent ?? s.main.percent,
+    },
+  }
+}
+
+export function synced(s: AgentTreeState, list: readonly { id: string; status: string }[], now: number): AgentTreeState {
+  let next = s
+  for (const entry of list) {
+    const status = ENGINE_STATUS[entry.status]
+    const node = findAgent(next, entry.id)
+    if (!status || !node || node.status !== 'running') continue
+    next = withAgent(next, entry.id, n => ({ ...n, status, endedAt: n.endedAt ?? now }))
+  }
+  return next
+}
+
+export type ListedAgent = { id: string; description: string; type: string; status: string; parentId?: string }
+
+const LISTED_STATUS: Record<string, AgentTreeStatus> = {
+  pending: 'running',
+  running: 'running',
+  waiting: 'running',
+  idle: 'running',
+  completed: 'done',
+  failed: 'failed',
+  killed: 'stopped',
+}
+
+export function adopted(s: AgentTreeState, list: readonly ListedAgent[], now: number): AgentTreeState {
+  const known = new Set(s.agents.map(n => n.id))
+  const fresh: AgentTreeNode[] = []
+  for (const entry of list) {
+    const status = LISTED_STATUS[entry.status]
+    if (status !== 'running' || known.has(entry.id)) continue
+    known.add(entry.id)
+    fresh.push({
+      id: entry.id,
+      parentId: entry.parentId,
+      type: entry.type,
+      description: oneLine(entry.description).slice(0, DESCRIPTION_LIMIT),
+      background: false,
+      fork: false,
+      status,
+      startedAt: now,
+      endedAt: status === 'running' ? undefined : now,
+      toolCount: 0,
+    })
+  }
+  if (fresh.length === 0) return s
+  const next: AgentTreeState = { ...s, startedAt: s.startedAt || now, agents: [...s.agents, ...fresh] }
+  const count = fresh.length === 1 ? '1 Agent' : `${fresh.length} Agenten`
+  return logged(next, 'agent', `${count} aus der Agentenliste übernommen`, now)
+}
+
+export function trimmed(s: AgentTreeState, maxAgents: number): AgentTreeState {
+  const limit = Math.max(1, Math.floor(maxAgents))
+  if (s.agents.length <= limit) return s
+  const finished = s.agents
+    .filter(n => n.status !== 'running')
+    .sort((a, b) => (a.endedAt ?? a.startedAt) - (b.endedAt ?? b.startedAt))
+  const dropped = new Set(finished.slice(0, s.agents.length - limit).map(n => n.id))
+  return { ...s, agents: s.agents.filter(n => !dropped.has(n.id)) }
+}
+
+export function groups(s: AgentTreeState): AgentTreeGroup[] {
+  const all: AgentTreeGroup[] = []
+  const runs = new Map<string, WorkflowGroup>()
+  for (const node of s.agents) {
+    if (node.workflowRunId === undefined) {
+      all.push({ kind: 'agent', node })
+      continue
+    }
+    let run = runs.get(node.workflowRunId)
+    if (!run) {
+      run = {
+        kind: 'workflow',
+        runId: node.workflowRunId,
+        size: 0,
+        running: 0,
+        done: 0,
+        failed: 0,
+        stopped: 0,
+        startedAt: node.startedAt,
+        lastDescription: '',
+      }
+      runs.set(node.workflowRunId, run)
+      all.push(run)
+    }
+    run.size += 1
+    run[node.status] += 1
+    run.lastDescription = node.description
+  }
+  const isRunning = (g: AgentTreeGroup) => (g.kind === 'agent' ? g.node.status === 'running' : g.running > 0)
+  const recency = (g: AgentTreeGroup) => (g.kind === 'agent' ? g.node.endedAt ?? g.node.startedAt : g.startedAt)
+  return [...all.filter(isRunning), ...all.filter(g => !isRunning(g)).sort((a, b) => recency(b) - recency(a))]
+}
+
+function decimal(value: number, digits: number): string {
+  return value.toFixed(digits).replace(/\.0$/, '').replace('.', ',')
+}
+
+export function fmtTokens(n: number | undefined): string {
+  if (n === undefined || !Number.isFinite(n)) return ''
+  if (n < 1000) return String(Math.round(n))
+  const thousands = n / 1000
+  const thousandDigits = thousands < 100 ? 1 : 0
+  if (Number(thousands.toFixed(thousandDigits)) < 1000) return `${decimal(thousands, thousandDigits)}k`
+  const millions = n / 1_000_000
+  return `${decimal(millions, millions < 100 ? 1 : 0)}M`
+}
+
+export function fmtShortDuration(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000))
+  if (seconds < 60) return `${seconds} s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}:${String(seconds % 60).padStart(2, '0')}`
+  return `${Math.floor(minutes / 60)} h ${minutes % 60}`
+}
+
+export function typeLabel(type: string): string {
+  return type.split(':').at(-1) || type
+}
+
+export function fmtDuration(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000))
+  if (seconds < 60) return `${seconds} s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}:${String(seconds % 60).padStart(2, '0')} min`
+  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`
+}
+
+export function effortBar(effort: string | number | undefined): string {
+  const level = EFFORT_LEVELS.indexOf(String(effort ?? '')) + 1
+  if (level === 0) return ''
+  return '▮'.repeat(level) + '▯'.repeat(EFFORT_LEVELS.length - level)
+}
+
+export function clockTime(ms: number): string {
+  try {
+    return new Intl.DateTimeFormat('de-DE', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(ms)
+  } catch {
+    return new Date(ms).toISOString().slice(11, 19)
+  }
+}
+
+export function estimateTokens(text: string | undefined): number {
+  return Math.ceil((text ?? '').length / 4)
+}
+
+export function modelLabel(model: string | undefined): string {
+  if (!model) return ''
+  const capital = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
+  const plain = model.replace(/\[[^\]]*\]$/, '')
+  const modern = /claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?!\d)/.exec(plain)
+  if (modern) return `${capital(modern[1] ?? '')} ${modern[2]}${modern[3] ? `.${modern[3]}` : ''}`
+  const legacy = /claude-(\d+)(?:-(\d+))?-([a-z]+)/.exec(plain)
+  if (legacy) return `${capital(legacy[3] ?? '')} ${legacy[1]}${legacy[2] ? `.${legacy[2]}` : ''}`
+  if (/^[a-z]+$/.test(plain)) return capital(plain)
+  return model
+}
+
+const TOOL_WORDS: Record<string, string> = {
+  SubagentHandback: 'Antwort übergeben',
+}
+
+const BARE_TOOLS = new Set(['Grep', 'Glob', 'WebSearch', 'ToolSearch'])
+
+export function toolLabel(tool: string, input: Record<string, unknown>): string {
+  const word = TOOL_WORDS[tool]
+  if (word) return word
+  const text = (value: unknown) => (typeof value === 'string' ? oneLine(value) : '')
+  const fileName = (value: unknown) => text(value).split('/').filter(Boolean).at(-1) ?? ''
+  const program = (value: unknown) => fileName(text(value).split(' ')[0])
+  const host = (value: unknown) => {
+    try {
+      return new URL(text(value)).host
+    } catch {
+      return ''
+    }
+  }
+  const detail = BARE_TOOLS.has(tool)
+    ? ''
+    : text(input.description) ||
+      fileName(input.file_path) ||
+      fileName(input.notebook_path) ||
+      program(input.command) ||
+      text(input.skill) ||
+      host(input.url)
+  return (detail ? `${tool} ${detail}` : tool).slice(0, LABEL_LIMIT)
+}

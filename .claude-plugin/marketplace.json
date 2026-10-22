@@ -1,0 +1,13 @@
+{
+  "name": "agent-tree",
+  "description": "Seitenleiste mit dem Agentenbaum einer Sitzung als Kästen",
+  "owner": {
+    "name": "Mike Pollow, Digitalroots"
+  },
+  "plugins": [
+    {
+      "name": "agent-tree",
+      "source": "./"
+    }
+  ]
+}
