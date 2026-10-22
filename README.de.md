@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-Seitenleiste fürs Terminal, die die Agenten einer Sitzung als Kästen zeichnet: Hauptsitzung, Unteragenten, Rückweg zur Hauptsitzung, Berater und Sitzungsprotokoll.
+Seitenleiste für Claude Code im Terminal, die die Agenten einer Sitzung als Kästen zeichnet: Hauptsitzung, Unteragenten, Rückweg, Berater und Sitzungsprotokoll.
 
 ![Agent Tree](docs/agent-tree-de.png)
 
