@@ -10,7 +10,7 @@ Seitenleiste fürs Terminal, die die Agenten einer Sitzung als Kästen zeichnet:
 /plugin install agent-tree --marketplace MikeGT4/agent-tree
 ```
 
-Voraussetzung ist eine Version mit Mod-Schnittstelle, 2.1.287 oder neuer.
+Getestet mit den Versionen 2.1.307 und 2.1.308, Voraussetzung ist die Mod-Schnittstelle.
 
 ## Bedienung
 
