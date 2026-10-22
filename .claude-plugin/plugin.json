@@ -1,8 +1,8 @@
 {
   "_copyright": "© 2026 Mike Pollow, Digitalroots. MIT-Lizenz.",
   "name": "agent-tree",
-  "version": "0.1.0",
-  "description": "Seitenleiste mit dem Agentenbaum der Sitzung als Kästen: Hauptsitzung, Unteragenten, Rückweg, Berater und Sitzungsprotokoll.",
+  "version": "0.2.0",
+  "description": "Side pane that draws the session's agents as boxes: main session, sub-agents, the way back, advisor and session log.",
   "author": {
     "name": "Mike Pollow, Digitalroots"
   },
@@ -12,27 +12,38 @@
   "userConfig": {
     "columns": {
       "type": "number",
-      "title": "Breite",
-      "description": "Spalten der angedockten Leiste, eine gezogene Breite gewinnt",
+      "title": "Width",
+      "description": "Columns of the docked pane; a width dragged by hand wins",
       "default": 90
     },
     "maxAgents": {
       "type": "number",
-      "title": "Behaltene Agenten",
-      "description": "Wie viele Unteragenten der Baum behält, die ältesten fertigen fallen zuerst",
+      "title": "Agents kept",
+      "description": "How many sub-agents the tree keeps; the oldest finished ones go first",
       "default": 30
     },
     "openOnStart": {
       "type": "boolean",
-      "title": "Beim Start öffnen",
-      "description": "Die Leiste beim Sitzungsstart öffnen",
+      "title": "Open on start",
+      "description": "Open the pane when a session starts",
       "default": false
     },
     "animate": {
       "type": "boolean",
-      "title": "Bewegung",
-      "description": "Laufanzeige und Fluss zeichnen, solange Agenten arbeiten",
+      "title": "Motion",
+      "description": "Draw the spinner and the flow while agents work",
       "default": true
+    },
+    "language": {
+      "type": "string",
+      "title": "Language",
+      "description": "Labels in German or English; auto follows the language setting",
+      "options": [
+        "auto",
+        "de",
+        "en"
+      ],
+      "default": "auto"
     }
   }
 }

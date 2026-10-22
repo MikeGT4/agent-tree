@@ -1,23 +1,25 @@
 # Agent Tree
 
-Seitenleiste fürs Terminal, die die Agenten einer Sitzung als Kästen zeichnet: Hauptsitzung, Unteragenten, Rückweg zur Hauptsitzung, Berater und Sitzungsprotokoll.
+[Deutsch](README.de.md)
+
+A side pane for the terminal that draws a session's agents as a tree of boxes: main session, sub-agents, the way back, the advisor and a session log.
 
 ![Agent Tree](docs/agent-tree.png)
 
-## Installation
+## Install
 
 ```
 /plugin install agent-tree --marketplace MikeGT4/agent-tree
 ```
 
-Getestet mit den Versionen 2.1.307 und 2.1.308, Voraussetzung ist die Mod-Schnittstelle.
+Tested with versions 2.1.307 and 2.1.308; it needs the mod interface.
 
-## Bedienung
+## Use
 
-`/agent-tree` öffnet die Leiste, mit `stop` dahinter schließt sie sich, mit `clear` beginnt der Baum neu. Das Modell für neue Unteragenten dieser Sitzung wählt ein Klick auf „Modell ▾“. Wer auf das Modell in einem laufenden Kasten klickt, stellt diesen Agenten für seine nächsten Schritte um. Ab 84 Spalten Breite steht der Berater in einer eigenen Spalte.
+`/agent-tree` opens the pane, `/agent-tree stop` closes it, `/agent-tree clear` starts afresh. Click a type for its task, tools and latest answer, and to stop it. Clicking a model switches a running agent; "Model" sets it for new sub-agents. Boxes carry a timeline bar, the main box the session's cost. Keys: ctrl+x tab focuses the pane, m model, 0 to 4 pick, x close, s stop.
 
-Im Konfigurationsmenü stehen Breite, Zahl der Agenten, Öffnen beim Start und Bewegung.
+Settings: width, agents kept, open on start, motion, language (auto, de, en).
 
-## Lizenz
+## License
 
 MIT, © 2026 Mike Pollow, Digitalroots

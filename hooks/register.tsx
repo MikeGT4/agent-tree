@@ -8,23 +8,33 @@ import {
   adopted,
   choicesOf,
   chosen,
+  closed,
   completed,
   counts,
   createTree,
+  detailLoaded,
+  detailOpened,
+  isStopping,
   measured,
   phaseOf,
   pickerOpened,
   spawned,
   stepModelFor,
   stepped,
+  stopCancelled,
+  stopRequested,
+  stopSent,
   synced,
   toolLabel,
   toolRan,
   trimmed,
   turnStarted,
+  wasStopSent,
   withAdvisorModel,
 } from './model.ts'
 import { drawTree, statusText } from './view.tsx'
+import { resolveLang, wordsFor } from './words.ts'
+import type { Lang } from './words.ts'
 
 const PANE = 'agent-tree'
 const COMMAND = 'agent-tree'
@@ -32,12 +42,16 @@ const TITLE = 'Agent Tree'
 const SHAPE = 'agent-tree-1'
 const INLINE_ROWS = 40
 const FRAME_MS = 250
+const HANDBACK = 'SubagentHandback'
 
 const tree = atom({ plugin: 'agent-tree', key: 'tree' } as const, createTree(0), { shape: SHAPE })
 const frame = atom({ plugin: 'agent-tree', key: 'frame' } as const, 0)
 
 let ticker: Timer | undefined
 let animate = true
+let lang: Lang = 'en'
+let stoppingIds = new Set<string>()
+let stopSentIds = new Set<string>()
 
 function busy(s: AgentTreeState): boolean {
   return counts(s).running > 0 || phaseOf(s) === 'reviewing'
@@ -69,14 +83,24 @@ function agentLimit(value: unknown): number {
   return Math.min(200, Math.max(5, n))
 }
 
+function handbackId(): string {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let id = 'toolu_01'
+  for (let i = 0; i < 22; i++) id += letters[Math.floor(Math.random() * letters.length)]
+  return id
+}
+
 async function clock($: EngineInterface): Promise<number> {
   return $.clock.now().catch(() => Date.now())
 }
 
-async function change($: EngineInterface, apply: (s: AgentTreeState) => AgentTreeState): Promise<void> {
+async function change($: EngineInterface, apply: (s: AgentTreeState) => AgentTreeState): Promise<AgentTreeState> {
   const next = await update($, tree, apply)
-  $.ui.status(statusText(next))
+  stoppingIds = new Set(next.stopping ?? [])
+  stopSentIds = new Set(next.stopSent ?? [])
+  $.ui.status(statusText(next, lang))
   keepTicking($, next)
+  return next
 }
 
 async function catchUp($: EngineInterface, now: number, keep: number): Promise<void> {
@@ -84,16 +108,39 @@ async function catchUp($: EngineInterface, now: number, keep: number): Promise<v
   await change($, s => trimmed(synced(adopted(s, list, now), list, now), keep))
 }
 
+type Found = { task?: string; answer?: string; denied?: boolean }
+
+function summarize(rows: unknown): Found {
+  if (!Array.isArray(rows)) return { denied: true }
+  const messages = rows.filter(
+    (m): m is { role: string; text: string } => typeof m === 'object' && m !== null && typeof m.text === 'string',
+  )
+  const task = messages.find(m => m.role === 'user' && m.text.trim() !== '')?.text
+  const answer = [...messages].reverse().find(m => m.role === 'assistant' && m.text.trim() !== '')?.text
+  return { task, answer }
+}
+
+async function openDetail($: EngineInterface, agentId: string): Promise<void> {
+  const s = await change($, t => detailOpened(t, agentId))
+  if (s.detail?.agentId !== agentId || s.detail.state !== 'loading') return
+  const rows = await $.session.messages({ agentId }).catch(() => undefined)
+  await change($, t => detailLoaded(t, agentId, summarize(rows)))
+}
+
 export const register: Register = (on, options) => {
   const columns = paneColumns(options.columns)
   const keep = agentLimit(options.maxAgents)
   const openOnStart = options.openOnStart === true
   animate = options.animate !== false
+  lang = resolveLang(options.language, undefined)
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
+    if (options.language !== 'de' && options.language !== 'en') {
+      lang = resolveLang(options.language, await $.settings.read({ key: 'language' }).catch(() => undefined))
+    }
     await $.command
-      .register({ name: COMMAND, description: 'Agentenbaum der Sitzung als Kästen (stop, clear)', argumentHint: '[stop|clear]', immediate: true })
+      .register({ name: COMMAND, description: wordsFor(lang).commandDescription, argumentHint: '[stop|clear]', immediate: true })
       .catch(() => undefined)
     const advisorModel = await $.settings.read({ key: 'advisorModel' }).catch(() => undefined)
     await change($, s => withAdvisorModel(s, typeof advisorModel === 'string' ? advisorModel : undefined)).catch(() => undefined)
@@ -103,25 +150,26 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: COMMAND }, async ($, e) => {
+    const w = wordsFor(lang)
     const arg = e.args.trim().toLowerCase()
     if (arg === 'stop' || arg === 'close') {
       await $.ui.close({ id: PANE }).catch(() => undefined)
-      return { text: `${TITLE} geschlossen` }
+      return { text: w.closedText }
     }
     const now = await clock($)
     if (arg === 'clear') {
       await change($, s => withAdvisorModel(createTree(now), s.advisor.model))
-      return { text: `${TITLE} geleert` }
+      return { text: w.cleared }
     }
     await catchUp($, now, keep)
     try {
       await $.ui.open({ id: PANE, title: TITLE, focus: true, columns, rows: INLINE_ROWS })
     } catch (err) {
-      return { text: `${TITLE}: Leiste nicht geöffnet: ${String(err)}` }
+      return { text: w.notOpened(String(err)) }
     }
     const s = await read($, tree)
-    return { text: `${TITLE} geöffnet · ${s.agents.length} Agenten bisher · /${COMMAND} stop schließt` }
-  }).catch(() => ({ text: `${TITLE}: Befehl gescheitert` }))
+    return { text: w.opened(s.agents.length) }
+  }).catch(() => ({ text: wordsFor(lang).commandFailed }))
 
   on('turn.start', async ($, e, next) => {
     const result = await next(e)
@@ -131,7 +179,28 @@ export const register: Register = (on, options) => {
   })
 
   on('turn.step', async function* ($, e, next) {
-    const before = e.agentId ? await read($, tree) : undefined
+    const agentId = e.agentId
+    const before = agentId ? await read($, tree) : undefined
+    if (agentId && before && isStopping(before, agentId)) {
+      const report = wordsFor(lang).stopAnswer(before.agents.find(n => n.id === agentId)?.toolCount ?? 0)
+      const first = !wasStopSent(before, agentId)
+      if (first) await change($, s => stopSent(s, agentId)).catch(() => undefined)
+      const stopReason = first ? ('tool_use' as const) : ('end_turn' as const)
+      yield { kind: 'text' as const, index: 0, text: report }
+      if (first) {
+        yield { kind: 'tool' as const, index: 1, id: handbackId(), name: HANDBACK }
+        yield { kind: 'input' as const, index: 1, json: JSON.stringify({ message: report }) }
+      }
+      yield { kind: 'stop' as const, stopReason, usage: null }
+      return {
+        turnId: e.turnId,
+        index: e.index,
+        answer: report,
+        toolUses: first ? [{ name: HANDBACK, input: { message: report } }] : [],
+        stopReason,
+        usage: null,
+      }
+    }
     const family = before && e.agentId ? choicesOf(before).agents[e.agentId] : undefined
     const model = before && family ? stepModelFor(before, family) : undefined
     const result = yield* next(model ? { ...e, model } : e)
@@ -144,7 +213,11 @@ export const register: Register = (on, options) => {
       .map(use => ({ id: use.id, startedAt: use.startedAt, endedAt: use.endedAt }))
     const now = await clock($)
     await change($, s =>
-      stepped(s, { agentId: e.agentId, model: model ?? e.model, effort: e.effort, contextTokens, advisorUses }, now),
+      stepped(
+        s,
+        { agentId: e.agentId, answer: result.answer, model: model ?? e.model, effort: e.effort, contextTokens, advisorUses },
+        now,
+      ),
     ).catch(() => undefined)
     return result
   })
@@ -165,6 +238,7 @@ export const register: Register = (on, options) => {
               parentAgentId: e.parentAgentId,
               agentType: e.subagentType,
               description: e.description,
+              prompt: e.prompt,
               model: result.model,
               background: e.background,
               fork: e.fork,
@@ -182,6 +256,14 @@ export const register: Register = (on, options) => {
   on('tool.call', async ($, e, next) => {
     const agentId = e.agentId
     if (!agentId) return next(e)
+    if (stoppingIds.has(agentId)) {
+      if (e.tool !== HANDBACK) {
+        const current = await read($, tree)
+        return { deny: wordsFor(lang).stopAnswer(current.agents.find(n => n.id === agentId)?.toolCount ?? 0) }
+      }
+      if (stopSentIds.has(agentId)) return next(e)
+      await change($, s => stopCancelled(s, agentId)).catch(() => undefined)
+    }
     const label = toolLabel(String(e.tool), e as unknown as Record<string, unknown>)
     const noted = (async () => {
       const known = (await read($, tree)).agents.some(n => n.id === agentId)
@@ -206,10 +288,10 @@ export const register: Register = (on, options) => {
 
   on('session.measure', async ($, e, next) => {
     const result = await next(e)
-    if (e.changed.includes('context')) {
-      await change($, s => measured(s, { tokens: e.context.tokens, window: e.context.window, percent: e.context.percent })).catch(
-        () => undefined,
-      )
+    if (e.changed.includes('context') || e.changed.includes('cost')) {
+      await change($, s =>
+        measured(s, { tokens: e.context.tokens, window: e.context.window, percent: e.context.percent, costUsd: e.cost?.usd }),
+      ).catch(() => undefined)
     }
     return result
   })
@@ -228,15 +310,21 @@ export const register: Register = (on, options) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const s = await read($, tree)
     const tick = animate ? await read($, frame) : 0
+    const now = await clock($)
+    const ignore = () => undefined
     const actions = {
-      pick: (target: string) => void change($, t => pickerOpened(t, target)).catch(() => undefined),
+      pick: (target: string) => void change($, t => pickerOpened(t, target)).catch(ignore),
       choose: (family: string | undefined) =>
-        void change($, t => chosen(t, choicesOf(t).picker ?? NEW_AGENTS, family, Date.now())).catch(() => undefined),
-      close: () => void change($, t => pickerOpened(t, undefined)).catch(() => undefined),
+        void change($, t => chosen(t, choicesOf(t).picker ?? NEW_AGENTS, family, Date.now())).catch(ignore),
+      close: () => void change($, t => closed(t)).catch(ignore),
+      detail: (agentId: string) => void openDetail($, agentId).catch(ignore),
+      stop: (agentId: string) => void change($, t => stopRequested(t, agentId, Date.now())).catch(ignore),
     }
     return drawTree({ Box, Text, Button } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {
       frame: tick,
       animate,
+      now,
+      lang,
       actions,
     })
   })

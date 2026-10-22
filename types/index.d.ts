@@ -19,6 +19,9 @@ export type AgentTreeNode = {
   contextTokens?: number
   toolCount: number
   lastTool?: string
+  tools?: string[]
+  task?: string
+  answer?: string
   answerTokens?: number
 }
 
@@ -37,12 +40,14 @@ export type AgentTreeAdvisor = {
   calls: AgentTreeAdvisorCall[]
 }
 
-export type AgentTreeLogSource ='session' | 'main' | 'agent' | 'advisor'
+export type AgentTreeLogSource = 'session' | 'main' | 'agent' | 'advisor'
 
 export type AgentTreeLogEntry = {
   at: number
   source: AgentTreeLogSource
-  text: string
+  kind?: string
+  data?: Record<string, string | number>
+  text?: string
 }
 
 export type AgentTreeMain = {
@@ -58,6 +63,7 @@ export type AgentTreeMain = {
   percent?: number
   returned: number
   returnedTokens: number
+  costUsd?: number
 }
 
 export type AgentTreeOrphanEnd = {
@@ -72,9 +78,17 @@ export type AgentTreeChoices = {
   picker?: string
 }
 
+export type AgentTreeDetail = {
+  agentId: string
+  state: 'loading' | 'ready' | 'denied'
+}
+
 export type AgentTreeState = {
   startedAt: number
   choices?: AgentTreeChoices
+  detail?: AgentTreeDetail
+  stopping?: string[]
+  stopSent?: string[]
   orphans?: Record<string, AgentTreeOrphanEnd>
   main: AgentTreeMain
   agents: AgentTreeNode[]

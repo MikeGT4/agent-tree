@@ -1,8 +1,27 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import type { Elements } from 'claude-code'
 
-import type { AgentTreeAdvisorCall, AgentTreeGroup, AgentTreeLogSource, AgentTreeNode, AgentTreePhase, AgentTreeState, AgentTreeStatus } from '../types'
-import { MODEL_CHOICES, NEW_AGENTS, choicesOf, clockTime, counts, effortBar, familyLabel, fmtShortDuration, fmtTokens, groups, modelLabel, phaseOf, typeLabel } from './model.ts'
+import type { AgentTreeAdvisorCall, AgentTreeGroup, AgentTreeLogSource, AgentTreeNode, AgentTreeState, AgentTreeStatus } from '../types'
+import {
+  MODEL_CHOICES,
+  NEW_AGENTS,
+  choicesOf,
+  clockTime,
+  counts,
+  effortBar,
+  familyLabel,
+  fmtShortDuration,
+  fmtTokens,
+  groups,
+  modelLabel,
+  phaseOf,
+  typeLabel,
+} from './model.ts'
+import { WORDS, familyOr, logLine, toolText, wordsFor } from './words.ts'
+import type { Lang, Words } from './words.ts'
+
+export { WORDS, logLine, wordsFor }
+export type { Lang }
 
 type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
 
@@ -21,21 +40,16 @@ export const ADVISOR_ROWS = 4
 export const ADVISOR_BASE_ROWS = 15
 export const ADVISOR_COMPACT_ROWS = 4
 export const LEGEND_EFFORT_FROM = 60
+export const BAR_WIDTH = 15
+export const DETAIL_ROWS = 8
 
 const COLOR = {
   main: '#E6845D',
   agent: '#7CAAE8',
   advisor: '#B1A7E6',
   done: '#7BE396',
-  dim: '#7A7A85',
+  dim: '#8E8E9A',
   failed: 'error',
-}
-
-const PHASE_TEXT: Record<AgentTreePhase, string> = {
-  idle: 'bereit',
-  planning: 'plant und entscheidet',
-  delegating: 'wartet auf Unteragenten',
-  reviewing: 'prüft und verifiziert',
 }
 
 const STATUS_MARK: Record<AgentTreeStatus, string> = { running: '◐', done: '●', failed: '✗', stopped: '○' }
@@ -51,29 +65,17 @@ export type TreeActions = {
   pick: (target: string) => void
   choose: (family: string | undefined) => void
   close: () => void
+  detail: (agentId: string) => void
+  stop: (agentId: string) => void
 }
 
-export type TreeLook = { frame: number; animate: boolean; actions?: TreeActions }
-
-const STATUS_WORD: Record<AgentTreeStatus, string> = {
-  running: 'läuft',
-  done: 'fertig',
-  failed: 'fehlgeschlagen',
-  stopped: 'gestoppt',
-}
+export type TreeLook = { frame: number; animate: boolean; now?: number; lang?: Lang; actions?: TreeActions }
 
 const STATUS_COLOR: Record<AgentTreeStatus, string> = {
   running: COLOR.agent,
   done: COLOR.done,
   failed: COLOR.failed,
   stopped: COLOR.dim,
-}
-
-const SOURCE_WORD: Record<AgentTreeLogSource, string> = {
-  session: 'sitzung',
-  main: 'haupt',
-  agent: 'agent',
-  advisor: 'berater',
 }
 
 const SOURCE_COLOR: Record<AgentTreeLogSource, string> = {
@@ -101,13 +103,16 @@ const GLYPH: Record<string, string> = {
   r: '─',
 }
 
-export function statusText(s: AgentTreeState): string | undefined {
+export function statusText(s: AgentTreeState, lang: Lang = 'de'): string | undefined {
+  const w = wordsFor(lang)
   const c = counts(s)
   if (c.running + c.done + c.failed + c.stopped === 0 && s.advisor.total === 0) return undefined
-  const parts = [`${c.running} ${c.running === 1 ? 'läuft' : 'laufen'}`, `${c.done} fertig`]
-  if (c.failed) parts.push(`${c.failed} fehlgeschlagen`)
-  if (s.advisor.total) parts.push(`Berater ${s.advisor.total}×`)
-  if (s.main.percent !== undefined) parts.push(`Kontext ${s.main.percent} %`)
+  const parts = [w.running(c.running), `${c.done} ${w.done}`]
+  if (c.failed) parts.push(`${c.failed} ${w.status.failed}`)
+  if (c.stopped) parts.push(`${c.stopped} ${w.status.stopped}`)
+  if (s.advisor.total) parts.push(`${w.advisorShort} ${s.advisor.total}×`)
+  if (s.main.percent !== undefined) parts.push(`${w.contextShort} ${w.percent(s.main.percent)}`)
+  if (s.main.costUsd !== undefined) parts.push(w.cost(s.main.costUsd))
   return parts.join(' · ')
 }
 
@@ -121,6 +126,8 @@ export type RowPlanInput = {
   advisorRows: number
   earlier: boolean
   pickerRows?: number
+  detailRows?: number
+  helpRows?: number
 }
 
 export type RowPlan = { shown: number; logRows: number }
@@ -133,14 +140,14 @@ function treeRows(o: RowPlanInput, shown: number): number {
   const back = 1 + 5 + hidden + later
   if (o.asRows) return top + 1 + shown + back
   const boxRows = Math.ceil(shown / o.perRow)
-  return top + 4 + (9 * boxRows - 1) + 1 + back
+  return top + 4 + (10 * boxRows - 1) + 1 + back
 }
 
 function usedRows(o: RowPlanInput, shown: number, logRows: number): number {
   const header = (o.tight ? 1 : 3) + (o.pickerRows ?? 0)
   const tree = treeRows(o, shown)
   const body = o.wide ? Math.max(o.advisorRows, tree) : o.advisorRows + tree
-  return header + 1 + body + 4 + logRows
+  return header + 1 + body + (o.detailRows ?? 0) + 4 + logRows + (o.helpRows ?? 0)
 }
 
 export function planRows(o: RowPlanInput): RowPlan {
@@ -199,6 +206,14 @@ export function connector(width: number, points: readonly number[], join: number
   return line
 }
 
+export function timelineBar(start: number, end: number, from: number, to: number, width = BAR_WIDTH): string {
+  if (!(to > from)) return '━'.repeat(width)
+  const scale = (t: number) => Math.round(((Math.min(Math.max(t, from), to) - from) / (to - from)) * width)
+  const a = Math.min(width - 1, scale(start))
+  const b = Math.max(a + 1, scale(end))
+  return '·'.repeat(a) + '━'.repeat(b - a) + '·'.repeat(width - b)
+}
+
 function marks(width: number, points: readonly number[], glyph: string): string {
   return Array.from({ length: width }, (_, p) => (points.includes(p) ? glyph : ' ')).join('')
 }
@@ -217,12 +232,12 @@ function effortLine(effort: string | undefined): string {
   return bar ? `${bar} ${effort}` : `Effort ${effort}`
 }
 
-function contextLine(s: AgentTreeState): string {
+function contextLine(s: AgentTreeState, w: Words): string {
   const { contextTokens, window, percent } = s.main
-  const share = percent !== undefined ? `${percent} %` : ''
-  if (contextTokens === undefined) return share ? `Kontext ${share}` : 'Kontext noch nicht gemessen'
-  const amount = window ? `${fmtTokens(contextTokens)} / ${fmtTokens(window)}` : fmtTokens(contextTokens)
-  return `Kontext ${amount}${share ? ` · ${share}` : ''}`
+  const share = percent !== undefined ? w.percent(percent) : ''
+  if (contextTokens === undefined) return share ? `${w.context} ${share}` : w.contextNone
+  const amount = window ? `${fmtTokens(contextTokens, w.decimal)} / ${fmtTokens(window, w.decimal)}` : fmtTokens(contextTokens, w.decimal)
+  return `${w.context} ${amount}${share ? ` · ${share}` : ''}`
 }
 
 function isRunning(g: AgentTreeGroup): boolean {
@@ -236,21 +251,16 @@ function startOf(g: AgentTreeGroup): number {
 function parentOf(s: AgentTreeState, n: AgentTreeNode): string | undefined {
   if (n.parentId === undefined) return undefined
   const parent = s.agents.find(p => p.id === n.parentId)
-  return parent ? typeLabel(parent.type) : 'Unteragent'
+  return parent ? typeLabel(parent.type) : '?'
 }
 
-function agentStatusLine(n: AgentTreeNode, spin: string): string {
-  if (n.status === 'running') return `${spin} läuft${n.contextTokens ? ` · ${fmtTokens(n.contextTokens)}` : ''}`
-  if (n.status === 'done' && n.endedAt !== undefined) return `${STATUS_MARK.done} fertig · ${fmtShortDuration(n.endedAt - n.startedAt)}`
-  return `${STATUS_MARK[n.status]} ${STATUS_WORD[n.status]}`
+function callPlace(call: AgentTreeAdvisorCall, w: Words): string {
+  return call.agentId === undefined ? w.fromMain : w.fromSub
 }
 
-function callPlace(call: AgentTreeAdvisorCall): string {
-  return call.agentId === undefined ? 'Haupt' : 'Sub'
-}
-
-export function pickerLines(name: string, width: number): number {
-  const parts = [`Modell für ${name}:`, '[ Standard ]', ...MODEL_CHOICES.map(c => `[ ${c.label} ]`), '[ × ]']
+export function pickerLines(name: string, width: number, lang: Lang = 'de'): number {
+  const w = wordsFor(lang)
+  const parts = [w.pickerFor(name), `[ ${w.standard} ]`, ...MODEL_CHOICES.map(c => `[ ${c.label} ]`), '[ × ]']
   let lines = 1
   let used = 0
   for (const part of parts) {
@@ -265,6 +275,10 @@ export function pickerLines(name: string, width: number): number {
   return lines
 }
 
+export function clip(text: string, width: number): string {
+  return text.length > width ? `${text.slice(0, Math.max(0, width - 1))}…` : text
+}
+
 function chunk<T>(items: readonly T[], size: number): T[][] {
   const rows: T[][] = []
   for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size))
@@ -273,9 +287,13 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 
 export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: number, look: TreeLook = { frame: 0, animate: false }) {
   const { Box, Text, Button } = ui
+  const lang: Lang = look.lang ?? 'de'
+  const w = wordsFor(lang)
   const spin = runningMark(look.frame, look.animate)
   const choices = choicesOf(s)
   const actions = look.actions
+  const now = look.now ?? Date.now()
+  const detail = s.detail
   const tight = height !== undefined && height < TIGHT_BELOW
   const wide = width >= WIDE_FROM && !tight
   const treeWidth = Math.max(1, oddFloor(wide ? width - ADVISOR_WIDTH - 2 : width))
@@ -289,6 +307,10 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const current = all.filter(g => isRunning(g) || startOf(g) >= roundStart)
   const earlier = all.length - current.length
   const recentCalls = s.advisor.calls.slice(-ADVISOR_ROWS)
+  const pickerTarget = choices.picker
+  const pickerNode = pickerTarget && pickerTarget !== NEW_AGENTS ? s.agents.find(n => n.id === pickerTarget) : undefined
+  const pickerName = pickerTarget === NEW_AGENTS ? w.newAgents : pickerNode ? `${typeLabel(pickerNode.type)} · ${pickerNode.description}` : '?'
+  const detailNode = detail ? s.agents.find(n => n.id === detail.agentId) : undefined
   const plan = planRows({
     height,
     wide,
@@ -298,13 +320,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     total: current.length,
     advisorRows: wide ? ADVISOR_BASE_ROWS + recentCalls.length : ADVISOR_COMPACT_ROWS,
     earlier: earlier > 0,
-    pickerRows: choices.picker ? 1 + pickerLines(choices.picker === NEW_AGENTS ? 'neue Unteragenten' : 'Unteragent', width) : 0,
+    pickerRows: pickerTarget && actions ? 1 + pickerLines(pickerName, width, lang) : 0,
+    detailRows: detailNode && actions ? DETAIL_ROWS : 0,
+    helpRows: tight ? 0 : 1,
   })
   const shown = current.slice(0, plan.shown)
   const rest = current.slice(shown.length)
   const hiddenRunning = rest.filter(isRunning).length
-  const hiddenText =
-    hiddenRunning > 0 ? `+${rest.length} weitere, ${hiddenRunning} davon laufen` : `+${rest.length} weitere beendet`
   const mainModel = modelLabel(s.main.model)
   const advisorModel = modelLabel(s.advisor.model)
   const agentEffort =
@@ -312,6 +334,26 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const lastCall = s.advisor.calls.at(-1)
   const consulted = lastCall !== undefined && lastCall.at >= roundStart && roundStart > 0
   const legendEffort = width >= LEGEND_EFFORT_FROM
+  const groupEnd = (g: AgentTreeGroup) => {
+    if (g.kind === 'agent') return g.node.endedAt ?? now
+    const members = s.agents.filter(n => n.workflowRunId === g.runId)
+    return members.some(n => n.status === 'running') ? now : Math.max(...members.map(n => n.endedAt ?? n.startedAt))
+  }
+  const spanFrom = current.length ? Math.min(...current.map(startOf)) : now
+  const spanTo = current.length ? Math.max(...current.map(groupEnd)) : now
+
+  const bar = (g: AgentTreeGroup) => timelineBar(startOf(g), groupEnd(g), spanFrom, spanTo)
+
+  const typeButton = (n: AgentTreeNode, running: boolean) =>
+    actions ? (
+      <Box key={`type-row:${n.id}`} width={AGENT_WIDTH - 2} flexDirection="row" justifyContent="center">
+        <Button key={`detail:${n.id}`} plain label={clip(typeLabel(n.type), AGENT_WIDTH - 2)} onPress={() => actions.detail(n.id)} />
+      </Box>
+    ) : (
+      <Text bold color={running ? COLOR.agent : undefined} wrap="truncate-end">
+        {typeLabel(n.type)}
+      </Text>
+    )
 
   const agentBox = (g: AgentTreeGroup, marginLeft: number) => {
     if (g.kind === 'workflow') {
@@ -322,33 +364,38 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             {`Workflow · ${g.size}`}
           </Text>
           <Text color={COLOR.agent} wrap="truncate-end">
-            {`${spin} ${g.running} ${g.running === 1 ? 'läuft' : 'laufen'}`}
+            {`${spin} ${w.running(g.running)}`}
           </Text>
-          <Text color={COLOR.done} wrap="truncate-end">{`${STATUS_MARK.done} ${g.done} fertig`}</Text>
+          <Text color={COLOR.done} wrap="truncate-end">{`${STATUS_MARK.done} ${g.done} ${w.done}`}</Text>
           <Text color={g.failed ? COLOR.failed : COLOR.dim} wrap="truncate-end">
-            {`${STATUS_MARK.failed} ${g.failed} Fehler`}
+            {`${STATUS_MARK.failed} ${g.failed} ${w.status.failed}`}
           </Text>
           <Text wrap="truncate-end">{g.lastDescription || ' '}</Text>
           <Text color={COLOR.dim} wrap="truncate-end">
-            {g.stopped ? `${STATUS_MARK.stopped} ${g.stopped} gestoppt` : ' '}
+            {g.stopped ? `${STATUS_MARK.stopped} ${g.stopped} ${w.status.stopped}` : ' '}
           </Text>
+          <Text color={color}>{bar(g)}</Text>
         </Box>
       )
     }
     const n = g.node
     const running = n.status === 'running'
     const nested = parentOf(s, n)
+    const statusLine =
+      n.status === 'running'
+        ? `${spin} ${w.status.running}${n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''}`
+        : n.status === 'done' && n.endedAt !== undefined
+          ? `${STATUS_MARK.done} ${w.status.done} · ${fmtShortDuration(n.endedAt - n.startedAt)}`
+          : `${STATUS_MARK[n.status]} ${w.status[n.status]}`
     return (
       <Box key={`ag:${n.id}`} width={AGENT_WIDTH} marginLeft={marginLeft} borderStyle="single" borderColor={running ? COLOR.agent : n.status === 'failed' ? COLOR.failed : COLOR.dim} flexDirection="column" alignItems="center">
-        <Text bold color={running ? COLOR.agent : undefined} wrap="truncate-end">
-          {typeLabel(n.type)}
-        </Text>
+        {typeButton(n, running)}
         {running && actions ? (
           <Box key={`pick-row:${n.id}`} width={AGENT_WIDTH - 2} flexDirection="row" justifyContent="center">
             <Button
               key={`pick:${n.id}`}
               plain
-              label={`${choices.agents[n.id] ? `→ ${familyLabel(choices.agents[n.id])}` : modelLabel(n.model) || 'Modell'} ▾`}
+              label={clip(`${choices.agents[n.id] ? `→ ${familyLabel(choices.agents[n.id])}` : modelLabel(n.model) || w.model} ▾`, AGENT_WIDTH - 2)}
               onPress={() => actions.pick(n.id)}
             />
           </Box>
@@ -358,17 +405,18 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           </Text>
         )}
         <Text color={COLOR.dim} wrap="truncate-end">
-          {nested ? `↳ unter ${nested}` : effortLine(n.effort)}
+          {nested ? `↳ ${w.under} ${nested}` : effortLine(n.effort)}
         </Text>
         <Text color={running ? undefined : COLOR.dim} wrap="truncate-end">
           {n.description || ' '}
         </Text>
         <Text color={COLOR.dim} wrap="truncate-end">
-          {n.lastTool ?? `Werkzeuge: ${n.toolCount}`}
+          {toolText(n.lastTool, lang) ?? `${w.tools}: ${n.toolCount}`}
         </Text>
         <Text color={STATUS_COLOR[n.status]} wrap="truncate-end">
-          {agentStatusLine(n, spin)}
+          {statusLine}
         </Text>
+        <Text color={STATUS_COLOR[n.status]}>{bar(g)}</Text>
       </Box>
     )
   }
@@ -376,23 +424,35 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const agentRow = (g: AgentTreeGroup) => {
     if (g.kind === 'workflow') {
       const color = g.running > 0 ? COLOR.agent : g.failed > 0 ? COLOR.failed : COLOR.dim
-      const state = g.running > 0 ? `${spin} ${g.running} ${g.running === 1 ? 'läuft' : 'laufen'}` : `${STATUS_MARK.done} beendet`
+      const state =
+        g.running > 0
+          ? `${spin} ${w.running(g.running)}`
+          : g.failed > 0
+            ? `${STATUS_MARK.failed} ${g.failed} ${w.status.failed}`
+            : g.done > 0
+              ? `${STATUS_MARK.done} ${w.done}`
+              : `${STATUS_MARK.stopped} ${w.status.stopped}`
       return (
         <Box key={`wf:${g.runId}`} width={treeWidth}>
           <Text color={color} wrap="truncate-end">
-            {`${state} · Workflow · ${g.size} Agenten`}
+            {`${state} · Workflow · ${g.size}`}
           </Text>
         </Box>
       )
     }
     const n = g.node
     const indent = parentOf(s, n) ? '↳ ' : ''
-    const size = n.status === 'running' && n.contextTokens ? ` · ${fmtTokens(n.contextTokens)}` : ''
+    const size = n.status === 'running' && n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''
+    const text = `${indent}${n.status === 'running' ? spin : STATUS_MARK[n.status]} ${w.status[n.status]} · ${typeLabel(n.type)} · ${n.description}${size}`
     return (
       <Box key={`ag:${n.id}`} width={treeWidth}>
-        <Text color={STATUS_COLOR[n.status]} wrap="truncate-end">
-          {`${indent}${n.status === 'running' ? spin : STATUS_MARK[n.status]} ${STATUS_WORD[n.status]} · ${typeLabel(n.type)} · ${n.description}${size}`}
-        </Text>
+        {actions ? (
+          <Button key={`detail:${n.id}`} plain label={clip(text, treeWidth)} onPress={() => actions.detail(n.id)} />
+        ) : (
+          <Text color={STATUS_COLOR[n.status]} wrap="truncate-end">
+            {text}
+          </Text>
+        )}
       </Box>
     )
   }
@@ -411,37 +471,40 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     )
   }
 
+  const verb = phase === 'idle' ? w.idle : w.working
   const header = tight ? (
     <Box key="head" flexDirection="column" alignItems="center" width={width}>
       <Text bold wrap="truncate-end">
-        {`AGENT TREE${mainModel ? ` · ${mainModel.toUpperCase()}` : ''} · ${phase === 'idle' ? 'BEREIT' : 'ARBEITET'}`}
+        {`AGENT TREE${mainModel ? ` · ${mainModel.toUpperCase()}` : ''} · ${verb}`}
       </Text>
     </Box>
   ) : (
     <Box key="head" flexDirection="column" alignItems="center" width={width}>
       <Text bold wrap="truncate-end">
         {'AGENT TREE'}
-        {mainModel ? <Text color={COLOR.main}>{` · ${mainModel.toUpperCase()} ${phase === 'idle' ? 'BEREIT' : 'ARBEITET'}`}</Text> : null}
-        {advisorModel && wide ? <Text color={COLOR.advisor}>{` · BERATER ${advisorModel.toUpperCase()} AUF ABRUF`}</Text> : null}
+        {mainModel ? <Text color={COLOR.main}>{` · ${mainModel.toUpperCase()} ${verb}`}</Text> : null}
+        {advisorModel && wide ? <Text color={COLOR.advisor}>{` · ${w.advisorOnCall(advisorModel.toUpperCase())}`}</Text> : null}
       </Text>
       <Text color={COLOR.dim}>{'─'.repeat(Math.max(1, width - 2))}</Text>
       <Text wrap="truncate-end">
         <Text color={COLOR.main}>{'■'}</Text>
-        {` Hauptsitzung${legendEffort && s.main.effort ? ` · ${s.main.effort}` : ''}   `}
+        {` ${w.main}${legendEffort && s.main.effort ? ` · ${s.main.effort}` : ''}   `}
         <Text color={COLOR.agent}>{'■'}</Text>
-        {` Unteragenten${legendEffort && agentEffort ? ` · ${agentEffort}` : ''}   `}
+        {` ${w.agents}${legendEffort && agentEffort ? ` · ${agentEffort}` : ''}   `}
         <Text color={COLOR.advisor}>{'■'}</Text>
-        {' Berater'}
+        {` ${w.advisor}`}
       </Text>
     </Box>
   )
 
+  const roundLine = s.main.turn ? `${w.round} ${s.main.turn}${s.main.costUsd !== undefined ? ` · ${w.cost(s.main.costUsd)}` : ''}` : w.noRound
+
   const mainBox = (
     <Box key="main" width={mainWidth} flexShrink={0} borderStyle="single" borderColor={COLOR.main} flexDirection="column" alignItems="center">
       <Text bold color={COLOR.main} wrap="truncate-end">
-        {[mainModel, 'Hauptsitzung'].filter(Boolean).join(' · ')}
+        {[mainModel, w.main].filter(Boolean).join(' · ')}
       </Text>
-      <Text wrap="truncate-end">{PHASE_TEXT[phase]}</Text>
+      <Text wrap="truncate-end">{w.phase[phase]}</Text>
       {s.main.effort && effortBar(s.main.effort) ? (
         <Text wrap="truncate-end">
           <Text color={COLOR.dim}>{'Effort '}</Text>
@@ -450,14 +513,14 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         </Text>
       ) : (
         <Text color={COLOR.dim} wrap="truncate-end">
-          {s.main.effort ? `Effort ${s.main.effort}` : 'ohne Effort-Stufe'}
+          {s.main.effort ? `Effort ${s.main.effort}` : w.effortNone}
         </Text>
       )}
       <Text color={COLOR.dim} wrap="truncate-end">
-        {contextLine(s)}
+        {contextLine(s, w)}
       </Text>
       <Text color={COLOR.dim} wrap="truncate-end">
-        {s.main.turn ? `Runde ${s.main.turn}` : 'noch keine Runde'}
+        {roundLine}
       </Text>
     </Box>
   )
@@ -465,13 +528,11 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const backBox = (
     <Box key="back" width={backWidth} flexShrink={0} borderStyle={phase === 'reviewing' ? 'bold' : 'single'} borderColor={COLOR.main} flexDirection="column" alignItems="center">
       <Text bold color={COLOR.main} wrap="truncate-end">
-        {`zurück zur Hauptsitzung${s.main.effort ? ` · ${s.main.effort}` : ''}`}
+        {`${w.back}${s.main.effort ? ` · ${s.main.effort}` : ''}`}
       </Text>
-      <Text wrap="truncate-end">
-        {phase === 'reviewing' ? 'prüft und verifiziert' : phase === 'delegating' ? 'wartet auf Antworten' : 'bereit'}
-      </Text>
+      <Text wrap="truncate-end">{phase === 'reviewing' ? w.phase.reviewing : phase === 'delegating' ? w.waiting : w.ready}</Text>
       <Text color={COLOR.dim} wrap="truncate-end">
-        {`${s.main.returned} ${s.main.returned === 1 ? 'Antwort' : 'Antworten'} · ↑ ${fmtTokens(s.main.returnedTokens) || '0'}`}
+        {`${w.answers(s.main.returned)} · ↑ ${fmtTokens(s.main.returnedTokens, w.decimal) || '0'}`}
       </Text>
     </Box>
   )
@@ -479,24 +540,24 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const notes = [
     rest.length > 0 ? (
       <Text key="hidden" color={COLOR.dim} wrap="truncate-end">
-        {hiddenText}
+        {w.more(rest.length, hiddenRunning)}
       </Text>
     ) : null,
     earlier > 0 ? (
       <Text key="earlier" color={COLOR.dim} wrap="truncate-end">
-        {`aus früheren Runden: ${earlier} ${earlier === 1 ? 'Agent' : 'Agenten'}`}
+        {w.earlier(earlier)}
       </Text>
     ) : null,
   ]
 
   const pickNew = actions ? (
-    <Button key="pick:new" plain label={`Modell: ${familyLabel(choices.newAgents)} ▾`} onPress={() => actions.pick(NEW_AGENTS)} />
+    <Button key="pick:new" plain hotkey="m" label={`${w.model}: ${familyOr(choices.newAgents, w.standard)} ▾`} onPress={() => actions.pick(NEW_AGENTS)} />
   ) : null
 
-  const label = (
+  const delegationLabel = (
     <Box key="label" flexDirection="row">
       <Text color={COLOR.agent} wrap="truncate-end">
-        {`● an Unteragenten${agentEffort ? ` · Effort ${agentEffort}` : ''}`}
+        {`● ${w.toAgents}${agentEffort ? ` · Effort ${agentEffort}` : ''}`}
       </Text>
       {pickNew ? <Text color={COLOR.dim}>{' · '}</Text> : null}
       {pickNew}
@@ -518,7 +579,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     shown.length === 0 ? (
       <Box key="agents" flexDirection="column" alignItems="center">
         <Box key="none" flexDirection="row">
-          <Text color={COLOR.dim}>{'noch keine Unteragenten'}</Text>
+          <Text color={COLOR.dim}>{w.noAgents}</Text>
           {pickNew ? <Text color={COLOR.dim}>{' · '}</Text> : null}
           {pickNew}
         </Box>
@@ -526,7 +587,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       </Box>
     ) : asRows ? (
       <Box key="agents" flexDirection="column" alignItems="center">
-        {label}
+        {delegationLabel}
         <Box key="rows" flexDirection="column" width={treeWidth}>
           {shown.map(agentRow)}
         </Box>
@@ -536,7 +597,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       </Box>
     ) : (
       <Box key="agents" flexDirection="column" alignItems="center">
-        {label}
+        {delegationLabel}
         <Text color={stemMid === '●' ? COLOR.agent : COLOR.dim}>{stemMid}</Text>
         <Text color={COLOR.dim}>{connector(frame, centersOf(boxRows[0] ?? []), join, 'split')}</Text>
         <Text color={COLOR.agent}>{marks(frame, centersOf(boxRows[0] ?? []), '▼')}</Text>
@@ -562,74 +623,50 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     </Box>
   )
 
-  const advisorState = advisorModel ? advisorModel : 'nicht eingeschaltet'
-
-  const pickerTarget = choices.picker
-  const pickerNode = pickerTarget && pickerTarget !== NEW_AGENTS ? s.agents.find(n => n.id === pickerTarget) : undefined
-  const pickerName =
-    pickerTarget === NEW_AGENTS ? 'neue Unteragenten' : pickerNode ? `${typeLabel(pickerNode.type)} · ${pickerNode.description}` : 'Unteragent'
-  const pickerCurrent = pickerTarget === NEW_AGENTS ? choices.newAgents : pickerTarget ? choices.agents[pickerTarget] : undefined
-  const pickerRow =
-    pickerTarget && actions ? (
-      <Box key="picker" flexDirection="row" flexWrap="wrap" columnGap={1} width={width} marginTop={1}>
-        <Text color={COLOR.agent} wrap="truncate-end">
-          {`Modell für ${pickerName}:`}
-        </Text>
-        <Button key="choose:default" label="Standard" variant={pickerCurrent === undefined ? 'primary' : undefined} onPress={() => actions.choose(undefined)} />
-        {MODEL_CHOICES.map(choice => (
-          <Button
-            key={`choose:${choice.family}`}
-            label={choice.label}
-            variant={pickerCurrent === choice.family ? 'primary' : undefined}
-            onPress={() => actions.choose(choice.family)}
-          />
-        ))}
-        <Button key="picker:close" label="×" onPress={() => actions.close()} />
-      </Box>
-    ) : null
+  const advisorState = advisorModel ? advisorModel : w.off
 
   const advisorColumn = (
     <Box key="advisor" width={ADVISOR_WIDTH} flexShrink={0} borderStyle="single" borderColor={COLOR.advisor} flexDirection="column">
       <Text bold color={COLOR.advisor} wrap="truncate-end">
-        {'BERATER'}
+        {w.advisorTitle}
       </Text>
       <Text color={COLOR.advisor} wrap="truncate-end">
         {advisorState}
       </Text>
       <Text color={COLOR.advisor} wrap="truncate-end">
-        {advisorModel ? 'auf Abruf' : ' '}
+        {advisorModel ? w.onCall : ' '}
       </Text>
       <Text color={COLOR.dim} wrap="truncate-end">
-        {'liest die ganze'}
+        {w.reads[0]}
       </Text>
       <Text color={COLOR.dim} wrap="truncate-end">
-        {'Sitzung mit'}
+        {w.reads[1]}
       </Text>
       <Text>{' '}</Text>
-      <Text wrap="truncate-end">{`Aufrufe ${s.advisor.total}`}</Text>
+      <Text wrap="truncate-end">{`${w.calls} ${s.advisor.total}`}</Text>
       <Text color={COLOR.dim} wrap="truncate-end">
-        {`Haupt ${s.advisor.fromMain} · Sub ${s.advisor.fromAgents}`}
+        {`${w.fromMain} ${s.advisor.fromMain} · ${w.fromSub} ${s.advisor.fromAgents}`}
       </Text>
       <Text color={COLOR.dim} wrap="truncate-end">
-        {lastCall ? `zuletzt ${clockTime(lastCall.at)}` : 'noch nicht gefragt'}
+        {lastCall ? `${w.last} ${clockTime(lastCall.at)}` : w.notAsked}
       </Text>
       <Text color={COLOR.dim} wrap="truncate-end">
-        {lastCall?.durationMs !== undefined ? `Dauer ${fmtShortDuration(lastCall.durationMs)}` : ' '}
+        {lastCall?.durationMs !== undefined ? `${w.duration} ${fmtShortDuration(lastCall.durationMs)}` : ' '}
       </Text>
       <Text>{' '}</Text>
       {recentCalls.map(call => (
         <Box key={`adv:${call.id}`}>
           <Text color={COLOR.advisor} wrap="truncate-end">
-            {`◆ ${clockTime(call.at)} ${callPlace(call)}`}
+            {`◆ ${clockTime(call.at)} ${callPlace(call, w)}`}
           </Text>
         </Box>
       ))}
       <Box key="advisor-fill" flexGrow={1} />
       <Text color={COLOR.dim} wrap="truncate-end">
-        {'schreibt nie'}
+        {w.writes[0]}
       </Text>
       <Text color={COLOR.dim} wrap="truncate-end">
-        {'selbst Code'}
+        {w.writes[1]}
       </Text>
     </Box>
   )
@@ -637,22 +674,73 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const advisorCompact = (
     <Box key="advisor" width={width} borderStyle="single" borderColor={COLOR.advisor} flexDirection="column">
       <Text color={COLOR.advisor} wrap="truncate-end">
-        {`Berater · ${advisorModel ? `${advisorModel} · auf Abruf` : 'nicht eingeschaltet'} · Aufrufe ${s.advisor.total}`}
+        {`${w.advisor} · ${advisorModel ? `${advisorModel} · ${w.onCall}` : w.off} · ${w.calls} ${s.advisor.total}`}
       </Text>
       <Text color={COLOR.dim} wrap="truncate-end">
-        {lastCall
-          ? `Haupt ${s.advisor.fromMain} · Sub ${s.advisor.fromAgents} · zuletzt ${clockTime(lastCall.at)}`
-          : 'noch nicht gefragt'}
+        {lastCall ? `${w.fromMain} ${s.advisor.fromMain} · ${w.fromSub} ${s.advisor.fromAgents} · ${w.last} ${clockTime(lastCall.at)}` : w.notAsked}
       </Text>
     </Box>
   )
 
+  const pickerCurrent = pickerTarget === NEW_AGENTS ? choices.newAgents : pickerTarget ? choices.agents[pickerTarget] : undefined
+  const pickerRow =
+    pickerTarget && actions ? (
+      <Box key="picker" flexDirection="row" flexWrap="wrap" columnGap={1} width={width} marginTop={1}>
+        <Text color={COLOR.agent} wrap="truncate-end">
+          {w.pickerFor(pickerName)}
+        </Text>
+        <Button key="choose:default" hotkey="0" label={w.standard} variant={pickerCurrent === undefined ? 'primary' : undefined} onPress={() => actions.choose(undefined)} />
+        {MODEL_CHOICES.map((choice, i) => (
+          <Button
+            key={`choose:${choice.family}`}
+            hotkey={String(i + 1)}
+            label={choice.label}
+            variant={pickerCurrent === choice.family ? 'primary' : undefined}
+            onPress={() => actions.choose(choice.family)}
+          />
+        ))}
+        <Button key="picker:close" hotkey="x" label="×" onPress={() => actions.close()} />
+      </Box>
+    ) : null
+
+  const missing = (value: string | undefined, empty: string) =>
+    detail?.state === 'loading' ? w.loading : value || (detail?.state === 'denied' ? w.noAccess : empty)
+  const detailRunning = detailNode?.status === 'running'
+  const detailStopping = detailNode !== undefined && (s.stopping ?? []).includes(detailNode.id)
+  const detailBox =
+    detail && detailNode && actions ? (
+      <Box key="detail" width={width} borderStyle="single" borderColor={COLOR.agent} flexDirection="column" marginTop={1}>
+        <Box key="detail-head" flexDirection="row" justifyContent="space-between">
+          <Box key="detail-title" flexShrink={1}>
+            <Text bold color={COLOR.agent} wrap="truncate-end">
+              {`${typeLabel(detailNode.type)} · ${detailNode.description}`}
+            </Text>
+          </Box>
+          <Box key="detail-buttons" flexDirection="row" columnGap={1} flexShrink={0}>
+            {detailRunning && !detailStopping ? (
+              <Button key={`stop:${detailNode.id}`} hotkey="s" label={w.stop} onPress={() => actions.stop(detailNode.id)} />
+            ) : null}
+            {detailStopping ? <Text color={COLOR.dim}>{w.stopping}</Text> : null}
+            <Button key="detail:close" plain hotkey="x" label={w.close} onPress={() => actions.close()} />
+          </Box>
+        </Box>
+        <Text wrap="truncate-end">{`${w.task}: ${missing(detailNode.task, '?')}`}</Text>
+        <Text color={COLOR.dim} wrap="truncate-end">
+          {`${w.tools}: ${detailNode.tools?.length ? detailNode.tools.map(t => toolText(t, lang)).join(' · ') : '0'}`}
+        </Text>
+        <Text wrap="truncate-end">{`${detailRunning ? w.latest : w.reply}: ${missing(detailNode.answer, w.noReply)}`}</Text>
+        <Text color={COLOR.dim} wrap="truncate-end">
+          {`${modelLabel(detailNode.model) || w.model} · ${w.status[detailNode.status]} · ${fmtShortDuration((detailNode.endedAt ?? now) - detailNode.startedAt)}`}
+        </Text>
+      </Box>
+    ) : null
+
   const rows = s.log.slice(-plan.logRows)
   const logBox = (
     <Box key="log" width={width} borderStyle="single" borderColor={COLOR.dim} flexDirection="column" marginTop={1}>
-      <Text color={COLOR.dim}>{'Sitzungsprotokoll'}</Text>
+      <Text color={COLOR.dim}>{w.log}</Text>
       {rows.length === 0 ? (
-        <Text color={COLOR.dim}>{'noch nichts geschehen'}</Text>
+        <Text color={COLOR.dim}>{w.logEmpty}</Text>
       ) : (
         rows.map((row, i) => (
           <Box key={`log:${i}:${row.at}`} flexDirection="row">
@@ -661,11 +749,11 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             </Box>
             <Box width={9} flexShrink={0}>
               <Text bold color={SOURCE_COLOR[row.source]}>
-                {SOURCE_WORD[row.source]}
+                {w.source[row.source]}
               </Text>
             </Box>
             <Box flexGrow={1} flexShrink={1}>
-              <Text wrap="truncate-end">{row.text}</Text>
+              <Text wrap="truncate-end">{logLine(row, lang)}</Text>
             </Box>
           </Box>
         ))
@@ -688,7 +776,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           {tree}
         </Box>
       )}
+      {detailBox}
       {logBox}
+      {tight ? null : (
+        <Text key="help" color={COLOR.dim} wrap="truncate-end">
+          {w.help}
+        </Text>
+      )}
     </Box>
   )
 }

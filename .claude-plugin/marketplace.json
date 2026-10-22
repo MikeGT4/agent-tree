@@ -1,6 +1,6 @@
 {
   "name": "agent-tree",
-  "description": "Seitenleiste mit dem Agentenbaum einer Sitzung als Kästen",
+  "description": "Side pane that draws a session's agent tree as boxes",
   "owner": {
     "name": "Mike Pollow, Digitalroots"
   },

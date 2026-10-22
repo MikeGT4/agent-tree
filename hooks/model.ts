@@ -2,6 +2,7 @@
 import type {
   AgentTreeChoices,
   AgentTreeCounts,
+  AgentTreeDetail,
   AgentTreeGroup,
   AgentTreeLogSource,
   AgentTreeNode,
@@ -15,11 +16,14 @@ export const LOG_EXCERPT = 60
 export const DESCRIPTION_LIMIT = 80
 export const LABEL_LIMIT = 40
 export const ADVISOR_CALLS_KEPT = 20
+export const TOOLS_KEPT = 5
+export const DETAIL_LIMIT = 160
 
 export type AdvisorUse = { id: string; startedAt: number; endedAt?: number }
 
 export type StepInput = {
   agentId?: string
+  answer?: string
   model: string
   effort?: string | number
   contextTokens?: number
@@ -31,6 +35,7 @@ export type SpawnInput = {
   parentAgentId?: string
   agentType: string
   description: string
+  prompt?: string
   model?: string
   background: boolean
   fork: boolean
@@ -73,25 +78,79 @@ export function familyLabel(family: string | undefined): string {
 }
 
 export function pickerOpened(s: AgentTreeState, target: string | undefined): AgentTreeState {
-  return { ...s, choices: { ...choicesOf(s), picker: target } }
+  return { ...s, detail: target === undefined ? s.detail : undefined, choices: { ...choicesOf(s), picker: target } }
+}
+
+export function closed(s: AgentTreeState): AgentTreeState {
+  return { ...s, detail: undefined, choices: { ...choicesOf(s), picker: undefined } }
+}
+
+export function detailOpened(s: AgentTreeState, agentId: string): AgentTreeState {
+  const node = findAgent(s, agentId)
+  if (!node || s.detail?.agentId === agentId) return { ...s, detail: undefined }
+  const detail: AgentTreeDetail = { agentId, state: node.task ? 'ready' : 'loading' }
+  return { ...s, detail, choices: { ...choicesOf(s), picker: undefined } }
+}
+
+export function detailLoaded(
+  s: AgentTreeState,
+  agentId: string,
+  found: { task?: string; answer?: string; denied?: boolean },
+): AgentTreeState {
+  const next = withAgent(s, agentId, n => ({
+    ...n,
+    task: n.task || (found.task ? excerpt(found.task) : undefined),
+    answer: n.answer || (found.answer ? excerpt(found.answer) : undefined),
+  }))
+  if (next.detail?.agentId !== agentId) return next
+  return { ...next, detail: { agentId, state: found.denied ? 'denied' : 'ready' } }
+}
+
+export function stopRequested(s: AgentTreeState, agentId: string, now: number): AgentTreeState {
+  const node = findAgent(s, agentId)
+  if (!node || node.status !== 'running' || isStopping(s, agentId)) return s
+  return logged({ ...s, stopping: [...(s.stopping ?? []), agentId] }, 'session', 'stopRequested', { type: node.type }, now)
+}
+
+export function isStopping(s: AgentTreeState, agentId: string | undefined): boolean {
+  return agentId !== undefined && (s.stopping ?? []).includes(agentId)
+}
+
+export function stopSent(s: AgentTreeState, agentId: string): AgentTreeState {
+  if (wasStopSent(s, agentId)) return s
+  return { ...s, stopSent: [...(s.stopSent ?? []), agentId] }
+}
+
+export function wasStopSent(s: AgentTreeState, agentId: string | undefined): boolean {
+  return agentId !== undefined && (s.stopSent ?? []).includes(agentId)
+}
+
+export function stopCancelled(s: AgentTreeState, agentId: string): AgentTreeState {
+  return isStopping(s, agentId) || wasStopSent(s, agentId) ? withoutStop(s, agentId) : s
+}
+
+function withoutStop(s: AgentTreeState, agentId: string): AgentTreeState {
+  return {
+    ...s,
+    stopping: (s.stopping ?? []).filter(id => id !== agentId),
+    stopSent: (s.stopSent ?? []).filter(id => id !== agentId),
+  }
 }
 
 export function chosen(s: AgentTreeState, target: string, family: string | undefined, now: number): AgentTreeState {
   const current = choicesOf(s)
   const agents = { ...current.agents }
   let choices: AgentTreeChoices
-  let text: string
+  let who = ''
   if (target === NEW_AGENTS) {
     choices = { ...current, newAgents: family, agents, picker: undefined }
-    text = `Modell für neue Unteragenten: ${familyLabel(family)}`
   } else {
     if (family === undefined) delete agents[target]
     else agents[target] = family
     choices = { ...current, agents, picker: undefined }
-    const node = findAgent(s, target)
-    text = `Modell für ${node ? node.type : 'Unteragent'}: ${familyLabel(family)}`
+    who = findAgent(s, target)?.type ?? '?'
   }
-  return logged({ ...s, choices }, 'session', text, now)
+  return logged({ ...s, choices }, 'session', 'choice', { who, family: family ?? '' }, now)
 }
 
 export function stepModelFor(s: AgentTreeState, family: string): string {
@@ -112,11 +171,17 @@ export function createTree(now: number): AgentTreeState {
 
 const AGENT_MESSAGE = /^\s*<(agent-message|task-notification)\b/
 
-function logged(s: AgentTreeState, source: AgentTreeLogSource, text: string, at: number): AgentTreeState {
+function logged(
+  s: AgentTreeState,
+  source: AgentTreeLogSource,
+  kind: string,
+  data: Record<string, string | number>,
+  at: number,
+): AgentTreeState {
   const log = [...s.log]
   let place = log.length
   while (place > 0 && (log[place - 1]?.at ?? 0) > at) place -= 1
-  log.splice(place, 0, { at, source, text })
+  log.splice(place, 0, { at, source, kind, data })
   return { ...s, log: log.slice(-LOG_LIMIT) }
 }
 
@@ -131,10 +196,14 @@ function withAgent(s: AgentTreeState, id: string, change: (n: AgentTreeNode) => 
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g
 
 const SECRET =
-  /\b(?:ghp_|gho_|ghu_|ghs_|github_pat_|sk-|xox[abprs]-|AKIA|eyJ)[A-Za-z0-9_\-.]{6,}|\bBearer\s+\S+|\b(?:password|passwort|token|secret|api[_-]?key)\s*[=:]\s*\S+/gi
+  /\b(?:ghp_|gho_|ghu_|ghs_|github_pat_|sk-|xox[abprs]-|AKIA|AIza|eyJ)[A-Za-z0-9_\-.]{6,}|\bBearer\s+\S+|[A-Za-z0-9_]*(?:password|passwort|passwd|token|secret|api[_-]?key|access[_-]?key)[A-Za-z0-9_]*["']?\s*[=:]\s*["']?[^\s"',;]+/gi
 
 function oneLine(text: string): string {
   return text.replace(CONTROL, ' ').replace(SECRET, '•••').replace(/\s+/g, ' ').trim()
+}
+
+export function excerpt(text: string | undefined, limit = DETAIL_LIMIT): string {
+  return oneLine(text ?? '').slice(0, limit)
 }
 
 export function counts(s: AgentTreeState): AgentTreeCounts {
@@ -158,7 +227,7 @@ export function turnStarted(s: AgentTreeState, input: { text: string; agentId?: 
     const node = findAgent(s, input.agentId)
     if (!node || node.status === 'running') return s
     const reopened = withAgent(s, node.id, n => ({ ...n, status: 'running', endedAt: undefined, startedAt: now }))
-    return logged(reopened, 'agent', `${node.type} fortgesetzt: ${node.description}`, now)
+    return logged(reopened, 'agent', 'resumed', { type: node.type, description: node.description }, now)
   }
   if (AGENT_MESSAGE.test(input.text) || input.text.trim() === '') {
     return { ...s, main: { ...s.main, active: true, resumed: true, turnStartedAt: now } }
@@ -170,7 +239,7 @@ export function turnStarted(s: AgentTreeState, input: { text: string; agentId?: 
     startedAt: s.startedAt || now,
     main: { ...s.main, active: true, resumed: false, turn, turnStartedAt: now, roundStartedAt: now, returned: 0, returnedTokens: 0 },
   }
-  return logged(next, 'main', `Runde ${turn}: ${excerpt}`, now)
+  return logged(next, 'main', 'turn', { turn, excerpt }, now)
 }
 
 function advised(s: AgentTreeState, use: AdvisorUse, agentId: string | undefined, now: number): AgentTreeState {
@@ -189,8 +258,8 @@ function advised(s: AgentTreeState, use: AdvisorUse, agentId: string | undefined
     fromAgents: s.advisor.fromAgents + (fromMain ? 0 : 1),
     calls: [...s.advisor.calls, { id: use.id, at: use.startedAt, durationMs, agentId }].slice(-ADVISOR_CALLS_KEPT),
   }
-  const where = fromMain ? 'Hauptsitzung' : findAgent(s, agentId)?.type ?? 'Unteragent'
-  return logged({ ...s, advisor }, 'advisor', `gefragt aus ${where}`, Math.min(use.startedAt, now))
+  const where = fromMain ? '' : findAgent(s, agentId)?.type ?? '?'
+  return logged({ ...s, advisor }, 'advisor', 'advisor', { where }, Math.min(use.startedAt, now))
 }
 
 export function stepped(s: AgentTreeState, input: StepInput, now: number): AgentTreeState {
@@ -212,6 +281,7 @@ export function stepped(s: AgentTreeState, input: StepInput, now: number): Agent
       model: input.model,
       effort: effort ?? n.effort,
       contextTokens: input.contextTokens ?? n.contextTokens,
+      answer: input.answer ? excerpt(input.answer) : n.answer,
     }))
   }
   for (const use of input.advisorUses ?? []) next = advised(next, use, input.agentId, now)
@@ -239,7 +309,7 @@ export function spawned(s: AgentTreeState, input: SpawnInput, now: number): Agen
       startedAt: now,
       endedAt: undefined,
     }))
-    return logged(resumed, 'agent', `${existing.type} fortgesetzt: ${existing.description}`, now)
+    return logged(resumed, 'agent', 'resumed', { type: existing.type, description: existing.description }, now)
   }
   const orphan = s.orphans?.[input.agentId]
   const node: AgentTreeNode = {
@@ -247,6 +317,7 @@ export function spawned(s: AgentTreeState, input: SpawnInput, now: number): Agen
     parentId: input.parentAgentId,
     type: input.fork ? 'Fork' : input.agentType,
     description: oneLine(input.description).slice(0, DESCRIPTION_LIMIT),
+    task: input.prompt ? excerpt(input.prompt) || undefined : undefined,
     model: input.model,
     background: input.background,
     fork: input.fork,
@@ -268,13 +339,19 @@ export function spawned(s: AgentTreeState, input: SpawnInput, now: number): Agen
   }
   if (orphan) next = returnedTo(next, node, orphan.answerTokens)
   if (runSeen) return next
-  const text = node.workflowRunId === undefined ? `${node.type} gestartet: ${node.description}` : `Workflow gestartet: ${node.description}`
-  return logged(next, 'agent', text, now)
+  return node.workflowRunId === undefined
+    ? logged(next, 'agent', 'agentStarted', { type: node.type, description: node.description }, now)
+    : logged(next, 'agent', 'workflowStarted', { description: node.description }, now)
 }
 
 export function toolRan(s: AgentTreeState, input: { agentId?: string; label: string }, now: number): AgentTreeState {
   if (input.agentId === undefined || !findAgent(s, input.agentId)) return s
-  return withAgent(s, input.agentId, n => ({ ...n, toolCount: n.toolCount + 1, lastTool: input.label }))
+  return withAgent(s, input.agentId, n => ({
+    ...n,
+    toolCount: n.toolCount + 1,
+    lastTool: input.label,
+    tools: [...(n.tools ?? []), input.label].slice(-TOOLS_KEPT),
+  }))
 }
 
 function statusOf(input: CompleteInput): AgentTreeStatus {
@@ -283,26 +360,12 @@ function statusOf(input: CompleteInput): AgentTreeStatus {
   return 'done'
 }
 
-const STATUS_WORD: Record<AgentTreeStatus, string> = {
-  running: 'läuft',
-  done: 'fertig',
-  failed: 'fehlgeschlagen',
-  stopped: 'gestoppt',
-}
-
-const MAIN_END_WORD: Record<AgentTreeStatus, string> = {
-  running: 'läuft',
-  done: 'fertig',
-  failed: 'fehlgeschlagen',
-  stopped: 'abgebrochen',
-}
-
 export function completed(s: AgentTreeState, input: CompleteInput, now: number): AgentTreeState {
   const status = statusOf(input)
   if (input.agentId === undefined) {
     const next: AgentTreeState = { ...s, main: { ...s.main, active: false } }
     if (s.main.resumed) return next
-    return logged(next, 'main', `Hauptsitzung ${MAIN_END_WORD[status]} nach ${fmtDuration(input.durationMs)}`, now)
+    return logged(next, 'main', 'mainDone', { status, durationMs: input.durationMs }, now)
   }
   const answerTokens = estimateTokens(input.answer)
   const node = findAgent(s, input.agentId)
@@ -311,19 +374,28 @@ export function completed(s: AgentTreeState, input: CompleteInput, now: number):
     return { ...s, orphans: Object.fromEntries(kept) }
   }
   if (node.status !== 'running') return s
-  let next = withAgent(s, node.id, n => ({ ...n, status, endedAt: now, answerTokens }))
+  const final = wasStopSent(s, node.id) ? 'stopped' : status
+  let next = withAgent(withoutStop(s, node.id), node.id, n => ({
+    ...n,
+    status: final,
+    endedAt: now,
+    answerTokens,
+    answer: input.answer ? excerpt(input.answer) : n.answer,
+  }))
   next = returnedTo(next, node, answerTokens)
   if (node.workflowRunId !== undefined) {
     const stillRunning = next.agents.some(n => n.workflowRunId === node.workflowRunId && n.status === 'running')
     if (stillRunning) return next
     const size = next.agents.filter(n => n.workflowRunId === node.workflowRunId).length
-    return logged(next, 'agent', `Workflow fertig: ${size} Agenten`, now)
+    return logged(next, 'agent', 'workflowDone', { size }, now)
   }
-  const detail = status === 'done' ? ` nach ${fmtDuration(input.durationMs)} · ↑ ${fmtTokens(answerTokens)}` : ''
-  return logged(next, 'agent', `${node.type} ${STATUS_WORD[status]}${detail}`, now)
+  return logged(next, 'agent', 'agentEnded', { type: node.type, status: final, durationMs: input.durationMs, tokens: answerTokens }, now)
 }
 
-export function measured(s: AgentTreeState, input: { tokens?: number; window: number; percent?: number }): AgentTreeState {
+export function measured(
+  s: AgentTreeState,
+  input: { tokens?: number; window: number; percent?: number; costUsd?: number },
+): AgentTreeState {
   return {
     ...s,
     main: {
@@ -331,6 +403,7 @@ export function measured(s: AgentTreeState, input: { tokens?: number; window: nu
       contextTokens: input.tokens ?? s.main.contextTokens,
       window: input.window,
       percent: input.percent ?? s.main.percent,
+      costUsd: input.costUsd ?? s.main.costUsd,
     },
   }
 }
@@ -341,7 +414,8 @@ export function synced(s: AgentTreeState, list: readonly { id: string; status: s
     const status = ENGINE_STATUS[entry.status]
     const node = findAgent(next, entry.id)
     if (!status || !node || node.status !== 'running') continue
-    next = withAgent(next, entry.id, n => ({ ...n, status, endedAt: n.endedAt ?? now }))
+    const final = status === 'done' && wasStopSent(next, entry.id) ? 'stopped' : status
+    next = withAgent(withoutStop(next, entry.id), entry.id, n => ({ ...n, status: final, endedAt: n.endedAt ?? now }))
   }
   return next
 }
@@ -380,8 +454,7 @@ export function adopted(s: AgentTreeState, list: readonly ListedAgent[], now: nu
   }
   if (fresh.length === 0) return s
   const next: AgentTreeState = { ...s, startedAt: s.startedAt || now, agents: [...s.agents, ...fresh] }
-  const count = fresh.length === 1 ? '1 Agent' : `${fresh.length} Agenten`
-  return logged(next, 'agent', `${count} aus der Agentenliste übernommen`, now)
+  return logged(next, 'agent', 'adopted', { count: fresh.length }, now)
 }
 
 export function trimmed(s: AgentTreeState, maxAgents: number): AgentTreeState {
@@ -391,7 +464,13 @@ export function trimmed(s: AgentTreeState, maxAgents: number): AgentTreeState {
     .filter(n => n.status !== 'running')
     .sort((a, b) => (a.endedAt ?? a.startedAt) - (b.endedAt ?? b.startedAt))
   const dropped = new Set(finished.slice(0, s.agents.length - limit).map(n => n.id))
-  return { ...s, agents: s.agents.filter(n => !dropped.has(n.id)) }
+  const choices = s.choices && s.choices.picker && dropped.has(s.choices.picker) ? { ...s.choices, picker: undefined } : s.choices
+  return {
+    ...s,
+    choices,
+    detail: s.detail && dropped.has(s.detail.agentId) ? undefined : s.detail,
+    agents: s.agents.filter(n => !dropped.has(n.id)),
+  }
 }
 
 export function groups(s: AgentTreeState): AgentTreeGroup[] {
@@ -427,18 +506,18 @@ export function groups(s: AgentTreeState): AgentTreeGroup[] {
   return [...all.filter(isRunning), ...all.filter(g => !isRunning(g)).sort((a, b) => recency(b) - recency(a))]
 }
 
-function decimal(value: number, digits: number): string {
-  return value.toFixed(digits).replace(/\.0$/, '').replace('.', ',')
+function decimal(value: number, digits: number, separator: string): string {
+  return value.toFixed(digits).replace(/\.0$/, '').replace('.', separator)
 }
 
-export function fmtTokens(n: number | undefined): string {
+export function fmtTokens(n: number | undefined, separator = ','): string {
   if (n === undefined || !Number.isFinite(n)) return ''
   if (n < 1000) return String(Math.round(n))
   const thousands = n / 1000
   const thousandDigits = thousands < 100 ? 1 : 0
-  if (Number(thousands.toFixed(thousandDigits)) < 1000) return `${decimal(thousands, thousandDigits)}k`
+  if (Number(thousands.toFixed(thousandDigits)) < 1000) return `${decimal(thousands, thousandDigits, separator)}k`
   const millions = n / 1_000_000
-  return `${decimal(millions, millions < 100 ? 1 : 0)}M`
+  return `${decimal(millions, millions < 100 ? 1 : 0, separator)}M`
 }
 
 export function fmtShortDuration(ms: number): string {
@@ -496,15 +575,9 @@ export function modelLabel(model: string | undefined): string {
   return model
 }
 
-const TOOL_WORDS: Record<string, string> = {
-  SubagentHandback: 'Antwort übergeben',
-}
-
-const BARE_TOOLS = new Set(['Grep', 'Glob', 'WebSearch', 'ToolSearch'])
+const BARE_TOOLS = new Set(['Grep', 'Glob', 'WebSearch', 'ToolSearch', 'SubagentHandback'])
 
 export function toolLabel(tool: string, input: Record<string, unknown>): string {
-  const word = TOOL_WORDS[tool]
-  if (word) return word
   const text = (value: unknown) => (typeof value === 'string' ? oneLine(value) : '')
   const fileName = (value: unknown) => text(value).split('/').filter(Boolean).at(-1) ?? ''
   const program = (value: unknown) => fileName(text(value).split(' ')[0])
