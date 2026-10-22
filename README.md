@@ -4,7 +4,7 @@
 
 A side pane for the terminal that draws a session's agents as a tree of boxes: main session, sub-agents, the way back, the advisor and a session log.
 
-![Agent Tree](docs/agent-tree.png)
+![Agent Tree](docs/agent-tree.gif)
 
 ## Install
 
