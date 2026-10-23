@@ -12,7 +12,7 @@ A terminal side pane for Claude Code that draws a session's agents as a tree of 
 /plugin install agent-tree --marketplace MikeGT4/agent-tree
 ```
 
-Tested with versions 2.1.307 and 2.1.308; it needs the mod interface.
+Tested with 2.1.296 and 2.1.307 to 2.1.309; it needs the mod interface.
 
 ## Use
 
