@@ -60,12 +60,7 @@ const ENGINE_STATUS: Record<string, AgentTreeStatus> = {
   killed: 'stopped',
 }
 
-export const MODEL_CHOICES = [
-  { family: 'haiku', label: 'Haiku', id: 'claude-haiku-5-5' },
-  { family: 'sonnet', label: 'Sonnet', id: 'claude-sonnet-5-5' },
-  { family: 'opus', label: 'Opus', id: 'claude-opus-5-5' },
-  { family: 'fable', label: 'Fable', id: 'claude-fable-5-1' },
-] as const
+export const MODEL_FAMILIES = ['haiku', 'sonnet', 'opus', 'fable'] as const
 
 export const NEW_AGENTS = 'new'
 
@@ -74,7 +69,7 @@ export function choicesOf(s: AgentTreeState): AgentTreeChoices {
 }
 
 export function familyLabel(family: string | undefined): string {
-  return MODEL_CHOICES.find(c => c.family === family)?.label ?? 'Standard'
+  return family ? family.charAt(0).toUpperCase() + family.slice(1) : 'Standard'
 }
 
 export function pickerOpened(s: AgentTreeState, target: string | undefined): AgentTreeState {
@@ -155,8 +150,7 @@ export function chosen(s: AgentTreeState, target: string, family: string | undef
 
 export function stepModelFor(s: AgentTreeState, family: string): string {
   const seen = [s.main.model, ...s.agents.map(n => n.model)]
-  const match = seen.find(model => model !== undefined && new RegExp(`claude-${family}-\\d`).test(model))
-  return match ?? MODEL_CHOICES.find(c => c.family === family)?.id ?? family
+  return seen.find(model => model !== undefined && new RegExp(`claude-${family}-\\d`).test(model)) ?? family
 }
 
 export function createTree(now: number): AgentTreeState {

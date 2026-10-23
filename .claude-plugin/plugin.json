@@ -1,7 +1,7 @@
 {
   "_copyright": "© 2026 Mike Pollow, Digitalroots. MIT-Lizenz.",
   "name": "agent-tree",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Side pane that draws the session's agents as boxes: main session, sub-agents, the way back, advisor and session log.",
   "author": {
     "name": "Mike Pollow, Digitalroots"

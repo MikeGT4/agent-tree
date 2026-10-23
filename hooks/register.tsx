@@ -32,7 +32,8 @@ import {
   wasStopSent,
   withAdvisorModel,
 } from './model.ts'
-import { drawTree, statusText } from './view.tsx'
+import { drawTree, pressKey, statusText } from './view.tsx'
+import type { TreeActions } from './view.tsx'
 import { resolveLang, wordsFor } from './words.ts'
 import type { Lang } from './words.ts'
 
@@ -127,6 +128,17 @@ async function openDetail($: EngineInterface, agentId: string): Promise<void> {
   await change($, t => detailLoaded(t, agentId, summarize(rows)))
 }
 
+function actionsFor($: EngineInterface): TreeActions {
+  const ignore = () => undefined
+  return {
+    pick: target => void change($, t => pickerOpened(t, target)).catch(ignore),
+    choose: family => void change($, t => chosen(t, choicesOf(t).picker ?? NEW_AGENTS, family, Date.now())).catch(ignore),
+    close: () => void change($, t => closed(t)).catch(ignore),
+    detail: agentId => void openDetail($, agentId).catch(ignore),
+    stop: agentId => void change($, t => stopRequested(t, agentId, Date.now())).catch(ignore),
+  }
+}
+
 export const register: Register = (on, options) => {
   const columns = paneColumns(options.columns)
   const keep = agentLimit(options.maxAgents)
@@ -215,7 +227,7 @@ export const register: Register = (on, options) => {
     await change($, s =>
       stepped(
         s,
-        { agentId: e.agentId, answer: result.answer, model: model ?? e.model, effort: e.effort, contextTokens, advisorUses },
+        { agentId: e.agentId, answer: result.answer, model: usage?.model ?? model ?? e.model, effort: e.effort, contextTokens, advisorUses },
         now,
       ),
     ).catch(() => undefined)
@@ -311,21 +323,16 @@ export const register: Register = (on, options) => {
     const s = await read($, tree)
     const tick = animate ? await read($, frame) : 0
     const now = await clock($)
-    const ignore = () => undefined
-    const actions = {
-      pick: (target: string) => void change($, t => pickerOpened(t, target)).catch(ignore),
-      choose: (family: string | undefined) =>
-        void change($, t => chosen(t, choicesOf(t).picker ?? NEW_AGENTS, family, Date.now())).catch(ignore),
-      close: () => void change($, t => closed(t)).catch(ignore),
-      detail: (agentId: string) => void openDetail($, agentId).catch(ignore),
-      stop: (agentId: string) => void change($, t => stopRequested(t, agentId, Date.now())).catch(ignore),
-    }
     return drawTree({ Box, Text, Button } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {
       frame: tick,
       animate,
       now,
       lang,
-      actions,
+      actions: actionsFor($),
     })
   })
+
+  on('ui.press', { component: 'Pane', requestId: PANE }, async ($, e, next) =>
+    pressKey(actionsFor($), e.element) ? { element: e.element } : next(e),
+  )
 }

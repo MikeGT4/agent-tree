@@ -13,15 +13,18 @@ import {
   detailOpened,
   effortBar,
   excerpt,
+  familyLabel,
   fmtShortDuration,
   fmtTokens,
   groups,
   isStopping,
   measured,
+  MODEL_FAMILIES,
   modelLabel,
   phaseOf,
   pickerOpened,
   spawned,
+  stepModelFor,
   stepped,
   stopCancelled,
   stopRequested,
@@ -34,7 +37,7 @@ import {
   typeLabel,
   wasStopSent,
 } from '../hooks/model.ts'
-import { pickerLines, planRows, runningMark, statusText, timelineBar } from '../hooks/view.tsx'
+import { pickerLines, planRows, pressKey, runningMark, statusText, timelineBar } from '../hooks/view.tsx'
 import { logLine, resolveLang, toolText } from '../hooks/words.ts'
 
 const line = (entry: AgentTreeLogEntry | undefined) => (entry ? logLine(entry, 'de') : undefined)
@@ -218,6 +221,33 @@ describe('Datenmodell', () => {
       'medium',
       9000,
     ])
+  })
+
+  test('Knöpfe der Leiste wirken über ihren Schlüssel', () => {
+    const calls: string[] = []
+    const actions = {
+      pick: (target: string) => void calls.push(`pick ${target}`),
+      choose: (family: string | undefined) => void calls.push(`choose ${family ?? '-'}`),
+      close: () => void calls.push('close'),
+      detail: (agentId: string) => void calls.push(`detail ${agentId}`),
+      stop: (agentId: string) => void calls.push(`stop ${agentId}`),
+    }
+    const keys = ['pick:new', 'pick:a1', 'choose:default', 'choose:sonnet', 'picker:close', 'detail:a1', 'detail:close', 'stop:a1', 'picker', 'pickX', 'fremd:x']
+    expect(keys.map(key => pressKey(actions, key))).toEqual([true, true, true, true, true, true, true, true, false, false, false])
+    expect(calls).toEqual(['pick new', 'pick a1', 'choose -', 'choose sonnet', 'close', 'detail a1', 'close', 'stop a1'])
+  })
+
+  test('Modellwahl: gesehene Kennung der Familie, sonst ihr Alias', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = stepped(s, { model: 'claude-opus-5-5' }, 2)
+    s = stepped(s, { agentId: 'a1', model: 'claude-sonnet-5-5' }, 3)
+    expect([stepModelFor(s, 'opus'), stepModelFor(s, 'sonnet'), stepModelFor(s, 'haiku'), stepModelFor(s, 'mythos')]).toEqual([
+      'claude-opus-5-5',
+      'claude-sonnet-5-5',
+      'haiku',
+      'mythos',
+    ])
+    expect([...MODEL_FAMILIES.map(familyLabel), familyLabel('mythos')]).toEqual(['Haiku', 'Sonnet', 'Opus', 'Fable', 'Mythos'])
   })
 
   test('Zeilenplan: Kästen, Zeilen und Protokoll teilen sich die Höhe', () => {

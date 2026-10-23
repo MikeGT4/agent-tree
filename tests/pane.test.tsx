@@ -4,6 +4,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 const usage = { input_tokens: 2000, output_tokens: 40, cache_read_input_tokens: 30000, cache_creation_input_tokens: 0 }
+const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<string, string>)[model] ?? model
 
 function engine(on: On, listed: unknown[] = []) {
   const status: string[] = []
@@ -39,7 +40,7 @@ function engine(on: On, listed: unknown[] = []) {
       answer: '',
       toolUses: [],
       stopReason: 'end_turn' as const,
-      usage: { ...usage, model: e.model },
+      usage: { ...usage, model: answering(e.model) },
       ...(e.messageCount === 99
         ? { serverToolUses: [{ id: 'adv-1', name: 'advisor', input: {}, startedAt: 1000, endedAt: 4000 }] }
         : {}),
@@ -177,8 +178,14 @@ describe('Agent Tree', () => {
     await ui.press({ key: 'choose:sonnet' })
     await ui.unmount()
     await step($, { agentId: 'sub-1' })
+    await step($, { agentId: 'sub-1' })
     await step($)
-    expect(seen.stepModels.slice(-2)).toEqual(['claude-sonnet-5-5', 'claude-opus-5-5'])
+    expect(seen.stepModels.slice(-3)).toEqual(['sonnet', 'claude-sonnet-5-5', 'claude-opus-5-5'])
+    const again = await $.ui.mount(pane(90))
+    await again.press({ key: 'detail:sub-1' })
+    await again.redraw()
+    expect(await screen(again)).toMatch(/Sonnet 5\.5 · /)
+    await again.unmount()
   })
 
   test('eine schmale Leiste stapelt und bleibt gültig', de, async ($, on) => {

@@ -3,7 +3,7 @@ import type { Elements } from 'claude-code'
 
 import type { AgentTreeAdvisorCall, AgentTreeGroup, AgentTreeLogSource, AgentTreeNode, AgentTreeState, AgentTreeStatus } from '../types'
 import {
-  MODEL_CHOICES,
+  MODEL_FAMILIES,
   NEW_AGENTS,
   choicesOf,
   clockTime,
@@ -70,6 +70,20 @@ export type TreeActions = {
 }
 
 export type TreeLook = { frame: number; animate: boolean; now?: number; lang?: Lang; actions?: TreeActions }
+
+export function pressKey(actions: TreeActions, key: string): boolean {
+  const cut = key.indexOf(':')
+  if (cut < 0) return false
+  const kind = key.slice(0, cut)
+  const rest = key.slice(cut + 1)
+  if (key === 'picker:close' || key === 'detail:close') actions.close()
+  else if (kind === 'pick') actions.pick(rest)
+  else if (kind === 'choose') actions.choose(rest === 'default' ? undefined : rest)
+  else if (kind === 'detail') actions.detail(rest)
+  else if (kind === 'stop') actions.stop(rest)
+  else return false
+  return true
+}
 
 const STATUS_COLOR: Record<AgentTreeStatus, string> = {
   running: COLOR.agent,
@@ -260,7 +274,7 @@ function callPlace(call: AgentTreeAdvisorCall, w: Words): string {
 
 export function pickerLines(name: string, width: number, lang: Lang = 'de'): number {
   const w = wordsFor(lang)
-  const parts = [w.pickerFor(name), `[ ${w.standard} ]`, ...MODEL_CHOICES.map(c => `[ ${c.label} ]`), '[ × ]']
+  const parts = [w.pickerFor(name), `[ ${w.standard} ]`, ...MODEL_FAMILIES.map(family => `[ ${familyLabel(family)} ]`), '[ × ]']
   let lines = 1
   let used = 0
   for (const part of parts) {
@@ -690,13 +704,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           {w.pickerFor(pickerName)}
         </Text>
         <Button key="choose:default" hotkey="0" label={w.standard} variant={pickerCurrent === undefined ? 'primary' : undefined} onPress={() => actions.choose(undefined)} />
-        {MODEL_CHOICES.map((choice, i) => (
+        {MODEL_FAMILIES.map((family, i) => (
           <Button
-            key={`choose:${choice.family}`}
+            key={`choose:${family}`}
             hotkey={String(i + 1)}
-            label={choice.label}
-            variant={pickerCurrent === choice.family ? 'primary' : undefined}
-            onPress={() => actions.choose(choice.family)}
+            label={familyLabel(family)}
+            variant={pickerCurrent === family ? 'primary' : undefined}
+            onPress={() => actions.choose(family)}
           />
         ))}
         <Button key="picker:close" hotkey="x" label="×" onPress={() => actions.close()} />
