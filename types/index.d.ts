@@ -70,6 +70,8 @@ export type AgentTreeOrphanEnd = {
   status: AgentTreeStatus
   at: number
   answerTokens: number
+  answer?: string
+  durationMs?: number
 }
 
 export type AgentTreeChoices = {

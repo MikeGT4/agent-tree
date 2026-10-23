@@ -132,10 +132,10 @@ function actionsFor($: EngineInterface): TreeActions {
   const ignore = () => undefined
   return {
     pick: target => void change($, t => pickerOpened(t, target)).catch(ignore),
-    choose: family => void change($, t => chosen(t, choicesOf(t).picker ?? NEW_AGENTS, family, Date.now())).catch(ignore),
+    choose: family => void clock($).then(now => change($, t => chosen(t, choicesOf(t).picker ?? NEW_AGENTS, family, now))).catch(ignore),
     close: () => void change($, t => closed(t)).catch(ignore),
     detail: agentId => void openDetail($, agentId).catch(ignore),
-    stop: agentId => void change($, t => stopRequested(t, agentId, Date.now())).catch(ignore),
+    stop: agentId => void clock($).then(now => change($, t => stopRequested(t, agentId, now))).catch(ignore),
   }
 }
 
@@ -311,7 +311,7 @@ export const register: Register = (on, options) => {
   on('session.end', async ($, e, next) => {
     const reset =
       e.reason === 'clear' || e.reason === 'resume'
-        ? change($, s => withAdvisorModel(createTree(Date.now()), s.advisor.model)).catch(() => undefined)
+        ? clock($).then(now => change($, s => withAdvisorModel(createTree(now), s.advisor.model))).catch(() => undefined)
         : Promise.resolve()
     const result = await next(e)
     await reset

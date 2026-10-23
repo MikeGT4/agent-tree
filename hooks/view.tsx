@@ -262,6 +262,10 @@ function startOf(g: AgentTreeGroup): number {
   return g.kind === 'agent' ? g.node.startedAt : g.startedAt
 }
 
+function endedSince(g: AgentTreeGroup, since: number): boolean {
+  return g.kind === 'agent' && g.node.endedAt !== undefined && g.node.endedAt >= since
+}
+
 function parentOf(s: AgentTreeState, n: AgentTreeNode): string | undefined {
   if (n.parentId === undefined) return undefined
   const parent = s.agents.find(p => p.id === n.parentId)
@@ -318,7 +322,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const phase = phaseOf(s)
   const roundStart = s.main.roundStartedAt ?? 0
   const all = groups(s)
-  const current = all.filter(g => isRunning(g) || startOf(g) >= roundStart)
+  const current = all.filter(g => isRunning(g) || startOf(g) >= roundStart || endedSince(g, roundStart))
   const earlier = all.length - current.length
   const recentCalls = s.advisor.calls.slice(-ADVISOR_ROWS)
   const pickerTarget = choices.picker

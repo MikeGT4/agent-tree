@@ -4,6 +4,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { AgentTreeLogEntry } from '../types'
 import {
   adopted,
+  chosen,
   clockTime,
   closed,
   completed,
@@ -201,6 +202,28 @@ describe('Datenmodell', () => {
     let s = completed(createTree(0), done('ghost', { reason: 'error' }), 1)
     s = spawned(s, spawn('ghost'), 2)
     expect([s.agents[0]?.status, s.agents[0]?.endedAt]).toEqual(['failed', 1])
+    let t = completed(createTree(0), done('early', { answer: 'Spätes Ergebnis' }), 5)
+    t = spawned(t, spawn('early'), 7)
+    const n = t.agents[0]
+    expect([n?.answer, (n?.startedAt ?? 0) <= (n?.endedAt ?? 0), t.log.at(-1)?.kind, t.main.returned]).toEqual(['Spätes Ergebnis', true, 'agentEnded', 1])
+  })
+
+  test('ein Ende, das die Agentenliste zuerst meldet, behält Antwort, Rückweg und Protokoll', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = synced(s, [{ id: 'a1', status: 'completed' }], 2)
+    s = completed(s, done('a1', { answer: 'Ergebnis' }), 3)
+    expect([s.agents[0]?.status, s.agents[0]?.answer, s.main.returned, s.log.at(-1)?.kind]).toEqual(['done', 'Ergebnis', 1, 'agentEnded'])
+    s = completed(s, done('a1', { answer: 'Ergebnis' }), 4)
+    expect(s.main.returned).toBe(1)
+  })
+
+  test('beim Kürzen fallen auch die Modellwahlen der entfernten Agenten weg', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = spawned(s, spawn('a2'), 2)
+    s = chosen(s, 'a1', 'sonnet', 3)
+    s = completed(s, done('a1'), 4)
+    s = trimmed(s, 1)
+    expect(Object.keys(s.choices?.agents ?? {})).toEqual([])
   })
 
   test('abgebrochene Hauptrunde und leerer Rundentext', () => {
@@ -331,7 +354,7 @@ describe('Datenmodell', () => {
     expect(toolLabel('Bash', { description: 'Push mit ghp_abcdefghijklmnop' })).toBe('Bash Push mit •••')
     expect(toolLabel('Agent', { description: 'x'.repeat(100) }).length).toBe(40)
     const s = turnStarted(createTree(0), { text: 'a\u001b[31mb\u202ec token=geheim123 ' + 'y'.repeat(100) }, 1)
-    expect(line(s.log.at(-1))).toBe(`Runde 1: ${`a [31mb c ••• ${'y'.repeat(100)}`.slice(0, 60)}`)
+    expect(line(s.log.at(-1))).toBe(`Runde 1: ${`a b c ••• ${'y'.repeat(100)}`.slice(0, 60)}`)
     const t = spawned(createTree(0), spawn('a1', { description: 'z'.repeat(120) }), 1)
     expect(t.agents[0]?.description.length).toBe(80)
   })
@@ -416,10 +439,26 @@ describe('Datenmodell', () => {
   })
 
   test('Maskierung: Schlüssel in Variablen, JSON und Google-Form', () => {
-    for (const secret of ['DB_PASSWORD=hunter2', 'AWS_SECRET_ACCESS_KEY=beispielwert', 'PGPASSWORD=s3cr3t', '{"password": "hunter2"}', 'key AIzaSyA1234567890abcdefghijklmnopqr']) {
-      expect(excerpt(secret)).not.toMatch(/hunter2|beispielwert|s3cr3t|AIzaSy/)
+    for (const secret of [
+      'DB_PASSWORD=hunter2',
+      'AWS_SECRET_ACCESS_KEY=beispielwert',
+      'PGPASSWORD=s3cr3t',
+      '{"password": "hunter2"}',
+      'key AIzaSyA1234567890abcdefghijklmnopqr',
+      '\u001b[31mghp_abcdefghijklmnop\u001b[0m',
+      '\u001b[32mBearer geheim123',
+      'password="mein geheimes wort"',
+      "token: 'zwei worte'",
+      'https://nutzer:kennwort123@example.org/pfad',
+      'Authorization: Basic dXNlcjpwYXNzd29yZA==',
+      'DB_PASS=hunter3 psql',
+      'MYSQL_PWD=hunter4',
+    ]) {
+      expect(excerpt(secret)).not.toMatch(/hunter2|beispielwert|s3cr3t|AIzaSy|ghp_|geheim123|geheimes|worte|kennwort123|dXNlcjpw|hunter3|hunter4/)
     }
     expect(excerpt('Lies den Code und prüfe die Tests')).toBe('Lies den Code und prüfe die Tests')
+    expect(excerpt('SK-Kontenrahmen 03, Basic configuration, Kompass: Norden')).toBe('SK-Kontenrahmen 03, Basic configuration, Kompass: Norden')
+    expect(toolLabel('Bash', { command: 'DB_PASS=hunter3 psql -h x' })).toBe('Bash psql')
   })
 
   test('leerer Auftrag zählt als unbekannt, gekürzte Agenten nehmen ihr Detail mit', () => {

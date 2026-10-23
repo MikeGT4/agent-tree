@@ -269,6 +269,21 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
+  test('ein Hintergrundagent der Vorrunde, der in dieser Runde endet, bleibt als Kasten mit Rückweg', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await $.turn.start({ text: 'Erste Runde', turnId: 't1' })
+    await $.agent.spawn({ prompt: 'A.', description: 'Hintergrund', subagentType: 'Explore' })
+    await $.turn.complete({ answer: 'gestartet', durationMs: 900, isAborted: false, turnId: 't1', reason: 'answer' })
+    await $.turn.start({ text: 'Zweite Runde', turnId: 't2' })
+    await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/"Hintergrund"/)
+    expect(await screen(ui)).toMatch(/1 Antwort/)
+    expect(await screen(ui)).not.toMatch(/aus früheren Runden/)
+    await ui.unmount()
+  })
+
   test('/clear beginnt den Baum neu', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)

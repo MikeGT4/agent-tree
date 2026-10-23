@@ -187,13 +187,27 @@ function withAgent(s: AgentTreeState, id: string, change: (n: AgentTreeNode) => 
   return { ...s, agents: s.agents.map(n => (n.id === id ? change(n) : n)) }
 }
 
+const ANSI = /\u001b\[[0-9;?]*[ -\/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g
+
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g
 
+const TOKEN =
+  /\b(?:ghp_|gho_|ghu_|ghs_|github_pat_|sk-|xox[abprs]-|AKIA|AIza|eyJ)[A-Za-z0-9_\-.]{6,}|\bBasic\s+(?=[A-Za-z0-9+\/]*[0-9+\/=])[A-Za-z0-9+\/]{8,}={0,2}/g
+
 const SECRET =
-  /\b(?:ghp_|gho_|ghu_|ghs_|github_pat_|sk-|xox[abprs]-|AKIA|AIza|eyJ)[A-Za-z0-9_\-.]{6,}|\bBearer\s+\S+|[A-Za-z0-9_]*(?:password|passwort|passwd|token|secret|api[_-]?key|access[_-]?key)[A-Za-z0-9_]*["']?\s*[=:]\s*["']?[^\s"',;]+/gi
+  /\bBearer\s+\S+|\b[a-z][a-z0-9+.-]*:\/\/[^\s\/:@]+:[^\s\/@]+@|[A-Za-z0-9_]*(?:password|passwort|passwd|token|secret|api[_-]?key|access[_-]?key)[A-Za-z0-9_]*["']?\s*[=:]\s*(?:"[^"]*"|'[^']*'|["']?[^\s"',;]+)/gi
+
+const ENV_SECRET = /\b[A-Z][A-Z0-9_]*(?:PASS|PWD|KEY|CREDENTIALS?)[A-Z0-9_]*=\S+/g
 
 function oneLine(text: string): string {
-  return text.replace(CONTROL, ' ').replace(SECRET, '•••').replace(/\s+/g, ' ').trim()
+  return text
+    .replace(ANSI, ' ')
+    .replace(CONTROL, ' ')
+    .replace(TOKEN, '•••')
+    .replace(SECRET, '•••')
+    .replace(ENV_SECRET, '•••')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export function excerpt(text: string | undefined, limit = DETAIL_LIMIT): string {
@@ -317,9 +331,10 @@ export function spawned(s: AgentTreeState, input: SpawnInput, now: number): Agen
     fork: input.fork,
     workflowRunId: input.workflowRunId,
     status: orphan?.status ?? 'running',
-    startedAt: now,
+    startedAt: orphan ? Math.min(now, orphan.at) : now,
     endedAt: orphan?.at,
     answerTokens: orphan?.answerTokens,
+    answer: orphan?.answer,
     toolCount: 0,
   }
   const runSeen = node.workflowRunId !== undefined && s.agents.some(n => n.workflowRunId === node.workflowRunId)
@@ -333,9 +348,11 @@ export function spawned(s: AgentTreeState, input: SpawnInput, now: number): Agen
   }
   if (orphan) next = returnedTo(next, node, orphan.answerTokens)
   if (runSeen) return next
-  return node.workflowRunId === undefined
-    ? logged(next, 'agent', 'agentStarted', { type: node.type, description: node.description }, now)
-    : logged(next, 'agent', 'workflowStarted', { description: node.description }, now)
+  if (node.workflowRunId !== undefined) return logged(next, 'agent', 'workflowStarted', { description: node.description }, node.startedAt)
+  next = logged(next, 'agent', 'agentStarted', { type: node.type, description: node.description }, node.startedAt)
+  if (!orphan) return next
+  const ended = { type: node.type, status: orphan.status, durationMs: orphan.durationMs ?? 0, tokens: orphan.answerTokens }
+  return logged(next, 'agent', 'agentEnded', ended, orphan.at)
 }
 
 export function toolRan(s: AgentTreeState, input: { agentId?: string; label: string }, now: number): AgentTreeState {
@@ -364,15 +381,18 @@ export function completed(s: AgentTreeState, input: CompleteInput, now: number):
   const answerTokens = estimateTokens(input.answer)
   const node = findAgent(s, input.agentId)
   if (!node) {
-    const kept = Object.entries({ ...s.orphans, [input.agentId]: { status, at: now, answerTokens } }).slice(-ORPHANS_KEPT)
+    const answer = input.answer ? excerpt(input.answer) : undefined
+    const kept = Object.entries({ ...s.orphans, [input.agentId]: { status, at: now, answerTokens, answer, durationMs: input.durationMs } }).slice(
+      -ORPHANS_KEPT,
+    )
     return { ...s, orphans: Object.fromEntries(kept) }
   }
-  if (node.status !== 'running') return s
-  const final = wasStopSent(s, node.id) ? 'stopped' : status
+  if (node.status !== 'running' && node.answerTokens !== undefined) return s
+  const final = node.status === 'stopped' || wasStopSent(s, node.id) ? 'stopped' : status
   let next = withAgent(withoutStop(s, node.id), node.id, n => ({
     ...n,
     status: final,
-    endedAt: now,
+    endedAt: n.status === 'running' ? now : n.endedAt ?? now,
     answerTokens,
     answer: input.answer ? excerpt(input.answer) : n.answer,
   }))
@@ -458,7 +478,11 @@ export function trimmed(s: AgentTreeState, maxAgents: number): AgentTreeState {
     .filter(n => n.status !== 'running')
     .sort((a, b) => (a.endedAt ?? a.startedAt) - (b.endedAt ?? b.startedAt))
   const dropped = new Set(finished.slice(0, s.agents.length - limit).map(n => n.id))
-  const choices = s.choices && s.choices.picker && dropped.has(s.choices.picker) ? { ...s.choices, picker: undefined } : s.choices
+  const choices = s.choices && {
+    ...s.choices,
+    agents: Object.fromEntries(Object.entries(s.choices.agents).filter(([id]) => !dropped.has(id))),
+    picker: s.choices.picker && dropped.has(s.choices.picker) ? undefined : s.choices.picker,
+  }
   return {
     ...s,
     choices,
@@ -540,14 +564,12 @@ export function effortBar(effort: string | number | undefined): string {
   return '▮'.repeat(level) + '▯'.repeat(EFFORT_LEVELS.length - level)
 }
 
+let clockFormat: Intl.DateTimeFormat | undefined
+
 export function clockTime(ms: number): string {
   try {
-    return new Intl.DateTimeFormat('de-DE', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    }).format(ms)
+    clockFormat ??= new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+    return clockFormat.format(ms)
   } catch {
     return new Date(ms).toISOString().slice(11, 19)
   }
@@ -574,7 +596,8 @@ const BARE_TOOLS = new Set(['Grep', 'Glob', 'WebSearch', 'ToolSearch', 'Subagent
 export function toolLabel(tool: string, input: Record<string, unknown>): string {
   const text = (value: unknown) => (typeof value === 'string' ? oneLine(value) : '')
   const fileName = (value: unknown) => text(value).split('/').filter(Boolean).at(-1) ?? ''
-  const program = (value: unknown) => fileName(text(value).split(' ')[0])
+  const program = (value: unknown) =>
+    fileName(text(typeof value === 'string' ? value.trimStart().replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+/, '') : value).split(' ')[0])
   const host = (value: unknown) => {
     try {
       return new URL(text(value)).host
