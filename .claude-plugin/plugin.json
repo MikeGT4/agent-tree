@@ -1,12 +1,13 @@
 {
   "name": "agent-tree",
   "displayName": "Agent Tree",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Side pane that draws the session's agents as boxes: main session, sub-agents, the way back, advisor and session log.",
   "author": {
     "name": "Mike Pollow, Digitalroots"
   },
   "homepage": "https://github.com/MikeGT4/agent-tree",
+  "privacyPolicyUrl": "https://github.com/MikeGT4/agent-tree/blob/main/PRIVACY.md",
   "repository": "https://github.com/MikeGT4/agent-tree",
   "license": "MIT",
   "types": "./types/index.d.ts",
