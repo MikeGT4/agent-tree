@@ -4,7 +4,7 @@
 
 Seitenleiste für Claude Code im Terminal, die die Agenten einer Sitzung als Kästen zeichnet: Hauptsitzung, Unteragenten, Rückweg, Berater und Sitzungsprotokoll.
 
-![Agent Tree](docs/agent-tree-opener.gif)
+![Agent Tree](https://github.com/MikeGT4/agent-tree/releases/download/v0.3.0/agent-tree-opener.gif)
 
 ## Installation
 
