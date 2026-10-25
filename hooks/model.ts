@@ -134,16 +134,19 @@ function withoutStop(s: AgentTreeState, agentId: string): AgentTreeState {
 
 export function chosen(s: AgentTreeState, target: string, family: string | undefined, now: number): AgentTreeState {
   const current = choicesOf(s)
+  const picker = current.picker === target ? undefined : current.picker
   const agents = { ...current.agents }
   let choices: AgentTreeChoices
   let who = ''
   if (target === NEW_AGENTS) {
-    choices = { ...current, newAgents: family, agents, picker: undefined }
+    choices = { ...current, newAgents: family, agents, picker }
   } else {
+    const node = findAgent(s, target)
+    if (!node) return s
     if (family === undefined) delete agents[target]
     else agents[target] = family
-    choices = { ...current, agents, picker: undefined }
-    who = findAgent(s, target)?.type ?? '?'
+    choices = { ...current, agents, picker }
+    who = node.type
   }
   return logged({ ...s, choices }, 'session', 'choice', { who, family: family ?? '' }, now)
 }

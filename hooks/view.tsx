@@ -65,7 +65,7 @@ export function runningMark(frame: number, animate: boolean): string {
 
 export type TreeActions = {
   pick: (target: string) => void
-  choose: (family: string | undefined) => void
+  choose: (target: string, family: string | undefined) => void
   close: () => void
   detail: (agentId: string) => void
   stop: (agentId: string) => void
@@ -80,10 +80,18 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   const rest = key.slice(cut + 1)
   if (key === 'picker:close' || key === 'detail:close') actions.close()
   else if (kind === 'pick') actions.pick(rest)
-  else if (kind === 'choose') actions.choose(rest === 'default' ? undefined : rest)
+  else if (kind === 'choose') return chooseKey(actions, rest)
   else if (kind === 'detail') actions.detail(rest)
   else if (kind === 'stop') actions.stop(rest)
   else return false
+  return true
+}
+
+function chooseKey(actions: TreeActions, rest: string): boolean {
+  const cut = rest.lastIndexOf(':')
+  if (cut < 1 || cut + 1 >= rest.length) return false
+  const family = rest.slice(cut + 1)
+  actions.choose(rest.slice(0, cut), family === 'default' ? undefined : family)
   return true
 }
 
@@ -709,14 +717,14 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         <Text color={COLOR.agent} wrap="truncate-end">
           {w.pickerFor(pickerName)}
         </Text>
-        <Button key="choose:default" hotkey="0" label={w.standard} variant={pickerCurrent === undefined ? 'primary' : undefined} onPress={() => actions.choose(undefined)} />
+        <Button key={`choose:${pickerTarget}:default`} hotkey="0" label={w.standard} variant={pickerCurrent === undefined ? 'primary' : undefined} onPress={() => actions.choose(pickerTarget, undefined)} />
         {MODEL_FAMILIES.map((family, i) => (
           <Button
-            key={`choose:${family}`}
+            key={`choose:${pickerTarget}:${family}`}
             hotkey={String(i + 1)}
             label={familyLabel(family)}
             variant={pickerCurrent === family ? 'primary' : undefined}
-            onPress={() => actions.choose(family)}
+            onPress={() => actions.choose(pickerTarget, family)}
           />
         ))}
         <Button key="picker:close" hotkey="x" label="×" onPress={() => actions.close()} />

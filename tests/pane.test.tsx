@@ -161,7 +161,7 @@ describe('Agent Tree', () => {
     await ui.press({ key: 'pick:new' })
     await ui.redraw()
     expect(await screen(ui)).toMatch(/Modell für neue Unteragenten/)
-    await ui.press({ key: 'choose:opus' })
+    await ui.press({ key: 'choose:new:opus' })
     await ui.unmount()
     await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' })
     await $.agent.spawn({ prompt: 'Q.', description: 'Eigen', subagentType: 'Plan', model: 'haiku' })
@@ -175,7 +175,7 @@ describe('Agent Tree', () => {
     await ui.press({ key: 'pick:sub-1' })
     await ui.redraw()
     expect(await screen(ui)).toMatch(/Modell für Explore · Code lesen/)
-    await ui.press({ key: 'choose:sonnet' })
+    await ui.press({ key: 'choose:sub-1:sonnet' })
     await ui.unmount()
     await step($, { agentId: 'sub-1' })
     await step($, { agentId: 'sub-1' })
@@ -186,6 +186,34 @@ describe('Agent Tree', () => {
     await again.redraw()
     expect(await screen(again)).toMatch(/Sonnet 5\.5 · /)
     await again.unmount()
+  })
+
+  test('eine Modellwahl bleibt bei ihrem Agenten, auch wenn die Uhr erst nach dem Öffnen der nächsten Auswahl antwortet', de, async ($, on) => {
+    const seen = engine(on)
+    let held = false
+    let release: (() => void) | undefined
+    on('clock.now', async () => {
+      if (held) {
+        held = false
+        await new Promise<void>(resolve => (release = resolve))
+      }
+      return { value: 1_000 } as never
+    })
+    await oneAgentWithAdvisor($)
+    await $.agent.spawn({ prompt: 'Plane.', description: 'Plan bauen', subagentType: 'Plan' })
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:sub-1' })
+    held = true
+    await ui.press({ key: 'choose:sub-1:sonnet' })
+    await ui.press({ key: 'pick:sub-2' })
+    expect(release).toBeDefined()
+    release?.()
+    for (let i = 0; i < 4; i++) await ui.redraw()
+    expect(await screen(ui)).toMatch(/Modell für Plan · Plan bauen/)
+    await ui.unmount()
+    await step($, { agentId: 'sub-1' })
+    await step($, { agentId: 'sub-2' })
+    expect(seen.stepModels.slice(-2)).toEqual(['sonnet', 'claude-haiku-4-5-20251001'])
   })
 
   test('eine schmale Leiste stapelt und bleibt gültig', de, async ($, on) => {
@@ -322,7 +350,7 @@ describe('Agent Tree', () => {
     await ui.press({ key: 'pick:new' })
     await ui.redraw()
     const keys = await Promise.all(
-      ['choose:default', 'choose:haiku', 'choose:sonnet', 'choose:opus', 'choose:fable', 'picker:close'].map(async key => (await ui.find({ key }))?.props.hotkey),
+      ['choose:new:default', 'choose:new:haiku', 'choose:new:sonnet', 'choose:new:opus', 'choose:new:fable', 'picker:close'].map(async key => (await ui.find({ key }))?.props.hotkey),
     )
     expect(keys).toEqual(['0', '1', '2', '3', '4', 'x'])
     await ui.unmount()

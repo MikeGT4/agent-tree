@@ -226,6 +226,17 @@ describe('Datenmodell', () => {
     expect(Object.keys(s.choices?.agents ?? {})).toEqual([])
   })
 
+  test('eine Modellwahl gilt nur ihrem Ziel: die offene Auswahl eines anderen bleibt, ein entfernter Agent bekommt keine', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = spawned(s, spawn('a2'), 2)
+    s = pickerOpened(s, 'a2')
+    s = chosen(s, 'a1', 'sonnet', 3)
+    expect([s.choices?.agents, s.choices?.picker]).toEqual([{ a1: 'sonnet' }, 'a2'])
+    s = chosen(s, 'a2', 'opus', 4)
+    expect([s.choices?.agents, s.choices?.picker]).toEqual([{ a1: 'sonnet', a2: 'opus' }, undefined])
+    expect(chosen(s, 'gone', 'haiku', 5)).toBe(s)
+  })
+
   test('abgebrochene Hauptrunde und leerer Rundentext', () => {
     let s = turnStarted(createTree(0), { text: 'los' }, 1)
     s = completed(s, done(undefined, { reason: 'aborted', isAborted: true }), 2)
@@ -250,14 +261,14 @@ describe('Datenmodell', () => {
     const calls: string[] = []
     const actions = {
       pick: (target: string) => void calls.push(`pick ${target}`),
-      choose: (family: string | undefined) => void calls.push(`choose ${family ?? '-'}`),
+      choose: (target: string, family: string | undefined) => void calls.push(`choose ${target} ${family ?? '-'}`),
       close: () => void calls.push('close'),
       detail: (agentId: string) => void calls.push(`detail ${agentId}`),
       stop: (agentId: string) => void calls.push(`stop ${agentId}`),
     }
-    const keys = ['pick:new', 'pick:a1', 'choose:default', 'choose:sonnet', 'picker:close', 'detail:a1', 'detail:close', 'stop:a1', 'picker', 'pickX', 'fremd:x']
-    expect(keys.map(key => pressKey(actions, key))).toEqual([true, true, true, true, true, true, true, true, false, false, false])
-    expect(calls).toEqual(['pick new', 'pick a1', 'choose -', 'choose sonnet', 'close', 'detail a1', 'close', 'stop a1'])
+    const keys = ['pick:new', 'pick:a1', 'choose:new:default', 'choose:a1:sonnet', 'picker:close', 'detail:a1', 'detail:close', 'stop:a1', 'choose:sonnet', 'choose:a1:', 'picker', 'pickX', 'fremd:x']
+    expect(keys.map(key => pressKey(actions, key))).toEqual([true, true, true, true, true, true, true, true, false, false, false, false, false])
+    expect(calls).toEqual(['pick new', 'pick a1', 'choose new -', 'choose a1 sonnet', 'close', 'detail a1', 'close', 'stop a1'])
   })
 
   test('Modellwahl: gesehene Kennung der Familie, sonst ihr Alias', () => {

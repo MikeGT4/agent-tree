@@ -4,7 +4,6 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentTreeState } from '../types'
 import {
-  NEW_AGENTS,
   adopted,
   choicesOf,
   chosen,
@@ -132,7 +131,7 @@ function actionsFor($: EngineInterface): TreeActions {
   const ignore = () => undefined
   return {
     pick: target => void change($, t => pickerOpened(t, target)).catch(ignore),
-    choose: family => void clock($).then(now => change($, t => chosen(t, choicesOf(t).picker ?? NEW_AGENTS, family, now))).catch(ignore),
+    choose: (target, family) => void clock($).then(now => change($, t => chosen(t, target, family, now))).catch(ignore),
     close: () => void change($, t => closed(t)).catch(ignore),
     detail: agentId => void openDetail($, agentId).catch(ignore),
     stop: agentId => void clock($).then(now => change($, t => stopRequested(t, agentId, now))).catch(ignore),
