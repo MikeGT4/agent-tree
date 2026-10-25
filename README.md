@@ -4,7 +4,7 @@
 
 A terminal side pane for Claude Code that draws a session's agents as a tree of boxes: main session, sub-agents, the way back, the advisor and a session log.
 
-![Agent Tree](docs/agent-tree.gif)
+![Agent Tree](docs/agent-tree-terminal.gif)
 
 ## Install
 
