@@ -38,7 +38,7 @@ import {
   typeLabel,
   wasStopSent,
 } from '../hooks/model.ts'
-import { pickerLines, planRows, pressKey, runningMark, statusText, timelineBar } from '../hooks/view.tsx'
+import { connector, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, timelineBar } from '../hooks/view.tsx'
 import { logLine, resolveLang, toolText } from '../hooks/words.ts'
 
 const line = (entry: AgentTreeLogEntry | undefined) => (entry ? logLine(entry, 'de') : undefined)
@@ -387,11 +387,12 @@ describe('Datenmodell', () => {
   })
 
   test('Zeitleiste: Balken je Kasten auf der Spanne der Runde', () => {
-    expect(timelineBar(0, 10, 0, 10, 10)).toBe('━━━━━━━━━━')
-    expect(timelineBar(5, 10, 0, 10, 10)).toBe('·····━━━━━')
-    expect(timelineBar(0, 1, 0, 100, 10)).toBe('━·········')
-    expect(timelineBar(100, 100, 0, 100, 10)).toBe('·········━')
-    expect(timelineBar(3, 3, 3, 3, 5)).toBe('━━━━━')
+    expect(timelineBar(0, 10, 0, 10, 10)).toBe('██████████')
+    expect(timelineBar(5, 10, 0, 10, 10)).toBe('░░░░░█████')
+    expect(timelineBar(0, 1, 0, 100, 10)).toBe('█░░░░░░░░░')
+    expect(timelineBar(100, 100, 0, 100, 10)).toBe('░░░░░░░░░█')
+    expect(timelineBar(3, 3, 3, 3, 5)).toBe('█████')
+    expect([shimmer('████', 1), shimmer('░░██', 4), shimmer('░░██', -1), shimmer('', 3)]).toEqual(['█▓██', '▒░██', '░░█▓', ''])
   })
 
   test('Details: öffnen, laden, schließen, abgelehnt', () => {
@@ -482,12 +483,21 @@ describe('Datenmodell', () => {
     expect([s.agents.some(n => n.id === 'a1'), s.detail]).toEqual([false, undefined])
   })
 
+  test('Verbinder: Punkte laufen beim Verteilen nach außen und beim Zurückgeben nach innen', () => {
+    expect(connector(21, [2, 10, 18], 10, 'split')).toBe('  ┌───────┼───────┐  ')
+    expect(connector(21, [2, 10, 18], 10, 'split', 0)).toBe('  ┌──────•┼•──────┐  ')
+    expect(connector(21, [2, 10, 18], 10, 'split', 2)).toBe('  ┌────•·─┼─·•────┐  ')
+    expect(connector(21, [2, 10, 18], 10, 'merge', 0)).toBe('  └•──────┼──────•┘  ')
+    expect(connector(21, [2, 10, 18], 10, 'merge', 2)).toBe('  └─·•────┼────•·─┘  ')
+    expect(connector(21, [2, 10, 18], 10, 'split', 7)).toBe(connector(21, [2, 10, 18], 10, 'split', 0))
+  })
+
   test('Kosten stehen in der Statuszeile, in beiden Sprachen', () => {
     let s = spawned(createTree(0), spawn('a1'), 1)
     s = measured(s, { tokens: 1000, window: 200000, percent: 1, costUsd: 0.4234 })
     expect([statusText(s, 'de'), statusText(s, 'en')]).toEqual([
-      '1 läuft · 0 fertig · Kontext 1 % · 0,42 $',
-      '1 running · 0 done · context 1% · $0.42',
+      'Unteragenten [1/1] · Kontext [1 %] · 0,42 $',
+      'Sub-agents [1/1] · context [1%] · $0.42',
     ])
     expect([fmtTokens(12345, '.'), fmtTokens(12345)]).toEqual(['12.3k', '12,3k'])
   })

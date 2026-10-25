@@ -139,7 +139,7 @@ describe('Agent Tree', () => {
     expect(await screen(ui)).toMatch(/Read auth\.ts/)
     expect(await screen(ui)).toMatch(/Aufrufe 1/)
     expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
-    expect(seen.status.at(-1)).toBe('1 läuft · 0 fertig · Berater 1×')
+    expect(seen.status.at(-1)).toBe('Unteragenten [1/1] · Berater [1×]')
     await ui.unmount()
   })
 
@@ -214,6 +214,17 @@ describe('Agent Tree', () => {
     await step($, { agentId: 'sub-1' })
     await step($, { agentId: 'sub-2' })
     expect(seen.stepModels.slice(-2)).toEqual(['sonnet', 'claude-haiku-4-5-20251001'])
+  })
+
+  test('die Berater-Spalte zeigt eine Zeitleiste mit Marken', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    const bild = await screen(ui)
+    expect(bild).toMatch(/┆ /)
+    expect(bild).toMatch(/liest die ganze/)
+    expect(bild).toMatch(/◆ \d\d:\d\d:\d\d Haupt/)
+    await ui.unmount()
   })
 
   test('eine schmale Leiste stapelt und bleibt gültig', de, async ($, on) => {
@@ -338,7 +349,7 @@ describe('Agent Tree', () => {
     const text = await screen(ui)
     for (const word of [/Main session/, /Sub-agents/, /Session log/, /Calls 1/, /Model: Default ▾/, /to sub-agents/]) expect(text).toMatch(word)
     expect(text).not.toMatch(/Hauptsitzung|Unteragenten|Sitzungsprotokoll|Aufrufe/)
-    expect(seen.status.at(-1)).toBe('1 running · 0 done · advisor 1×')
+    expect(seen.status.at(-1)).toBe('Sub-agents [1/1] · advisor [1×]')
     await ui.unmount()
   })
 
@@ -450,7 +461,7 @@ describe('Agent Tree', () => {
     await $.session.measure({ context: { window: 200000, tokens: 50000, percent: 25 }, rateLimits: [], cost: { usd: 1.5 }, changed: ['context', 'cost'] } as never)
     const ui = await $.ui.mount(pane(90))
     expect(await screen(ui)).toMatch(/Runde 1 · 1,50 \$/)
-    expect(seen.status.at(-1)).toBe('1 läuft · 0 fertig · Berater 1× · Kontext 25 % · 1,50 $')
+    expect(seen.status.at(-1)).toBe('Unteragenten [1/1] · Berater [1×] · Kontext [25 %] · 1,50 $')
     await ui.unmount()
   })
 

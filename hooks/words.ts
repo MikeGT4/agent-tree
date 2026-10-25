@@ -128,7 +128,7 @@ export const WORDS: Record<Lang, Words> = {
     fromSub: 'Sub',
     last: 'zuletzt',
     duration: 'Dauer',
-    notAsked: 'noch nicht gefragt',
+    notAsked: 'noch nie gefragt',
     writes: ['schreibt nie', 'selbst Code'],
     log: 'Sitzungsprotokoll',
     logEmpty: 'noch nichts geschehen',

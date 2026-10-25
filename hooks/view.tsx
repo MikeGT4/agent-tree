@@ -131,11 +131,11 @@ export function statusText(s: AgentTreeState, lang: Lang = 'de'): string | undef
   const w = wordsFor(lang)
   const c = counts(s)
   if (c.running + c.done + c.failed + c.stopped === 0 && s.advisor.total === 0) return undefined
-  const parts = [w.running(c.running), `${c.done} ${w.done}`]
+  const parts = [`${w.agents} [${c.running}/${c.running + c.done + c.failed + c.stopped}]`]
   if (c.failed) parts.push(`${c.failed} ${w.status.failed}`)
   if (c.stopped) parts.push(`${c.stopped} ${w.status.stopped}`)
-  if (s.advisor.total) parts.push(`${w.advisorShort} ${s.advisor.total}×`)
-  if (s.main.percent !== undefined) parts.push(`${w.contextShort} ${w.percent(s.main.percent)}`)
+  if (s.advisor.total) parts.push(`${w.advisorShort} [${s.advisor.total}×]`)
+  if (s.main.percent !== undefined) parts.push(`${w.contextShort} [${w.percent(s.main.percent)}]`)
   if (s.main.costUsd !== undefined) parts.push(w.cost(s.main.costUsd))
   return parts.join(' · ')
 }
@@ -212,9 +212,18 @@ function rowCenters(boxes: number, offset: number): number[] {
   return result
 }
 
-export function connector(width: number, points: readonly number[], join: number, kind: 'split' | 'merge'): string {
+export function connector(width: number, points: readonly number[], join: number, kind: 'split' | 'merge', step?: number): string {
   const lo = Math.min(join, ...points)
   const hi = Math.max(join, ...points)
+  const flow = (p: number): string | undefined => {
+    if (step === undefined || p === join) return undefined
+    const arm = p < join ? join - lo - 1 : hi - join - 1
+    if (arm < 2) return undefined
+    const out = p < join ? join - p : p - join
+    const head = kind === 'split' ? (step % arm) + 1 : arm - (step % arm)
+    const tail = kind === 'split' ? head - 1 : head + 1
+    return out === head ? '•' : out === tail && tail >= 1 && tail <= arm ? '·' : undefined
+  }
   let line = ''
   for (let p = 0; p < width; p++) {
     if (p < lo || p > hi) {
@@ -225,17 +234,24 @@ export function connector(width: number, points: readonly number[], join: number
     const up = kind === 'split' ? p === join : atPoint
     const down = kind === 'split' ? atPoint : p === join
     const key = `${up ? 'u' : ''}${down ? 'd' : ''}${p > lo ? 'l' : ''}${p < hi ? 'r' : ''}`
-    line += GLYPH[key] ?? ' '
+    line += (key === 'lr' ? flow(p) : undefined) ?? GLYPH[key] ?? ' '
   }
   return line
 }
 
 export function timelineBar(start: number, end: number, from: number, to: number, width = BAR_WIDTH): string {
-  if (!(to > from)) return '━'.repeat(width)
+  if (!(to > from)) return '█'.repeat(width)
   const scale = (t: number) => Math.round(((Math.min(Math.max(t, from), to) - from) / (to - from)) * width)
   const a = Math.min(width - 1, scale(start))
   const b = Math.max(a + 1, scale(end))
-  return '·'.repeat(a) + '━'.repeat(b - a) + '·'.repeat(width - b)
+  return '░'.repeat(a) + '█'.repeat(b - a) + '░'.repeat(width - b)
+}
+
+export function shimmer(line: string, frame: number): string {
+  const chars = [...line]
+  if (chars.length === 0) return line
+  const at = ((frame % chars.length) + chars.length) % chars.length
+  return chars.map((c, i) => (i === at ? (c === '█' ? '▓' : '▒') : c)).join('')
 }
 
 function marks(width: number, points: readonly number[], glyph: string): string {
@@ -402,7 +418,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
             {g.stopped ? `${STATUS_MARK.stopped} ${g.stopped} ${w.status.stopped}` : ' '}
           </Text>
-          <Text color={color}>{bar(g)}</Text>
+          <Text color={color}>{g.running > 0 && look.animate ? shimmer(bar(g), look.frame) : bar(g)}</Text>
         </Box>
       )
     }
@@ -444,7 +460,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         <Text size={SIZE.detail} color={STATUS_COLOR[n.status]} wrap="truncate-end">
           {statusLine}
         </Text>
-        <Text color={STATUS_COLOR[n.status]}>{bar(g)}</Text>
+        <Text color={STATUS_COLOR[n.status]}>{running && look.animate ? shimmer(bar(g), look.frame) : bar(g)}</Text>
       </Box>
     )
   }
@@ -598,6 +614,12 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const stemMid = flowing && look.frame % 2 === 1 ? '●' : '│'
   const backMark = returning && look.frame % 2 === 0 ? '●' : '▼'
 
+  const flowText = (key: string, line: string, color: string) => (
+    <Text key={key} color={COLOR.dim}>
+      {line.split(/([•·]+)/).map((part, i) => (/^[•·]+$/.test(part) ? <Text key={`${key}:${i}`} color={color}>{part}</Text> : part))}
+    </Text>
+  )
+
   const boxRows = chunk(shown, perRow)
   const frame = rowWidth(Math.max(1, boxRows[0]?.length ?? 1))
   const join = (frame - 1) / 2
@@ -627,7 +649,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       <Box key="agents" flexDirection="column" alignItems="center">
         {delegationLabel}
         <Text color={stemMid === '●' ? COLOR.agent : COLOR.dim}>{stemMid}</Text>
-        <Text color={COLOR.dim}>{connector(frame, centersOf(boxRows[0] ?? []), join, 'split')}</Text>
+        {flowText('split', connector(frame, centersOf(boxRows[0] ?? []), join, 'split', flowing ? look.frame * 2 : undefined), COLOR.agent)}
         <Text color={COLOR.agent}>{marks(frame, centersOf(boxRows[0] ?? []), '▼')}</Text>
         <Box key="boxes" flexDirection="column" alignItems="center" rowGap={1} width={frame}>
           {boxRows.map((row, r) => (
@@ -636,7 +658,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             </Box>
           ))}
         </Box>
-        <Text color={COLOR.dim}>{connector(frame, centersOf(boxRows.at(-1) ?? []), join, 'merge')}</Text>
+        {flowText('merge', connector(frame, centersOf(boxRows.at(-1) ?? []), join, 'merge', returning ? look.frame * 2 : undefined), COLOR.main)}
         <Text color={COLOR.main}>{backMark}</Text>
         {arrowRow('back-row', backWidth, backBox)}
         {notes}
@@ -653,6 +675,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const advisorState = advisorModel ? advisorModel : w.off
 
+  const railLine = (key: string, text: string, plain = false) => (
+    <Text key={key} size={SIZE.detail} wrap="truncate-end">
+      <Text color={COLOR.advisor} dimColor>{'┆ '}</Text>
+      <Text color={plain ? undefined : COLOR.dim}>{text || ' '}</Text>
+    </Text>
+  )
+
   const advisorColumn = (
     <Box key="advisor" width={ADVISOR_WIDTH} flexShrink={0} borderStyle="single" borderColor={COLOR.advisor} flexDirection="column">
       <Text bold size={SIZE.title} color={COLOR.advisor} wrap="truncate-end">
@@ -664,24 +693,14 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       <Text size={SIZE.detail} color={COLOR.advisor} wrap="truncate-end">
         {advisorModel ? w.onCall : ' '}
       </Text>
-      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
-        {w.reads[0]}
-      </Text>
-      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
-        {w.reads[1]}
-      </Text>
-      <Text>{' '}</Text>
-      <Text size={SIZE.detail} wrap="truncate-end">{`${w.calls} ${s.advisor.total}`}</Text>
-      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
-        {`${w.fromMain} ${s.advisor.fromMain} · ${w.fromSub} ${s.advisor.fromAgents}`}
-      </Text>
-      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
-        {lastCall ? `${w.last} ${clockTime(lastCall.at)}` : w.notAsked}
-      </Text>
-      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
-        {lastCall?.durationMs !== undefined ? `${w.duration} ${fmtShortDuration(lastCall.durationMs)}` : ' '}
-      </Text>
-      <Text>{' '}</Text>
+      {railLine('reads-0', w.reads[0])}
+      {railLine('reads-1', w.reads[1])}
+      {railLine('gap-1', '')}
+      {railLine('calls', `${w.calls} ${s.advisor.total}`, true)}
+      {railLine('places', `${w.fromMain} ${s.advisor.fromMain} · ${w.fromSub} ${s.advisor.fromAgents}`)}
+      {railLine('last', lastCall ? `${w.last} ${clockTime(lastCall.at)}` : w.notAsked)}
+      {railLine('took', lastCall?.durationMs !== undefined ? `${w.duration} ${fmtShortDuration(lastCall.durationMs)}` : '')}
+      {railLine('gap-2', '')}
       {recentCalls.map(call => (
         <Box key={`adv:${call.id}`}>
           <Text size={SIZE.detail} color={COLOR.advisor} wrap="truncate-end">
@@ -690,12 +709,8 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         </Box>
       ))}
       <Box key="advisor-fill" flexGrow={1} />
-      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
-        {w.writes[0]}
-      </Text>
-      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
-        {w.writes[1]}
-      </Text>
+      {railLine('writes-0', w.writes[0])}
+      {railLine('writes-1', w.writes[1])}
     </Box>
   )
 
