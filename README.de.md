@@ -12,7 +12,7 @@ Seitenleiste für Claude Code im Terminal, die die Agenten einer Sitzung als Kä
 /plugin install agent-tree --marketplace MikeGT4/agent-tree
 ```
 
-Getestet mit 2.1.296 und 2.1.307 bis 2.1.309, Voraussetzung ist die Mod-Schnittstelle.
+Getestet mit 2.1.296 und 2.1.307 bis 2.1.310, Voraussetzung ist die Mod-Schnittstelle.
 
 ## Bedienung
 

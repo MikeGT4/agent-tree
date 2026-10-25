@@ -328,6 +328,19 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
+  test('Schriftgrößen: Titel als heading, Nebenzeilen als footnote, Hinweise als caption', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount({ ...pane(90), surface: 'desktop' })
+    expect((await ui.find({ type: 'Text', text: /^AGENT TREE/ }))?.props.size).toBe('heading')
+    expect((await ui.find({ type: 'Text', text: /^Code lesen$/ }))?.props.size).toBe('footnote')
+    expect((await ui.find({ type: 'Text', text: /^Sitzungsprotokoll$/ }))?.props.size).toBe('caption')
+    await ui.unmount()
+    const terminal = await $.ui.mount(pane(90))
+    expect(await screen(terminal)).toMatch(/AGENT TREE/)
+    await terminal.unmount()
+  })
+
   test('ein Klick auf den Typ zeigt Auftrag, Werkzeuge und letzte Antwort', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)

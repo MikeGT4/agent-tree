@@ -1,7 +1,7 @@
 {
   "name": "agent-tree",
   "displayName": "Agent Tree",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Side pane that draws the session's agents as boxes: main session, sub-agents, the way back, advisor and session log.",
   "author": {
     "name": "Mike Pollow, Digitalroots"

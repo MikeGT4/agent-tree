@@ -52,6 +52,8 @@ const COLOR = {
   failed: 'error',
 }
 
+const SIZE = { title: 'heading', detail: 'footnote', note: 'caption' } as const
+
 const STATUS_MARK: Record<AgentTreeStatus, string> = { running: '◐', done: '●', failed: '✗', stopped: '○' }
 
 const SPIN = ['◐', '◓', '◑', '◒']
@@ -368,7 +370,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         <Button key={`detail:${n.id}`} plain label={clip(typeLabel(n.type), AGENT_WIDTH - 2)} onPress={() => actions.detail(n.id)} />
       </Box>
     ) : (
-      <Text bold color={running ? COLOR.agent : undefined} wrap="truncate-end">
+      <Text bold size={SIZE.title} color={running ? COLOR.agent : undefined} wrap="truncate-end">
         {typeLabel(n.type)}
       </Text>
     )
@@ -378,18 +380,18 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       const color = g.running > 0 ? COLOR.agent : g.failed > 0 ? COLOR.failed : COLOR.dim
       return (
         <Box key={`wf:${g.runId}`} width={AGENT_WIDTH} marginLeft={marginLeft} borderStyle="single" borderColor={color} flexDirection="column" alignItems="center">
-          <Text bold color={g.running > 0 ? COLOR.agent : undefined} wrap="truncate-end">
+          <Text bold size={SIZE.title} color={g.running > 0 ? COLOR.agent : undefined} wrap="truncate-end">
             {`Workflow · ${g.size}`}
           </Text>
-          <Text color={COLOR.agent} wrap="truncate-end">
+          <Text size={SIZE.detail} color={COLOR.agent} wrap="truncate-end">
             {`${spin} ${w.running(g.running)}`}
           </Text>
-          <Text color={COLOR.done} wrap="truncate-end">{`${STATUS_MARK.done} ${g.done} ${w.done}`}</Text>
-          <Text color={g.failed ? COLOR.failed : COLOR.dim} wrap="truncate-end">
+          <Text size={SIZE.detail} color={COLOR.done} wrap="truncate-end">{`${STATUS_MARK.done} ${g.done} ${w.done}`}</Text>
+          <Text size={SIZE.detail} color={g.failed ? COLOR.failed : COLOR.dim} wrap="truncate-end">
             {`${STATUS_MARK.failed} ${g.failed} ${w.status.failed}`}
           </Text>
-          <Text wrap="truncate-end">{g.lastDescription || ' '}</Text>
-          <Text color={COLOR.dim} wrap="truncate-end">
+          <Text size={SIZE.detail} wrap="truncate-end">{g.lastDescription || ' '}</Text>
+          <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
             {g.stopped ? `${STATUS_MARK.stopped} ${g.stopped} ${w.status.stopped}` : ' '}
           </Text>
           <Text color={color}>{bar(g)}</Text>
@@ -422,16 +424,16 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             {modelLabel(n.model) || ' '}
           </Text>
         )}
-        <Text color={COLOR.dim} wrap="truncate-end">
+        <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
           {nested ? `↳ ${w.under} ${nested}` : effortLine(n.effort)}
         </Text>
-        <Text color={running ? undefined : COLOR.dim} wrap="truncate-end">
+        <Text size={SIZE.detail} color={running ? undefined : COLOR.dim} wrap="truncate-end">
           {n.description || ' '}
         </Text>
-        <Text color={COLOR.dim} wrap="truncate-end">
+        <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
           {toolText(n.lastTool, lang) ?? `${w.tools}: ${n.toolCount}`}
         </Text>
-        <Text color={STATUS_COLOR[n.status]} wrap="truncate-end">
+        <Text size={SIZE.detail} color={STATUS_COLOR[n.status]} wrap="truncate-end">
           {statusLine}
         </Text>
         <Text color={STATUS_COLOR[n.status]}>{bar(g)}</Text>
@@ -492,19 +494,19 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const verb = phase === 'idle' ? w.idle : w.working
   const header = tight ? (
     <Box key="head" flexDirection="column" alignItems="center" width={width}>
-      <Text bold wrap="truncate-end">
+      <Text bold size={SIZE.title} wrap="truncate-end">
         {`AGENT TREE${mainModel ? ` · ${mainModel.toUpperCase()}` : ''} · ${verb}`}
       </Text>
     </Box>
   ) : (
     <Box key="head" flexDirection="column" alignItems="center" width={width}>
-      <Text bold wrap="truncate-end">
+      <Text bold size={SIZE.title} wrap="truncate-end">
         {'AGENT TREE'}
         {mainModel ? <Text color={COLOR.main}>{` · ${mainModel.toUpperCase()} ${verb}`}</Text> : null}
         {advisorModel && wide ? <Text color={COLOR.advisor}>{` · ${w.advisorOnCall(advisorModel.toUpperCase())}`}</Text> : null}
       </Text>
       <Text color={COLOR.dim}>{'─'.repeat(Math.max(1, width - 2))}</Text>
-      <Text wrap="truncate-end">
+      <Text size={SIZE.note} wrap="truncate-end">
         <Text color={COLOR.main}>{'■'}</Text>
         {` ${w.main}${legendEffort && s.main.effort ? ` · ${s.main.effort}` : ''}   `}
         <Text color={COLOR.agent}>{'■'}</Text>
@@ -519,25 +521,25 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const mainBox = (
     <Box key="main" width={mainWidth} flexShrink={0} borderStyle="single" borderColor={COLOR.main} flexDirection="column" alignItems="center">
-      <Text bold color={COLOR.main} wrap="truncate-end">
+      <Text bold size={SIZE.title} color={COLOR.main} wrap="truncate-end">
         {[mainModel, w.main].filter(Boolean).join(' · ')}
       </Text>
       <Text wrap="truncate-end">{w.phase[phase]}</Text>
       {s.main.effort && effortBar(s.main.effort) ? (
-        <Text wrap="truncate-end">
+        <Text size={SIZE.detail} wrap="truncate-end">
           <Text color={COLOR.dim}>{'Effort '}</Text>
           <Text color={COLOR.main}>{effortBar(s.main.effort)}</Text>
           {` ${s.main.effort}`}
         </Text>
       ) : (
-        <Text color={COLOR.dim} wrap="truncate-end">
+        <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
           {s.main.effort ? `Effort ${s.main.effort}` : w.effortNone}
         </Text>
       )}
-      <Text color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
         {contextLine(s, w)}
       </Text>
-      <Text color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
         {roundLine}
       </Text>
     </Box>
@@ -545,11 +547,11 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const backBox = (
     <Box key="back" width={backWidth} flexShrink={0} borderStyle={phase === 'reviewing' ? 'bold' : 'single'} borderColor={COLOR.main} flexDirection="column" alignItems="center">
-      <Text bold color={COLOR.main} wrap="truncate-end">
+      <Text bold size={SIZE.title} color={COLOR.main} wrap="truncate-end">
         {`${w.back}${s.main.effort ? ` · ${s.main.effort}` : ''}`}
       </Text>
       <Text wrap="truncate-end">{phase === 'reviewing' ? w.phase.reviewing : phase === 'delegating' ? w.waiting : w.ready}</Text>
-      <Text color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
         {`${w.answers(s.main.returned)} · ↑ ${fmtTokens(s.main.returnedTokens, w.decimal) || '0'}`}
       </Text>
     </Box>
@@ -557,12 +559,12 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const notes = [
     rest.length > 0 ? (
-      <Text key="hidden" color={COLOR.dim} wrap="truncate-end">
+      <Text key="hidden" size={SIZE.note} color={COLOR.dim} wrap="truncate-end">
         {w.more(rest.length, hiddenRunning)}
       </Text>
     ) : null,
     earlier > 0 ? (
-      <Text key="earlier" color={COLOR.dim} wrap="truncate-end">
+      <Text key="earlier" size={SIZE.note} color={COLOR.dim} wrap="truncate-end">
         {w.earlier(earlier)}
       </Text>
     ) : null,
@@ -597,7 +599,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     shown.length === 0 ? (
       <Box key="agents" flexDirection="column" alignItems="center">
         <Box key="none" flexDirection="row">
-          <Text color={COLOR.dim}>{w.noAgents}</Text>
+          <Text size={SIZE.note} color={COLOR.dim}>{w.noAgents}</Text>
           {pickNew ? <Text color={COLOR.dim}>{' · '}</Text> : null}
           {pickNew}
         </Box>
@@ -645,45 +647,45 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const advisorColumn = (
     <Box key="advisor" width={ADVISOR_WIDTH} flexShrink={0} borderStyle="single" borderColor={COLOR.advisor} flexDirection="column">
-      <Text bold color={COLOR.advisor} wrap="truncate-end">
+      <Text bold size={SIZE.title} color={COLOR.advisor} wrap="truncate-end">
         {w.advisorTitle}
       </Text>
-      <Text color={COLOR.advisor} wrap="truncate-end">
+      <Text size={SIZE.detail} color={COLOR.advisor} wrap="truncate-end">
         {advisorState}
       </Text>
-      <Text color={COLOR.advisor} wrap="truncate-end">
+      <Text size={SIZE.detail} color={COLOR.advisor} wrap="truncate-end">
         {advisorModel ? w.onCall : ' '}
       </Text>
-      <Text color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
         {w.reads[0]}
       </Text>
-      <Text color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
         {w.reads[1]}
       </Text>
       <Text>{' '}</Text>
-      <Text wrap="truncate-end">{`${w.calls} ${s.advisor.total}`}</Text>
-      <Text color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} wrap="truncate-end">{`${w.calls} ${s.advisor.total}`}</Text>
+      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
         {`${w.fromMain} ${s.advisor.fromMain} · ${w.fromSub} ${s.advisor.fromAgents}`}
       </Text>
-      <Text color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
         {lastCall ? `${w.last} ${clockTime(lastCall.at)}` : w.notAsked}
       </Text>
-      <Text color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
         {lastCall?.durationMs !== undefined ? `${w.duration} ${fmtShortDuration(lastCall.durationMs)}` : ' '}
       </Text>
       <Text>{' '}</Text>
       {recentCalls.map(call => (
         <Box key={`adv:${call.id}`}>
-          <Text color={COLOR.advisor} wrap="truncate-end">
+          <Text size={SIZE.detail} color={COLOR.advisor} wrap="truncate-end">
             {`◆ ${clockTime(call.at)} ${callPlace(call, w)}`}
           </Text>
         </Box>
       ))}
       <Box key="advisor-fill" flexGrow={1} />
-      <Text color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
         {w.writes[0]}
       </Text>
-      <Text color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
         {w.writes[1]}
       </Text>
     </Box>
@@ -694,7 +696,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       <Text color={COLOR.advisor} wrap="truncate-end">
         {`${w.advisor} · ${advisorModel ? `${advisorModel} · ${w.onCall}` : w.off} · ${w.calls} ${s.advisor.total}`}
       </Text>
-      <Text color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
         {lastCall ? `${w.fromMain} ${s.advisor.fromMain} · ${w.fromSub} ${s.advisor.fromAgents} · ${w.last} ${clockTime(lastCall.at)}` : w.notAsked}
       </Text>
     </Box>
@@ -730,7 +732,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       <Box key="detail" width={width} borderStyle="single" borderColor={COLOR.agent} flexDirection="column" marginTop={1}>
         <Box key="detail-head" flexDirection="row" justifyContent="space-between">
           <Box key="detail-title" flexShrink={1}>
-            <Text bold color={COLOR.agent} wrap="truncate-end">
+            <Text bold size={SIZE.title} color={COLOR.agent} wrap="truncate-end">
               {`${typeLabel(detailNode.type)} · ${detailNode.description}`}
             </Text>
           </Box>
@@ -743,11 +745,11 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           </Box>
         </Box>
         <Text wrap="truncate-end">{`${w.task}: ${missing(detailNode.task, '?')}`}</Text>
-        <Text color={COLOR.dim} wrap="truncate-end">
+        <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
           {`${w.tools}: ${detailNode.tools?.length ? detailNode.tools.map(t => toolText(t, lang)).join(' · ') : '0'}`}
         </Text>
         <Text wrap="truncate-end">{`${detailRunning ? w.latest : w.reply}: ${missing(detailNode.answer, w.noReply)}`}</Text>
-        <Text color={COLOR.dim} wrap="truncate-end">
+        <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
           {`${modelLabel(detailNode.model) || w.model} · ${w.status[detailNode.status]} · ${fmtShortDuration((detailNode.endedAt ?? now) - detailNode.startedAt)}`}
         </Text>
       </Box>
@@ -756,22 +758,22 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const rows = s.log.slice(-plan.logRows)
   const logBox = (
     <Box key="log" width={width} borderStyle="single" borderColor={COLOR.dim} flexDirection="column" marginTop={1}>
-      <Text color={COLOR.dim}>{w.log}</Text>
+      <Text size={SIZE.note} color={COLOR.dim}>{w.log}</Text>
       {rows.length === 0 ? (
-        <Text color={COLOR.dim}>{w.logEmpty}</Text>
+        <Text size={SIZE.note} color={COLOR.dim}>{w.logEmpty}</Text>
       ) : (
         rows.map((row, i) => (
           <Box key={`log:${i}:${row.at}`} flexDirection="row">
             <Box width={10} flexShrink={0}>
-              <Text color={COLOR.dim}>{clockTime(row.at)}</Text>
+              <Text size={SIZE.detail} color={COLOR.dim}>{clockTime(row.at)}</Text>
             </Box>
             <Box width={9} flexShrink={0}>
-              <Text bold color={SOURCE_COLOR[row.source]}>
+              <Text bold size={SIZE.detail} color={SOURCE_COLOR[row.source]}>
                 {w.source[row.source]}
               </Text>
             </Box>
             <Box flexGrow={1} flexShrink={1}>
-              <Text wrap="truncate-end">{logLine(row, lang)}</Text>
+              <Text size={SIZE.detail} wrap="truncate-end">{logLine(row, lang)}</Text>
             </Box>
           </Box>
         ))
@@ -797,7 +799,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       {detailBox}
       {logBox}
       {tight ? null : (
-        <Text key="help" color={COLOR.dim} wrap="truncate-end">
+        <Text key="help" size={SIZE.note} color={COLOR.dim} wrap="truncate-end">
           {w.help}
         </Text>
       )}
