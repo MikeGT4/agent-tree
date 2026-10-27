@@ -302,7 +302,7 @@ export const WORDS: Record<Lang, Words> = {
     advisorOn: 'turn on',
     advisorOff: 'turn off',
     look: 'Look',
-    lookRow: { style: 'Style', colors: 'Colors', light: 'Light' },
+    lookRow: { style: 'Style', colors: 'Colors', light: 'Glow' },
     lookOption: {
       style: { line: 'Line', pixel: 'Pixel', braille: 'Braille', hud: 'HUD', ascii: 'ASCII' },
       colors: { original: 'Original', light: 'Light', retro: 'Retro', mono: 'Mono' },
@@ -311,8 +311,8 @@ export const WORDS: Record<Lang, Words> = {
     lookReset: 'Reset',
     lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
     lookUnknown: (name, row, options) => `Agent Tree: ${name ? `"${name}" is not a choice. ` : ''}${row}: ${options}`,
-    commandDescription: "The session's agent tree as boxes (stop, clear, style, colors, light)",
-    commandHint: '[stop|clear|style <name>|colors <name>|light <name>]',
+    commandDescription: "The session's agent tree as boxes (stop, clear, style, colors, glow)",
+    commandHint: '[stop|clear|style <name>|colors <name>|glow <name>]',
     opened: n => `Agent Tree opened · ${n} ${n === 1 ? 'agent' : 'agents'} so far · /agent-tree stop closes`,
     closedText: 'Agent Tree closed',
     cleared: 'Agent Tree cleared',
@@ -349,6 +349,7 @@ const LOOK_WORDS = new Map<string, LookRow>([
   ['colours', 'colors'],
   ['licht', 'light'],
   ['light', 'light'],
+  ['glow', 'light'],
 ])
 
 const fold = (text: string) => text.toLowerCase().replaceAll('ß', 'ss')

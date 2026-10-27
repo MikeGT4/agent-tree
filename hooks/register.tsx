@@ -165,7 +165,7 @@ async function openDetail($: EngineInterface, agentId: string): Promise<void> {
 async function appendRow($: EngineInterface, text: string, agentId?: string): Promise<boolean> {
   const row = { message: { type: 'user' as const, content: [{ type: 'text' as const, text }] }, ...(agentId ? { agentId } : {}) }
   return $.session.append(row).then(
-    result => !(result as { deny?: string }).deny,
+    result => (result as { deny?: string }).deny === undefined,
     () => false,
   )
 }
@@ -287,8 +287,8 @@ export const register: Register = (on, options) => {
     if (choice) {
       const row = choice.row
       const id = choice.id
-      const options = (LOOK_OPTIONS[row] as readonly string[]).map(option => lookOptionLabel(w, row, option)).join(', ')
-      if (!id) return { text: w.lookUnknown(names.join(' '), w.lookRow[row], options) }
+      const choices = (LOOK_OPTIONS[row] as readonly string[]).map(option => lookOptionLabel(w, row, option)).join(', ')
+      if (!id) return { text: w.lookUnknown(names.join(' '), w.lookRow[row], choices) }
       await restyle($, row, id)
       return { text: w.lookSet(w.lookRow[row], lookOptionLabel(w, row, id)) }
     }

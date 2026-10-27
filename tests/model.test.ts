@@ -104,6 +104,15 @@ describe('Datenmodell', () => {
     expect(s.agents.map(n => n.id)).toEqual(['c', 'd'])
   })
 
+  test('kürzen räumt die Korrekturen entfernter Agenten mit ab', () => {
+    let s = createTree(0)
+    for (const id of ['a', 'b', 'c']) s = spawned(s, spawn(id), 1)
+    s = correctionSent(correctionSent(s, { agentId: 'a', text: 'A', via: 'append' }, 2), { agentId: 'c', text: 'C', via: 'append' }, 2)
+    s = completed(s, done('a'), 10)
+    s = trimmed(s, 2)
+    expect(Object.keys(s.corrections ?? {})).toEqual(['c'])
+  })
+
   test('ein Workflow mit 25 Agenten ist ein Bündel, laufende stehen vorn', () => {
     let s = spawned(createTree(0), spawn('solo'), 0)
     s = completed(s, done('solo'), 1)
@@ -677,7 +686,8 @@ describe('Aussehen', () => {
       expect(glyphs.spinner.length).toBeGreaterThanOrEqual(4)
       expect([glyphs.frame.tl, glyphs.frame.t, glyphs.frame.tr, glyphs.frame.l, glyphs.frame.r, glyphs.frame.bl, glyphs.frame.b, glyphs.frame.br].every(c => [...c].length === 1)).toBe(true)
     }
-    expect([STYLES.line.border, STYLES.ascii.border]).toEqual(['single', 'classic'])
+    expect([STYLES.line.border, STYLES.ascii.border]).toEqual(['single', undefined])
+    expect(frameEdges(STYLES.ascii, 5)).toEqual({ top: '+---+', bottom: '+---+' })
   })
 
   test('frameEdges zeichnet Kanten in voller Breite, HUD mit Strichen an den Ecken', () => {
@@ -699,6 +709,7 @@ describe('Aussehen', () => {
     expect(lookChoice('licht', 'weiss')).toEqual({ row: 'light', id: 'white' })
     expect(lookChoice('licht', 'weiß')).toEqual({ row: 'light', id: 'white' })
     expect(lookChoice('licht', 'zickzack')).toEqual({ row: 'light' })
+    expect([lookChoice('glow', 'gold'), WORDS.en.lookRow.light]).toEqual([{ row: 'light', id: 'gold' }, 'Glow'])
     expect(lookChoice('clear', '')).toBeUndefined()
   })
 

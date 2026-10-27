@@ -551,6 +551,7 @@ export function trimmed(s: AgentTreeState, maxAgents: number): AgentTreeState {
     ...s,
     choices,
     detail: s.detail && dropped.has(s.detail.agentId) ? undefined : s.detail,
+    corrections: s.corrections && Object.fromEntries(Object.entries(s.corrections).filter(([id]) => !dropped.has(id))),
     agents: s.agents.filter(n => !dropped.has(n.id)),
   }
 }

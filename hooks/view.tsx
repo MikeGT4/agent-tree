@@ -511,7 +511,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const barLine = (line: string, tint: string, lit: boolean) => (lit ? streakLine(line, tint, look.frame) : <Text color={tint}>{line}</Text>)
 
-  const sideRows = Math.max(120, height ?? 0)
+  const sideRows = height ?? 60
 
   const frameProps = (color: string, strong = false) =>
     glyphs.border

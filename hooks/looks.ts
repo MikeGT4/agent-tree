@@ -123,7 +123,6 @@ export const STYLES: Record<AgentTreeStyle, Glyphs> = {
     rail: { v: '╎', h: '╌', head: '▸' },
   },
   ascii: {
-    border: 'classic',
     frame: { tl: '+', t: '-', tr: '+', l: '|', r: '|', bl: '+', b: '-', br: '+' },
     lines: lineMap('-|+++++++++v*.'),
     node: 'o',
