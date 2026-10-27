@@ -273,6 +273,11 @@ describe('Datenmodell', () => {
       close: () => void calls.push('close'),
       detail: (agentId: string) => void calls.push(`detail ${agentId}`),
       stop: (agentId: string) => void calls.push(`stop ${agentId}`),
+      say: () => undefined,
+      advisor: () => undefined,
+      look: () => undefined,
+      restyle: () => undefined,
+      restyleDefault: () => undefined,
     }
     const keys = ['pick:new', 'pick:a1', 'choose:new:default', 'choose:a1:sonnet', 'picker:close', 'detail:a1', 'detail:close', 'stop:a1', 'choose:sonnet', 'choose:a1:', 'picker', 'pickX', 'fremd:x']
     expect(keys.map(key => pressKey(actions, key))).toEqual([true, true, true, true, true, true, true, true, false, false, false, false, false])
@@ -613,7 +618,7 @@ describe('Korrekturen', () => {
 describe('Textfeld', () => {
   test('inputKey schickt nur bei submit', () => {
     const said: [string, string][] = []
-    const actions = { pick: () => {}, choose: () => {}, close: () => {}, detail: () => {}, stop: () => {}, say: (id: string, value: string) => void said.push([id, value]) }
+    const actions = { pick: () => {}, choose: () => {}, close: () => {}, detail: () => {}, stop: () => {}, say: (id: string, value: string) => void said.push([id, value]), advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {} }
     expect(inputKey(actions, 'say:sub-1:0', 'submit', 'x')).toBe(true)
     expect(said).toEqual([['sub-1', 'x']])
     expect(inputKey(actions, 'say:sub-1:0', 'change', 'y')).toBe(false)
@@ -625,7 +630,7 @@ describe('Textfeld', () => {
 describe('Stopp am Kasten', () => {
   test('pressKey kennt halt', () => {
     const stopped: string[] = []
-    const actions = { pick: () => {}, choose: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), say: () => {} }
+    const actions = { pick: () => {}, choose: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), say: () => {}, advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {} }
     expect(pressKey(actions, 'halt:sub-1')).toBe(true)
     expect(stopped).toEqual(['sub-1'])
   })

@@ -400,14 +400,14 @@ export const register: Register = (on, options) => {
     if (!agentId) return next(e)
     const stopping = stoppingIds.has(agentId)
     if (stopping) {
-      if (e.tool !== HANDBACK) {
+      if (String(e.tool) !== HANDBACK) {
         const current = await read($, tree)
         return { deny: wordsFor(lang).stopAnswer(current.agents.find(n => n.id === agentId)?.toolCount ?? 0) }
       }
       if (stopSentIds.has(agentId)) return next(e)
       await change($, s => stopCancelled(s, agentId)).catch(() => undefined)
     }
-    if (!stopping && e.tool === HANDBACK) {
+    if (!stopping && String(e.tool) === HANDBACK) {
       const waiting = pendingCorrection(await read($, tree), agentId)
       if (waiting && !waiting.held) {
         await change($, s => correctionHeld(s, agentId)).catch(() => undefined)
@@ -458,7 +458,9 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Input } = $.ui.resolve(e)
+    const elements = $.ui.resolve(e)
+    const { Box, Text, Button } = elements
+    const Input = 'Input' in elements ? elements.Input : undefined
     const s = await read($, tree)
     const tick = animate ? await read($, frame) : 0
     const now = await clock($)

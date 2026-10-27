@@ -144,7 +144,7 @@ async function oneAgentWithAdvisor($: Engine) {
   await startSession($)
   await $.turn.start({ text: 'Prüf das Auth-Modul', turnId: 't1' })
   await step($, { advisor: true })
-  await $.agent.spawn({ prompt: 'Lies den Code.', description: 'Code lesen', subagentType: 'Explore' })
+  await $.agent.spawn({ prompt: 'Lies den Code.', description: 'Code lesen', subagentType: 'Explore' } as never)
   await step($, { agentId: 'sub-1' })
   await $.tool.call({ tool: 'Read', file_path: '/x/auth.ts', agentId: 'sub-1' } as never)
 }
@@ -211,8 +211,8 @@ describe('Agent Tree', () => {
     expect(await screen(ui)).toMatch(/Modell für neue Unteragenten/)
     await ui.press({ key: 'choose:new:opus' })
     await ui.unmount()
-    await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' })
-    await $.agent.spawn({ prompt: 'Q.', description: 'Eigen', subagentType: 'Plan', model: 'haiku' })
+    await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' } as never)
+    await $.agent.spawn({ prompt: 'Q.', description: 'Eigen', subagentType: 'Plan', model: 'haiku' } as never)
     expect(seen.spawnModels.slice(-2)).toEqual(['opus', 'haiku'])
   })
 
@@ -248,7 +248,7 @@ describe('Agent Tree', () => {
       return { value: 1_000 } as never
     })
     await oneAgentWithAdvisor($)
-    await $.agent.spawn({ prompt: 'Plane.', description: 'Plan bauen', subagentType: 'Plan' })
+    await $.agent.spawn({ prompt: 'Plane.', description: 'Plan bauen', subagentType: 'Plan' } as never)
     const ui = await $.ui.mount(pane(90))
     await ui.press({ key: 'pick:sub-1' })
     held = true
@@ -314,7 +314,7 @@ describe('Agent Tree', () => {
     await startSession($)
     await $.turn.start({ text: 'Viel zu tun', turnId: 't1' })
     for (let i = 1; i <= 6; i++) {
-      await $.agent.spawn({ prompt: 'Prüfe.', description: `Prüfung ${i}`, subagentType: 'general-purpose' })
+      await $.agent.spawn({ prompt: 'Prüfe.', description: `Prüfung ${i}`, subagentType: 'general-purpose' } as never)
     }
     for (let i = 1; i <= 3; i++) {
       await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: `sub-${i}`, reason: 'answer' })
@@ -341,14 +341,14 @@ describe('Agent Tree', () => {
     engine(on)
     await startSession($)
     await $.turn.start({ text: 'Erste Runde', turnId: 't1' })
-    await $.agent.spawn({ prompt: 'A.', description: 'Alt eins', subagentType: 'Explore' })
-    await $.agent.spawn({ prompt: 'B.', description: 'Alt zwei', subagentType: 'Explore' })
+    await $.agent.spawn({ prompt: 'A.', description: 'Alt eins', subagentType: 'Explore' } as never)
+    await $.agent.spawn({ prompt: 'B.', description: 'Alt zwei', subagentType: 'Explore' } as never)
     for (const agentId of ['sub-1', 'sub-2']) {
       await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId, reason: 'answer' })
     }
     await $.turn.complete({ answer: 'fertig', durationMs: 900, isAborted: false, turnId: 't1', reason: 'answer' })
     await $.turn.start({ text: 'Zweite Runde', turnId: 't2' })
-    await $.agent.spawn({ prompt: 'C.', description: 'Neu', subagentType: 'Plan' })
+    await $.agent.spawn({ prompt: 'C.', description: 'Neu', subagentType: 'Plan' } as never)
     const ui = await $.ui.mount(pane(90))
     expect(await screen(ui)).toMatch(/aus früheren Runden: 2 Agenten/)
     expect(await screen(ui)).toMatch(/"Neu"/)
@@ -360,7 +360,7 @@ describe('Agent Tree', () => {
     engine(on)
     await startSession($)
     await $.turn.start({ text: 'Erste Runde', turnId: 't1' })
-    await $.agent.spawn({ prompt: 'A.', description: 'Hintergrund', subagentType: 'Explore' })
+    await $.agent.spawn({ prompt: 'A.', description: 'Hintergrund', subagentType: 'Explore' } as never)
     await $.turn.complete({ answer: 'gestartet', durationMs: 900, isAborted: false, turnId: 't1', reason: 'answer' })
     await $.turn.start({ text: 'Zweite Runde', turnId: 't2' })
     await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
@@ -537,7 +537,7 @@ describe('Agent Tree', () => {
     engine(on)
     await startSession($)
     await $.turn.start({ text: 'Lauf', turnId: 't1' })
-    await $.agent.spawn({ prompt: 'P.', description: 'Messung', subagentType: 'performance-optimizer-extra' })
+    await $.agent.spawn({ prompt: 'P.', description: 'Messung', subagentType: 'performance-optimizer-extra' } as never)
     const ui = await $.ui.mount(pane(90))
     expect((await ui.find({ key: 'detail:sub-1' }))?.props.label).toBe('performance-opti…')
     await ui.unmount()
@@ -848,8 +848,8 @@ describe('Sichtbarkeit beim Korrigieren', () => {
   test('der Agent mit offenem Detailkasten bleibt als Kasten sichtbar', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
-    await $.agent.spawn({ prompt: 'B.', description: 'Tests prüfen', subagentType: 'general-purpose' })
-    await $.agent.spawn({ prompt: 'C.', description: 'Doku holen', subagentType: 'general-purpose' })
+    await $.agent.spawn({ prompt: 'B.', description: 'Tests prüfen', subagentType: 'general-purpose' } as never)
+    await $.agent.spawn({ prompt: 'C.', description: 'Doku holen', subagentType: 'general-purpose' } as never)
     await step($, { agentId: 'sub-2' })
     await step($, { agentId: 'sub-3' })
     const ui = await $.ui.mount(pane(73, 46))

@@ -1,5 +1,5 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
-import type { Elements } from 'claude-code'
+import type { Elements, RenderChildren } from 'claude-code'
 
 import type {
   AgentTreeAdvisorCall,
@@ -665,7 +665,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     )
   }
 
-  const arrowRow = (key: string, boxWidth: number, box: unknown) => {
+  const arrowRow = (key: string, boxWidth: number, box: RenderChildren) => {
     const side = Math.max(0, (treeWidth - boxWidth) / 2)
     const arrow = wide && side >= 3 ? `${glyphs.rail.h.repeat(side - 2)}${glyphs.rail.head} ` : ' '
     return (
