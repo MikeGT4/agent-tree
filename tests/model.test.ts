@@ -44,7 +44,7 @@ import {
   typeLabel,
   wasStopSent,
 } from '../hooks/model.ts'
-import { connector, inputKey, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, timelineBar } from '../hooks/view.tsx'
+import { connector, inputKey, litCells, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, timelineBar } from '../hooks/view.tsx'
 import { lookChoice, logLine, resolveLang, toolText, WORDS } from '../hooks/words.ts'
 import { contrast, DEFAULT_LOOK, frameEdges, isLookChoice, lookFrom, LOOK_OPTIONS, PALETTES, restyleLine, STYLES } from '../hooks/looks.ts'
 
@@ -678,6 +678,10 @@ describe('Aussehen', () => {
     expect(lookChoice('licht', 'weiß')).toEqual({ row: 'light', id: 'white' })
     expect(lookChoice('licht', 'zickzack')).toEqual({ row: 'light' })
     expect(lookChoice('clear', '')).toBeUndefined()
+  })
+
+  test('litCells legt drei Zellen hinter den Kopf des Lichts, auch über den Rand', () => {
+    expect([litCells(15, 5), litCells(15, 0), litCells(15, 16), litCells(2, 1), litCells(0, 3)]).toEqual([[3, 4, 5], [0, 13, 14], [0, 1, 14], [0, 1], []])
   })
 
   test('der Spinner folgt dem Stil', () => {

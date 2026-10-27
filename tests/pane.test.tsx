@@ -864,6 +864,28 @@ describe('Aussehen in der Leiste', () => {
     await ui.unmount()
   })
 
+  test('die Lichtfarbe liegt auf drei Zellen des Balkens und auf dem fließenden Punkt am Stamm', de, async ($, on) => {
+    engine(on, [], {}, { look: { light: 'gold' } })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    const gold = [...text.matchAll(/"color":"#F2C14E"\},"children":\["([^"]*)"\]/g)].map(m => m[1]).join('')
+    expect(gold).toBe('●███')
+    await ui.unmount()
+  })
+
+  test('die Auswahl zeigt das Licht als Vorschau, auch wenn nichts läuft', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'look:open' })
+    await ui.redraw()
+    await ui.press({ key: 'look:light:gold' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('#F2C14E')
+    await ui.unmount()
+  })
+
   test('ohne Bewegung kein Lichtstreifen', { options: { language: 'de', animate: false } }, async ($, on) => {
     engine(on, [], {}, { look: { light: 'gold' } })
     await oneAgentWithAdvisor($)

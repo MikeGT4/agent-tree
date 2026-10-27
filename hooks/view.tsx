@@ -293,6 +293,16 @@ export function timelineBar(
   return cells.empty.repeat(a) + cells.full.repeat(b - a) + cells.empty.repeat(width - b)
 }
 
+export const LIGHT_CELLS = 3
+
+export function litCells(size: number, frame: number, length = LIGHT_CELLS): number[] {
+  if (size <= 0) return []
+  const head = ((frame % size) + size) % size
+  const lit = new Set<number>()
+  for (let k = 0; k < Math.min(length, size); k++) lit.add((head - k + size) % size)
+  return [...lit].sort((a, b) => a - b)
+}
+
 export function shimmer(line: string, frame: number, cells: Glyphs['bar'] = STYLES.line.bar): string {
   const chars = [...line]
   if (chars.length === 0) return line
@@ -462,19 +472,24 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const bar = (g: AgentTreeGroup) => timelineBar(startOf(g), groupEnd(g), spanFrom, spanTo, BAR_WIDTH, glyphs.bar)
 
-  const barLine = (line: string, tint: string, lit: boolean) => {
-    if (!lit) return <Text color={tint}>{line}</Text>
-    if (!light) return <Text color={tint}>{shimmer(line, look.frame, glyphs.bar)}</Text>
+  const streakLine = (line: string, tint: string, at: number) => {
+    if (!light) return <Text color={tint}>{shimmer(line, at, glyphs.bar)}</Text>
     const cells = [...line]
-    const at = ((look.frame % cells.length) + cells.length) % cells.length
+    const lit = new Set(litCells(cells.length, at))
+    const runs: { text: string; lit: boolean }[] = []
+    cells.forEach((cell, i) => {
+      const last = runs.at(-1)
+      if (last && last.lit === lit.has(i)) last.text += cell
+      else runs.push({ text: cell, lit: lit.has(i) })
+    })
     return (
       <Text color={tint}>
-        {cells.slice(0, at).join('')}
-        <Text color={light}>{cells[at] ?? ''}</Text>
-        {cells.slice(at + 1).join('')}
+        {runs.map((run, i) => (run.lit ? <Text key={`lit:${i}`} color={light}>{run.text}</Text> : run.text))}
       </Text>
     )
   }
+
+  const barLine = (line: string, tint: string, lit: boolean) => (lit ? streakLine(line, tint, look.frame) : <Text color={tint}>{line}</Text>)
 
   const sideRows = Math.max(120, height ?? 0)
 
@@ -780,15 +795,15 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         <Box key="rows" flexDirection="column" width={treeWidth}>
           {shown.map(agentRow)}
         </Box>
-        <Text color={palette.main}>{backMark}</Text>
+        <Text color={backMark === glyphs.node ? (light ?? palette.main) : palette.main}>{backMark}</Text>
         {arrowRow('back-row', backWidth, backBox)}
         {notes}
       </Box>
     ) : (
       <Box key="agents" flexDirection="column" alignItems="center">
         {delegationLabel}
-        <Text color={stemMid === glyphs.node ? palette.agent : palette.dim}>{stemMid}</Text>
-        {flowText('split', connector(frame, centersOf(boxRows[0] ?? []), join, 'split', flowing ? look.frame * 2 : undefined), palette.agent)}
+        <Text color={stemMid === glyphs.node ? (light ?? palette.agent) : palette.dim}>{stemMid}</Text>
+        {flowText('split', connector(frame, centersOf(boxRows[0] ?? []), join, 'split', flowing ? look.frame * 2 : undefined), light ?? palette.agent)}
         <Text color={palette.agent}>{restyleLine(marks(frame, centersOf(boxRows[0] ?? []), '▼'), glyphs)}</Text>
         <Box key="boxes" flexDirection="column" alignItems="center" rowGap={1} width={frame}>
           {boxRows.map((row, r) => (
@@ -797,8 +812,8 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             </Box>
           ))}
         </Box>
-        {flowText('merge', connector(frame, centersOf(boxRows.at(-1) ?? []), join, 'merge', returning ? look.frame * 2 : undefined), palette.main)}
-        <Text color={palette.main}>{backMark}</Text>
+        {flowText('merge', connector(frame, centersOf(boxRows.at(-1) ?? []), join, 'merge', returning ? look.frame * 2 : undefined), light ?? palette.main)}
+        <Text color={backMark === glyphs.node ? (light ?? palette.main) : palette.main}>{backMark}</Text>
         {arrowRow('back-row', backWidth, backBox)}
         {notes}
       </Box>
@@ -807,7 +822,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const tree = (
     <Box key="tree" flexDirection="column" alignItems="center" width={treeWidth}>
       {arrowRow('main-row', mainWidth, mainBox)}
-      <Text color={stemTop === glyphs.node ? palette.agent : palette.dim}>{stemTop}</Text>
+      <Text color={stemTop === glyphs.node ? (light ?? palette.agent) : palette.dim}>{stemTop}</Text>
       {delegation}
     </Box>
   )
@@ -981,6 +996,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
                 onPress={() => actions.restyle(row, id)}
               />
             ))}
+            {row === 'light' ? <Box key="look-light-sample">{streakLine(glyphs.bar.full.repeat(9), palette.agent, 5)}</Box> : null}
           </Box>
         ))}
         <Box key="look-end" flexDirection="row" columnGap={1}>
