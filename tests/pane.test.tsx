@@ -695,6 +695,26 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await ui.unmount()
   })
 
+  test('in der Zeilenansicht bleibt das Zeichen der Korrektur trotz langer Beschreibung sichtbar', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const wide = await openDetail($)
+    await wide.input({ key: 'say:sub-1:0', text: 'Nur lesen' })
+    await wide.unmount()
+    const ui = await $.ui.mount(pane(38))
+    const label = String((await ui.find({ key: 'detail:sub-1' }))?.props.label ?? '')
+    expect(label).toMatch(/^◐ läuft ✉ · /)
+    await ui.unmount()
+  })
+
+  test('das Textfeld nennt Esc zum Verlassen', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    expect(String((await ui.find({ key: 'say:sub-1:0' }))?.props.placeholder ?? '')).toMatch(/Esc/)
+    await ui.unmount()
+  })
+
   test('der Kasten zeigt geschickt und gelesen, der Detailkasten nennt den Stand', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)

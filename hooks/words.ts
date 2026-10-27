@@ -170,7 +170,7 @@ export const WORDS: Record<Lang, Words> = {
     stop: 'stoppen',
     stopping: 'hält an …',
     stopAnswer: n => `Im Agent Tree vom Nutzer gestoppt, nach ${n} ${n === 1 ? 'Werkzeugaufruf' : 'Werkzeugaufrufen'}.`,
-    sayPlaceholder: 'Nachricht an diesen Agenten …',
+    sayPlaceholder: 'Nachricht an diesen Agenten … · Esc: zurück',
     send: 'senden',
     correctionFrame: (text, tool) =>
       `Nachricht des Nutzers über Agent Tree: ${text}\n\nSie gilt ab jetzt für deinen Auftrag. Berücksichtige sie bei der weiteren Arbeit und in deinem Bericht über ${tool}.`,
@@ -279,7 +279,7 @@ export const WORDS: Record<Lang, Words> = {
     stop: 'stop',
     stopping: 'stopping …',
     stopAnswer: n => `Stopped by the user in Agent Tree after ${n} tool ${n === 1 ? 'call' : 'calls'}.`,
-    sayPlaceholder: 'Message to this agent …',
+    sayPlaceholder: 'Message to this agent … · Esc: back',
     send: 'send',
     correctionFrame: (text, tool) =>
       `Message from the user via Agent Tree: ${text}\n\nIt applies to your task from now on. Take it into account in your remaining work and in your report via ${tool}.`,

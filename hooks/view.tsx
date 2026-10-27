@@ -58,10 +58,15 @@ const SIZE = { title: 'heading', detail: 'footnote', note: 'caption' } as const
 
 const CORRECTION_MARK: Partial<Record<AgentTreeCorrectionState, string>> = { sent: '✉', read: '✓' }
 
-function correctionMark(s: AgentTreeState, agentId: string): string {
+function correctionGlyph(s: AgentTreeState, agentId: string): string {
   const state = s.corrections?.[agentId]?.state
-  const mark = state ? CORRECTION_MARK[state] : undefined
-  return mark ? ` ${mark}` : ''
+  return (state ? CORRECTION_MARK[state] : undefined) ?? ''
+}
+
+export function statusWithMark(head: string, mark: string, tail: string, width: number): string {
+  if (!mark) return head + tail
+  if ([...head].length + 1 + [...mark].length <= width) return `${head} ${mark}${tail}`
+  return `${clip(head, width - [...mark].length)}${mark}`
 }
 
 export function runningMark(frame: number, animate: boolean, spinner: readonly string[] = STYLES.line.spinner): string {
@@ -559,14 +564,16 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     const running = n.status === 'running'
     const nested = parentOf(s, n)
     const stopping = (s.stopping ?? []).includes(n.id)
+    const mark = correctionGlyph(s, n.id)
+    const inner = AGENT_WIDTH - 2
     const statusLine =
-      (n.status === 'running'
+      n.status === 'running'
         ? stopping
-          ? `${spin} ${w.stopping}`
-          : `${spin} ${w.status.running}${n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''}`
+          ? statusWithMark(`${spin} ${w.stopping}`, mark, '', inner)
+          : statusWithMark(`${spin} ${w.status.running}`, mark, n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : '', inner)
         : n.status === 'done' && n.endedAt !== undefined
-          ? `${glyphs.marks.done} ${w.status.done} · ${fmtShortDuration(n.endedAt - n.startedAt)}`
-          : `${statusMark(glyphs, n.status)} ${w.status[n.status]}`) + correctionMark(s, n.id)
+          ? statusWithMark(`${glyphs.marks.done} ${w.status.done}`, mark, ` · ${fmtShortDuration(n.endedAt - n.startedAt)}`, inner)
+          : statusWithMark(`${statusMark(glyphs, n.status)} ${w.status[n.status]}`, mark, '', inner)
     const edge = running ? palette.agent : n.status === 'failed' ? palette.failed : palette.dim
     return (
       <Box key={`ag:${n.id}`} width={AGENT_WIDTH} marginLeft={marginLeft} {...frameProps(edge)} flexDirection="column" alignItems="center">
@@ -626,7 +633,8 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     const n = g.node
     const indent = parentOf(s, n) ? '↳ ' : ''
     const size = n.status === 'running' && n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''
-    const text = `${indent}${n.status === 'running' ? spin : statusMark(glyphs, n.status)} ${w.status[n.status]} · ${typeLabel(n.type)} · ${n.description}${size}${correctionMark(s, n.id)}`
+    const mark = correctionGlyph(s, n.id)
+    const text = `${indent}${n.status === 'running' ? spin : statusMark(glyphs, n.status)} ${w.status[n.status]}${mark ? ` ${mark}` : ''} · ${typeLabel(n.type)} · ${n.description}${size}`
     const halt = n.status === 'running' && actions && !(s.stopping ?? []).includes(n.id)
     return (
       <Box key={`ag:${n.id}`} width={treeWidth} flexDirection="row" columnGap={1}>
