@@ -76,6 +76,8 @@ export type Words = {
   correctionLabel: string
   correction: Record<AgentTreeCorrectionState, string>
   toolWords: Record<string, string>
+  advisorOn: string
+  advisorOff: string
   look: string
   lookRow: Record<LookRow, string>
   lookOption: { [R in LookRow]: Record<(typeof LOOK_OPTIONS)[R][number], string> }
@@ -183,6 +185,8 @@ export const WORDS: Record<Lang, Words> = {
     correctionLabel: 'Korrektur',
     correction: { sent: 'geschickt', read: 'gelesen', failed: 'nicht zugestellt' },
     toolWords: { SubagentHandback: 'Antwort übergeben' },
+    advisorOn: 'einschalten',
+    advisorOff: 'ausschalten',
     look: 'Aussehen',
     lookRow: { style: 'Stil', colors: 'Farben', light: 'Licht' },
     lookOption: {
@@ -292,6 +296,8 @@ export const WORDS: Record<Lang, Words> = {
     correctionLabel: 'Correction',
     correction: { sent: 'sent', read: 'read', failed: 'not delivered' },
     toolWords: { SubagentHandback: 'answer handed back' },
+    advisorOn: 'turn on',
+    advisorOff: 'turn off',
     look: 'Look',
     lookRow: { style: 'Style', colors: 'Colors', light: 'Light' },
     lookOption: {

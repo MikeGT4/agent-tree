@@ -10,7 +10,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; onSend?: () => Promise<unknown> } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; onSend?: () => Promise<unknown> } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -20,6 +20,21 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
     stored[key] = value
     storeSets.push({ key, value })
     return { value: undefined } as never
+  })
+  const settings: Record<string, unknown> = {}
+  const commands: { command: string; args: string }[] = []
+  const fills: string[] = []
+  on('settings.read', () => ({ value: { ...settings } }) as never)
+  on('command.run', (_, e) => {
+    if (refuse.command) throw new Error('refused')
+    commands.push({ command: e.command, args: e.args })
+    if (e.command === 'advisor' && e.args === 'off') delete settings.advisorModel
+    else if (e.command === 'advisor') settings.advisorModel = e.args
+    return { text: 'ok' } as never
+  })
+  on('prompt.fill', (_, e) => {
+    fills.push((e as { text: string }).text)
+    return { isFilled: true } as never
   })
   const appended: Appended[] = []
   const sent: { to: unknown; text: string }[] = []
@@ -73,7 +88,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
         : {}),
     }
   })
-  return { status, spawnModels, stepModels, appended, sent, storeSets }
+  return { status, spawnModels, stepModels, appended, sent, storeSets, settings, commands, fills }
 }
 
 async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[] } = {}) {
@@ -823,6 +838,45 @@ describe('Sichtbarkeit beim Korrigieren', () => {
     await ui.redraw()
     expect(await screen(ui)).toMatch(/weitere/)
     expect(await ui.find({ key: 'ag:sub-3' })).toBeDefined()
+    await ui.unmount()
+  })
+})
+
+describe('Berater per Knopf', () => {
+  test('der Knopf schaltet den Berater über /advisor ein und wieder aus', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'advisor:toggle' }))?.props.label).toBe('einschalten')
+    await ui.press({ key: 'advisor:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.commands.at(-1)).toEqual({ command: 'advisor', args: 'opus' })
+    expect((await ui.find({ key: 'advisor:toggle' }))?.props.label).toBe('ausschalten')
+    expect(await screen(ui)).toMatch(/Opus/)
+    await ui.press({ key: 'advisor:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.commands.at(-1)).toEqual({ command: 'advisor', args: 'off' })
+    expect((await ui.find({ key: 'advisor:toggle' }))?.props.label).toBe('einschalten')
+    await ui.unmount()
+  })
+
+  test('lehnt Claude Code den Befehl ab, steht er als Entwurf in der Eingabe', de, async ($, on) => {
+    const seen = engine(on, [], { command: true })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'advisor:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.fills).toEqual(['/advisor opus'])
+    await ui.unmount()
+  })
+
+  test('ein Umschalten von Hand kommt beim nächsten Zug in der Leiste an', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    seen.settings.advisorModel = 'opus'
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'advisor:toggle' }))?.props.label).toBe('ausschalten')
     await ui.unmount()
   })
 })

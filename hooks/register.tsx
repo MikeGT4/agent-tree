@@ -65,6 +65,7 @@ let lang: Lang = 'en'
 let stoppingIds = new Set<string>()
 let stopSentIds = new Set<string>()
 const unread = new Map<string, string>()
+let lastAdvisor = 'opus'
 
 function busy(s: AgentTreeState): boolean {
   return counts(s).running > 0 || phaseOf(s) === 'reviewing'
@@ -182,6 +183,26 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
   await appendRow($, w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text))
 }
 
+async function readAdvisor($: EngineInterface): Promise<void> {
+  const model = await $.settings.read({ key: 'advisorModel' }).catch(() => undefined)
+  const name = typeof model === 'string' && model ? model : undefined
+  if (name) lastAdvisor = name
+  await change($, s => withAdvisorModel(s, name))
+}
+
+async function toggleAdvisor($: EngineInterface): Promise<void> {
+  const args = (await read($, tree)).advisor.model ? 'off' : lastAdvisor
+  const ran = await $.command.run({ command: 'advisor', args }).then(
+    () => true,
+    () => false,
+  )
+  if (!ran) {
+    await $.prompt.fill({ text: `/advisor ${args}`, mode: 'replace' }).catch(() => undefined)
+    return
+  }
+  await readAdvisor($)
+}
+
 async function resendUnread($: EngineInterface, s: AgentTreeState, agentId: string, now: number): Promise<void> {
   const waiting = pendingCorrection(s, agentId)
   const text = unread.get(agentId)
@@ -205,6 +226,7 @@ function actionsFor($: EngineInterface): TreeActions {
     detail: agentId => void openDetail($, agentId).catch(ignore),
     stop: agentId => void clock($).then(now => change($, t => stopRequested(t, agentId, now))).catch(ignore),
     say: (agentId, text) => void sayTo($, agentId, text).catch(ignore),
+    advisor: () => void toggleAdvisor($).catch(ignore),
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
     restyle: (row, id) => void restyle($, look => ({ ...look, [row]: id })).catch(ignore),
     restyleDefault: () => void restyle($, () => DEFAULT_LOOK).catch(ignore),
@@ -228,8 +250,7 @@ export const register: Register = (on, options) => {
       .catch(() => undefined)
     const saved = await $.store.get(LOOK_KEY).catch(() => undefined)
     await update($, appearance, () => lookFrom(saved)).catch(() => undefined)
-    const advisorModel = await $.settings.read({ key: 'advisorModel' }).catch(() => undefined)
-    await change($, s => withAdvisorModel(s, typeof advisorModel === 'string' ? advisorModel : undefined)).catch(() => undefined)
+    await readAdvisor($).catch(() => undefined)
     await catchUp($, await clock($), keep).catch(() => undefined)
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
     return result
@@ -271,6 +292,7 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     const now = await clock($)
     await change($, s => turnStarted(s, { text: e.text, agentId: e.agentId }, now)).catch(() => undefined)
+    if (!e.agentId) await readAdvisor($).catch(() => undefined)
     return result
   })
 

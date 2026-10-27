@@ -94,6 +94,7 @@ export type TreeActions = {
   detail: (agentId: string) => void
   stop: (agentId: string) => void
   say: (agentId: string, text: string) => void
+  advisor: () => void
   look: () => void
   restyle: (row: LookRow, id: string) => void
   restyleDefault: () => void
@@ -114,6 +115,7 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   const kind = key.slice(0, cut)
   const rest = key.slice(cut + 1)
   if (key === 'picker:close' || key === 'detail:close' || key === 'look:close') actions.close()
+  else if (key === 'advisor:toggle') actions.advisor()
   else if (kind === 'look') return lookKey(actions, rest)
   else if (kind === 'pick') actions.pick(rest)
   else if (kind === 'choose') return chooseKey(actions, rest)
@@ -852,9 +854,15 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       <Text size={SIZE.detail} color={palette.advisor} wrap="truncate-end">
         {advisorState}
       </Text>
-      <Text size={SIZE.detail} color={palette.advisor} wrap="truncate-end">
-        {advisorModel ? w.onCall : ' '}
-      </Text>
+      {actions ? (
+        <Box key="advisor-toggle-row" flexDirection="row">
+          <Button key="advisor:toggle" plain label={advisorModel ? w.advisorOff : w.advisorOn} onPress={() => actions.advisor()} />
+        </Box>
+      ) : (
+        <Text size={SIZE.detail} color={palette.advisor} wrap="truncate-end">
+          {advisorModel ? w.onCall : ' '}
+        </Text>
+      )}
       {railLine('reads-0', w.reads[0])}
       {railLine('reads-1', w.reads[1])}
       {railLine('gap-1', '')}
@@ -879,9 +887,16 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const advisorCompact = (
     <Box key="advisor" width={width} {...frameProps(palette.advisor)} flexDirection="column">
-      <Text color={palette.advisor} wrap="truncate-end">
-        {`${w.advisor} · ${advisorModel ? `${advisorModel} · ${w.onCall}` : w.off} · ${w.calls} ${s.advisor.total}`}
-      </Text>
+      <Box key="advisor-head" flexDirection="row" columnGap={1}>
+        <Box key="advisor-head-text" flexShrink={1}>
+          <Text color={palette.advisor} wrap="truncate-end">
+            {`${w.advisor} · ${advisorModel ? `${advisorModel} · ${w.onCall}` : w.off} · ${w.calls} ${s.advisor.total}`}
+          </Text>
+        </Box>
+        {actions ? (
+          <Button key="advisor:toggle" plain label={advisorModel ? w.advisorOff : w.advisorOn} onPress={() => actions.advisor()} />
+        ) : null}
+      </Box>
       <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
         {lastCall ? `${w.fromMain} ${s.advisor.fromMain} · ${w.fromSub} ${s.advisor.fromAgents} · ${w.last} ${clockTime(lastCall.at)}` : w.notAsked}
       </Text>
