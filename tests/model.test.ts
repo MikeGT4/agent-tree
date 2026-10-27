@@ -581,6 +581,7 @@ describe('Korrekturen', () => {
   test('der Hinweis beim Anhalten verlangt eine neue Abgabe über das genannte Werkzeug', () => {
     expect(WORDS.de.correctionWaiting('SubagentHandback')).toMatch(/SubagentHandback erneut/)
     expect(WORDS.en.correctionWaiting('SubagentHandback')).toMatch(/SubagentHandback again/)
+    expect(WORDS.en.correctionFrame('Use b.ts', 'SubagentHandback')).toMatch(/Use b\.ts[\s\S]*report via SubagentHandback/)
   })
 
   test('Aussehen und Detailkasten schließen einander', () => {

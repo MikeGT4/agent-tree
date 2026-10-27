@@ -69,7 +69,7 @@ export type Words = {
   stopAnswer: (tools: number) => string
   sayPlaceholder: string
   send: string
-  correctionFrame: (text: string) => string
+  correctionFrame: (text: string, tool: string) => string
   mainNote: (agent: string, text: string) => string
   correctionWaiting: (tool: string) => string
   correctionFailedStatus: string
@@ -172,7 +172,8 @@ export const WORDS: Record<Lang, Words> = {
     stopAnswer: n => `Im Agent Tree vom Nutzer gestoppt, nach ${n} ${n === 1 ? 'Werkzeugaufruf' : 'Werkzeugaufrufen'}.`,
     sayPlaceholder: 'Nachricht an diesen Agenten …',
     send: 'senden',
-    correctionFrame: text => `Nachricht des Nutzers über Agent Tree: ${text}`,
+    correctionFrame: (text, tool) =>
+      `Nachricht des Nutzers über Agent Tree: ${text}\n\nSie gilt ab jetzt für deinen Auftrag. Berücksichtige sie bei der weiteren Arbeit und in deinem Bericht über ${tool}.`,
     mainNote: (agent, text) =>
       `Der Nutzer hat dem Unteragenten ${agent} über Agent Tree geschrieben: „${text}“. Sein Ergebnis kann deshalb vom Auftrag abweichen.`,
     correctionWaiting: tool =>
@@ -280,7 +281,8 @@ export const WORDS: Record<Lang, Words> = {
     stopAnswer: n => `Stopped by the user in Agent Tree after ${n} tool ${n === 1 ? 'call' : 'calls'}.`,
     sayPlaceholder: 'Message to this agent …',
     send: 'send',
-    correctionFrame: text => `Message from the user via Agent Tree: ${text}`,
+    correctionFrame: (text, tool) =>
+      `Message from the user via Agent Tree: ${text}\n\nIt applies to your task from now on. Take it into account in your remaining work and in your report via ${tool}.`,
     mainNote: (agent, text) =>
       `The user wrote to the sub-agent ${agent} via Agent Tree: "${text}". Its result may differ from the task for that reason.`,
     correctionWaiting: tool => `Before you finish: the user sent you a new message, shown above. Act on it, then call ${tool} again with a report that reflects it.`,

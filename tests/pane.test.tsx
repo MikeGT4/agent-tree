@@ -554,6 +554,7 @@ describe('Korrektur', () => {
     expect(seen.appended.length).toBe(2)
     expect([seen.appended[0]?.agentId, seen.appended[0]?.message.type]).toEqual(['sub-1', 'user'])
     expect(text(seen.appended[0])).toContain('Nur lesen')
+    expect(text(seen.appended[0])).toMatch(/Bericht über SubagentHandback/)
     expect(seen.appended[1]?.agentId).toBeUndefined()
     expect(text(seen.appended[1])).toContain('Code lesen')
     expect(text(seen.appended[1])).toContain('Nur lesen')
@@ -581,6 +582,7 @@ describe('Korrektur', () => {
     expect(seen.sent.length).toBe(1)
     expect(JSON.stringify(seen.sent[0]?.to)).toContain('sub-1')
     expect(seen.sent[0]?.text).toContain('Bitte noch die Tests')
+    expect(seen.sent[0]?.text).toMatch(/Bericht über SubagentHandback/)
     expect(seen.appended.filter(row => row.agentId === 'sub-1').length).toBe(0)
   })
 

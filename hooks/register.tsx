@@ -161,7 +161,7 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
     return
   }
   const now = await clock($)
-  const framed = w.correctionFrame(text)
+  const framed = w.correctionFrame(text, HANDBACK)
   let via: 'append' | 'send' | undefined
   if (node.status === 'running' && (await appendRow($, framed, agentId))) via = 'append'
   if (!via) {
