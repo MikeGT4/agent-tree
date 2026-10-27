@@ -210,7 +210,7 @@ async function toggleAdvisor($: EngineInterface): Promise<void> {
     await $.prompt.fill({ text: `/advisor ${args}`, mode: 'replace' }).catch(() => undefined)
     return
   }
-  await readAdvisor($)
+  await change($, s => withAdvisorModel(s, args === 'off' ? undefined : args))
 }
 
 async function resendUnread($: EngineInterface, s: AgentTreeState, agentId: string, now: number): Promise<void> {

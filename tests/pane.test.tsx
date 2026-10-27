@@ -10,7 +10,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; onSend?: () => Promise<unknown> } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; onSend?: () => Promise<unknown> } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -33,6 +33,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   on('command.run', (_, e) => {
     if (refuse.command) throw new Error('refused')
     commands.push({ command: e.command, args: e.args })
+    if (refuse.lag) return { text: 'ok' } as never
     if (e.command === 'advisor' && e.args === 'off') delete settings.advisorModel
     else if (e.command === 'advisor') settings.advisorModel = e.args
     return { text: 'ok' } as never
@@ -880,6 +881,16 @@ describe('Berater per Knopf', () => {
     for (let i = 0; i < 3; i++) await ui.redraw()
     expect(seen.commands.at(-1)).toEqual({ command: 'advisor', args: 'off' })
     expect((await ui.find({ key: 'advisor:toggle' }))?.props.label).toBe('einschalten')
+    await ui.unmount()
+  })
+
+  test('nach dem Befehl zeigt die Leiste den neuen Stand sofort, auch wenn die Einstellung noch nicht gelesen werden kann', de, async ($, on) => {
+    engine(on, [], { lag: true })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'advisor:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect((await ui.find({ key: 'advisor:toggle' }))?.props.label).toBe('ausschalten')
     await ui.unmount()
   })
 
