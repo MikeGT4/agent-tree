@@ -650,11 +650,13 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     return ui
   }
 
-  test('der Detailkasten eines Unteragenten hat ein Textfeld', de, async ($, on) => {
+  test('der Detailkasten eines Unteragenten hat ein Textfeld mit dem Fokus', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
     const ui = await openDetail($)
-    expect(await ui.find({ key: 'say:sub-1:0' })).toBeDefined()
+    const field = await ui.find({ key: 'say:sub-1:0' })
+    expect(field).toBeDefined()
+    expect((field?.props as { autoFocus?: boolean } | undefined)?.autoFocus).toBe(true)
     await ui.unmount()
   })
 

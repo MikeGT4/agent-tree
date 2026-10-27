@@ -803,6 +803,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         <Input
           key={`say:${detailNode.id}:${s.corrections?.[detailNode.id]?.count ?? 0}`}
           rows={2}
+          autoFocus
           placeholder={w.sayPlaceholder}
           submitLabel={w.send}
           onSubmit={value => actions.say(detailNode.id, value)}
