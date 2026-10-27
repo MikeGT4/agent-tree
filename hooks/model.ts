@@ -103,13 +103,25 @@ export function correctionSent(
   return logged(next, 'agent', 'correction', { type: node.type, text: oneLine(input.text).slice(0, LOG_EXCERPT) }, now)
 }
 
-export function correctionFailed(s: AgentTreeState, agentId: string, now: number): AgentTreeState {
-  const node = findAgent(s, agentId)
+export function correctionFailed(
+  s: AgentTreeState,
+  input: { agentId: string; text: string; before?: AgentTreeCorrection },
+  now: number,
+): AgentTreeState {
+  const node = findAgent(s, input.agentId)
   if (!node) return s
-  const before = s.corrections?.[agentId]
-  const correction: AgentTreeCorrection = { at: now, text: before?.text ?? '', state: 'failed', count: before?.count ?? 0 }
-  const next = { ...s, corrections: { ...s.corrections, [agentId]: correction } }
-  return logged(next, 'agent', 'correctionFailed', { type: node.type }, now)
+  const kept: AgentTreeCorrection =
+    input.before?.state === 'sent' ? input.before : { at: now, text: excerpt(input.text), state: 'failed', count: input.before?.count ?? 0 }
+  const next = { ...s, corrections: { ...s.corrections, [input.agentId]: kept } }
+  return logged(next, 'agent', 'correctionFailed', { type: node.type, text: oneLine(input.text).slice(0, LOG_EXCERPT) }, now)
+}
+
+export function correctionResent(s: AgentTreeState, agentId: string, now: number): AgentTreeState {
+  const node = findAgent(s, agentId)
+  const current = s.corrections?.[agentId]
+  if (!node || !current) return s
+  const correction: AgentTreeCorrection = { ...current, via: 'send', state: 'sent', at: now, held: undefined }
+  return logged({ ...s, corrections: { ...s.corrections, [agentId]: correction } }, 'agent', 'correctionResent', { type: node.type }, now)
 }
 
 export function correctionRead(s: AgentTreeState, agentId: string, now: number): AgentTreeState {

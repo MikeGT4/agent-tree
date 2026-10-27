@@ -10,7 +10,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; onSend?: () => Promise<unknown> } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -29,9 +29,10 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
     appended.push(row)
     return next(e)
   })
-  on('session.send', (_, e) => {
+  on('session.send', async (_, e) => {
     if (refuse.send) return { isDelivered: false, reason: 'gone' } as never
     sent.push(e as never)
+    await refuse.onSend?.()
     return { isDelivered: true } as never
   })
   const spawnModels: (string | undefined)[] = []
@@ -713,6 +714,61 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     const ui = await openDetail($)
     expect(String((await ui.find({ key: 'say:sub-1:0' }))?.props.placeholder ?? '')).toMatch(/Esc/)
     await ui.unmount()
+  })
+
+  const finished = { answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' } as const
+
+  test('endet ein Agent vor dem Lesen, schickt Agent Tree die Korrektur einmal nach', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await ui.input({ key: 'say:sub-1:0', text: 'Nimm b.ts' })
+    await ui.unmount()
+    await $.turn.complete(finished)
+    expect(seen.sent.length).toBe(1)
+    expect(seen.sent[0]?.text).toContain('Nimm b.ts')
+    await $.turn.complete(finished)
+    expect(seen.sent.length).toBe(1)
+  })
+
+  test('eine gelesene Korrektur wird beim Ende nicht nachgeschickt', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await ui.input({ key: 'say:sub-1:0', text: 'Nimm b.ts' })
+    await ui.unmount()
+    await step($, { agentId: 'sub-1' })
+    await $.turn.complete(finished)
+    expect(seen.sent.length).toBe(0)
+  })
+
+  test('scheitert eine zweite Korrektur, bleibt die erste offen', de, async ($, on) => {
+    const refuse = { append: false, send: false }
+    engine(on, [], refuse)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await ui.input({ key: 'say:sub-1:0', text: 'Erste Korrektur' })
+    refuse.append = true
+    refuse.send = true
+    await ui.input({ key: 'say:sub-1:1', text: 'Zweite Korrektur' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toMatch(/Korrektur: geschickt[^"]*Erste Korrektur/)
+    expect(text).toMatch(/nicht zugestellt: Zweite Korrektur/)
+    await ui.unmount()
+  })
+
+  test('ein per send neu gestarteter Agent liest die Korrektur schon im ersten Schritt', de, async ($, on) => {
+    const refuse: { onSend?: () => Promise<unknown> } = {}
+    engine(on, [], refuse)
+    await oneAgentWithAdvisor($)
+    await $.turn.complete(finished)
+    refuse.onSend = () => step($, { agentId: 'sub-1' })
+    const ui = await openDetail($)
+    await ui.input({ key: 'say:sub-1:0', text: 'Nimm b.ts' })
+    await ui.unmount()
+    const handback = await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
+    expect(JSON.stringify(handback)).not.toMatch(/deny/)
   })
 
   test('der Kasten zeigt geschickt und gelesen, der Detailkasten nennt den Stand', de, async ($, on) => {

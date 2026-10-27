@@ -13,6 +13,7 @@ import {
   correctionFailed,
   correctionHeld,
   correctionRead,
+  correctionResent,
   correctionSent,
   counts,
   createTree,
@@ -63,6 +64,7 @@ let animate = true
 let lang: Lang = 'en'
 let stoppingIds = new Set<string>()
 let stopSentIds = new Set<string>()
+const unread = new Map<string, string>()
 
 function busy(s: AgentTreeState): boolean {
   return counts(s).running > 0 || phaseOf(s) === 'reviewing'
@@ -155,27 +157,43 @@ async function appendRow($: EngineInterface, text: string, agentId?: string): Pr
 async function sayTo($: EngineInterface, agentId: string, text: string): Promise<void> {
   if (!text.trim()) return
   const w = wordsFor(lang)
-  const node = (await read($, tree)).agents.find(n => n.id === agentId)
+  const current = await read($, tree)
+  const node = current.agents.find(n => n.id === agentId)
   if (!node) {
     $.ui.status(w.correctionFailedStatus)
     return
   }
+  const before = current.corrections?.[agentId]
   const now = await clock($)
   const framed = w.correctionFrame(text, HANDBACK)
-  let via: 'append' | 'send' | undefined
-  if (node.status === 'running' && (await appendRow($, framed, agentId))) via = 'append'
-  if (!via) {
+  if (node.status === 'running' && (await appendRow($, framed, agentId))) {
+    unread.set(agentId, framed)
+    await change($, t => correctionSent(t, { agentId, text, via: 'append' }, now))
+  } else {
+    unread.delete(agentId)
+    await change($, t => correctionSent(t, { agentId, text, via: 'send' }, now))
     const sent = await $.session.send({ to: { agentId }, text: framed }).catch(() => undefined)
-    if (sent?.isDelivered) via = 'send'
+    if (!sent?.isDelivered) {
+      await change($, t => correctionFailed(t, { agentId, text, before }, now))
+      $.ui.status(w.correctionFailedStatus)
+      return
+    }
   }
-  if (!via) {
-    await change($, t => correctionFailed(t, agentId, now))
-    $.ui.status(w.correctionFailedStatus)
+  await appendRow($, w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text))
+}
+
+async function resendUnread($: EngineInterface, s: AgentTreeState, agentId: string, now: number): Promise<void> {
+  const waiting = pendingCorrection(s, agentId)
+  const text = unread.get(agentId)
+  unread.delete(agentId)
+  if (!waiting || waiting.via !== 'append' || !text || s.agents.find(n => n.id === agentId)?.status !== 'done') return
+  const sent = await $.session.send({ to: { agentId }, text }).catch(() => undefined)
+  if (sent?.isDelivered) {
+    await change($, t => correctionResent(t, agentId, now))
     return
   }
-  const delivered = via
-  await change($, t => correctionSent(t, { agentId, text, via: delivered }, now))
-  await appendRow($, w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text))
+  await change($, t => correctionFailed(t, { agentId, text: waiting.text }, now))
+  $.ui.status(wordsFor(lang).correctionFailedStatus)
 }
 
 function actionsFor($: EngineInterface): TreeActions {
@@ -281,6 +299,7 @@ export const register: Register = (on, options) => {
     }
     if (agentId && before && pendingCorrection(before, agentId)) {
       const readAt = await clock($)
+      unread.delete(agentId)
       await change($, s => correctionRead(s, agentId, readAt)).catch(() => undefined)
     }
     const family = before && e.agentId ? choicesOf(before).agents[e.agentId] : undefined
@@ -369,9 +388,10 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     const now = await clock($)
-    await change($, s =>
+    const after = await change($, s =>
       completed(s, { agentId: e.agentId, answer: e.answer, reason: e.reason, isAborted: e.isAborted, durationMs: e.durationMs }, now),
     ).catch(() => undefined)
+    if (e.agentId && after) await resendUnread($, after, e.agentId, now).catch(() => undefined)
     if (!e.agentId) await catchUp($, now, keep).catch(() => undefined)
     return result
   })

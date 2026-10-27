@@ -11,6 +11,7 @@ import {
   correctionFailed,
   correctionHeld,
   correctionRead,
+  correctionResent,
   correctionSent,
   counts,
   createTree,
@@ -538,11 +539,20 @@ describe('Korrekturen', () => {
     expect(correctionRead(s, 'sub-1', 3000)).toBe(s)
   })
 
-  test('fehlgeschlagen behält den Zähler', () => {
+  test('eine gescheiterte Korrektur lässt eine offene stehen und nennt ihren eigenen Text', () => {
     let s = correctionSent(one(), { agentId: 'sub-1', text: 'A', via: 'append' }, 2)
-    s = correctionFailed(s, 'sub-1', 3)
-    expect([s.corrections?.['sub-1']?.state, s.corrections?.['sub-1']?.count]).toEqual(['failed', 1])
-    expect(line(s.log.at(-1))).toBe('Korrektur an Explore nicht zugestellt')
+    const before = s.corrections?.['sub-1']
+    s = correctionFailed(s, { agentId: 'sub-1', text: 'B', before }, 3)
+    expect(s.corrections?.['sub-1']).toEqual(before)
+    expect(line(s.log.at(-1))).toBe('Korrektur an Explore nicht zugestellt: B')
+    const t = correctionFailed(one(), { agentId: 'sub-1', text: 'Nur B', before: undefined }, 3)
+    expect([t.corrections?.['sub-1']?.state, t.corrections?.['sub-1']?.text, t.corrections?.['sub-1']?.count]).toEqual(['failed', 'Nur B', 0])
+  })
+
+  test('correctionResent vermerkt das Nachschicken über send', () => {
+    const s = correctionResent(correctionSent(one(), { agentId: 'sub-1', text: 'A', via: 'append' }, 2), 'sub-1', 4)
+    expect([s.corrections?.['sub-1']?.state, s.corrections?.['sub-1']?.via, s.corrections?.['sub-1']?.at]).toEqual(['sent', 'send', 4])
+    expect(line(s.log.at(-1))).toBe('Korrektur an Explore nachgeschickt')
   })
 
   test('pendingCorrection kennt nur geschickte', () => {
@@ -551,7 +561,7 @@ describe('Korrekturen', () => {
     const s = correctionSent(fresh, { agentId: 'sub-1', text: 'A', via: 'append' }, 2)
     expect(pendingCorrection(s, 'sub-1')?.count).toBe(1)
     expect(pendingCorrection(correctionRead(s, 'sub-1', 3), 'sub-1')).toBeUndefined()
-    expect(pendingCorrection(correctionFailed(s, 'sub-1', 3), 'sub-1')).toBeUndefined()
+    expect(pendingCorrection(correctionFailed(fresh, { agentId: 'sub-1', text: 'B', before: undefined }, 3), 'sub-1')).toBeUndefined()
     expect(pendingCorrection(s, undefined)).toBeUndefined()
   })
 

@@ -103,6 +103,7 @@ export type Words = {
     stopRequested: (d: Record<string, string | number>) => string
     correction: (d: Record<string, string | number>) => string
     correctionFailed: (d: Record<string, string | number>) => string
+    correctionResent: (d: Record<string, string | number>) => string
   }
 }
 
@@ -215,7 +216,8 @@ export const WORDS: Record<Lang, Words> = {
       choice: d => `Modell für ${d.who ? d.who : 'neue Unteragenten'}: ${familyOr(d.family, 'Standard')}`,
       stopRequested: d => `Stopp für ${d.type} angefordert`,
       correction: d => `Korrektur an ${d.type}: ${d.text}`,
-      correctionFailed: d => `Korrektur an ${d.type} nicht zugestellt`,
+      correctionFailed: d => `Korrektur an ${d.type} nicht zugestellt${d.text ? `: ${d.text}` : ''}`,
+      correctionResent: d => `Korrektur an ${d.type} nachgeschickt`,
     },
   },
   en: {
@@ -323,7 +325,8 @@ export const WORDS: Record<Lang, Words> = {
       choice: d => `Model for ${d.who ? d.who : 'new sub-agents'}: ${familyOr(d.family, 'Default')}`,
       stopRequested: d => `Stop requested for ${d.type}`,
       correction: d => `Correction to ${d.type}: ${d.text}`,
-      correctionFailed: d => `Correction to ${d.type} not delivered`,
+      correctionFailed: d => `Correction to ${d.type} not delivered${d.text ? `: ${d.text}` : ''}`,
+      correctionResent: d => `Correction to ${d.type} sent again`,
     },
   },
 }
