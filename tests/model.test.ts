@@ -47,7 +47,7 @@ import {
 } from '../hooks/model.ts'
 import { AGENT_WIDTH, connector, drawTree, inputKey, litCells, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
 import { lookChoice, logLine, resolveLang, toolText, WORDS } from '../hooks/words.ts'
-import { contrast, DEFAULT_LOOK, frameEdges, isLookChoice, lookFrom, LOOK_OPTIONS, PALETTES, restyleLine, STYLES } from '../hooks/looks.ts'
+import { contrast, DEFAULT_LOOK, frameEdges, isLookChoice, lightColor, lookFrom, LOOK_OPTIONS, PALETTES, restyleLine, STYLES } from '../hooks/looks.ts'
 
 const line = (entry: AgentTreeLogEntry | undefined) => (entry ? logLine(entry, 'de') : undefined)
 
@@ -717,6 +717,14 @@ describe('Aussehen', () => {
     const draw = (appearance?: unknown) =>
       JSON.stringify(drawTree(ui, spawned(createTree(0), spawn('sub-1'), 1), 90, 60, { frame: 0, animate: false, now: 5000, ...(appearance ? { appearance: appearance as never } : {}) }))
     expect(draw({ style: 'zickzack', colors: 'neon', light: 'blitz' })).toBe(draw())
+  })
+
+  test('im Schema Hell sind alle Lichtfarben auf Weiß sichtbar, sonst gelten die hellen', () => {
+    for (const light of LOOK_OPTIONS.light) {
+      const color = lightColor({ ...DEFAULT_LOOK, colors: 'light', light })
+      if (color) expect(contrast(color, '#FFFFFF')).toBeGreaterThanOrEqual(3)
+    }
+    expect([lightColor({ ...DEFAULT_LOOK, light: 'white' }), lightColor(DEFAULT_LOOK)]).toEqual(['#FFFFFF', undefined])
   })
 
   test('der Spinner folgt dem Stil', () => {

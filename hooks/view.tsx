@@ -26,7 +26,7 @@ import {
   phaseOf,
   typeLabel,
 } from './model.ts'
-import { LIGHTS, LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, lookFrom, restyleLine } from './looks.ts'
+import { LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, lightColor, lookFrom, restyleLine } from './looks.ts'
 import type { Glyphs, LookRow, Palette } from './looks.ts'
 import { WORDS, familyOr, logLine, lookOptionLabel, toolText, wordsFor } from './words.ts'
 import type { Lang, Words } from './words.ts'
@@ -421,7 +421,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const appearance = lookFrom(look.appearance)
   const palette = PALETTES[appearance.colors]
   const glyphs = STYLES[appearance.style]
-  const light = LIGHTS[appearance.light]
+  const light = lightColor(appearance)
   const spin = runningMark(look.frame, look.animate, glyphs.spinner)
   const choices = choicesOf(s)
   const actions = look.actions

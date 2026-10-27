@@ -60,6 +60,18 @@ export const LIGHTS: Record<AgentTreeLight, string | undefined> = {
   magenta: '#F07AC0',
 }
 
+export const LIGHTS_ON_LIGHT: Record<AgentTreeLight, string | undefined> = {
+  standard: undefined,
+  white: '#1F2328',
+  gold: '#9A6700',
+  cyan: '#1B7C83',
+  magenta: '#BF3989',
+}
+
+export function lightColor(look: AgentTreeLook): string | undefined {
+  return (look.colors === 'light' ? LIGHTS_ON_LIGHT : LIGHTS)[look.light]
+}
+
 const LINE_GLYPHS = ['─', '│', '┌', '┐', '└', '┘', '┼', '├', '┤', '┬', '┴', '▼', '•', '·']
 
 function lineMap(chars: string): Record<string, string> {

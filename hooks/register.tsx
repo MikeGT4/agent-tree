@@ -2,8 +2,9 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { AgentTreeLook, AgentTreeState } from '../types'
+import type { AgentTreeState } from '../types'
 import { DEFAULT_LOOK, LOOK_OPTIONS, lookFrom } from './looks.ts'
+import type { LookRow } from './looks.ts'
 import {
   adopted,
   choicesOf,
@@ -117,10 +118,15 @@ async function change($: EngineInterface, apply: (s: AgentTreeState) => AgentTre
   return next
 }
 
-async function restyle($: EngineInterface, apply: (look: AgentTreeLook) => AgentTreeLook): Promise<AgentTreeLook> {
-  const next = await update($, appearance, look => lookFrom(apply(look)))
-  await $.store.set(LOOK_KEY, next).catch(() => undefined)
-  return next
+async function restyle($: EngineInterface, row: LookRow, id: string): Promise<void> {
+  const stored = lookFrom(await $.store.get(LOOK_KEY).catch(() => undefined))
+  await $.store.set(LOOK_KEY, lookFrom({ ...stored, [row]: id })).catch(() => undefined)
+  await update($, appearance, look => lookFrom({ ...lookFrom(look), [row]: id }))
+}
+
+async function resetLook($: EngineInterface): Promise<void> {
+  await $.store.set(LOOK_KEY, DEFAULT_LOOK).catch(() => undefined)
+  await update($, appearance, () => DEFAULT_LOOK)
 }
 
 async function catchUp($: EngineInterface, now: number, keep: number): Promise<void> {
@@ -190,7 +196,10 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
     }
   }
   focusField($, await read($, tree), agentId)
-  await appendRow($, w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text))
+  const note = w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text)
+  await appendRow($, note)
+  const parent = node.parentId ? current.agents.find(n => n.id === node.parentId) : undefined
+  if (parent?.status === 'running') await appendRow($, note, parent.id)
 }
 
 async function readAdvisor($: EngineInterface): Promise<void> {
@@ -238,8 +247,8 @@ function actionsFor($: EngineInterface): TreeActions {
     say: (agentId, text) => void sayTo($, agentId, text).catch(ignore),
     advisor: () => void toggleAdvisor($).catch(ignore),
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
-    restyle: (row, id) => void restyle($, look => ({ ...look, [row]: id })).catch(ignore),
-    restyleDefault: () => void restyle($, () => DEFAULT_LOOK).catch(ignore),
+    restyle: (row, id) => void restyle($, row, id).catch(ignore),
+    restyleDefault: () => void resetLook($).catch(ignore),
   }
 }
 
@@ -280,7 +289,7 @@ export const register: Register = (on, options) => {
       const id = choice.id
       const options = (LOOK_OPTIONS[row] as readonly string[]).map(option => lookOptionLabel(w, row, option)).join(', ')
       if (!id) return { text: w.lookUnknown(names.join(' '), w.lookRow[row], options) }
-      await restyle($, look => ({ ...look, [row]: id }))
+      await restyle($, row, id)
       return { text: w.lookSet(w.lookRow[row], lookOptionLabel(w, row, id)) }
     }
     const now = await clock($)

@@ -94,7 +94,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
         : {}),
     }
   })
-  return { status, spawnModels, stepModels, appended, sent, storeSets, settings, commands, fills, focused }
+  return { status, spawnModels, stepModels, appended, sent, storeSets, settings, commands, fills, focused, stored }
 }
 
 async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[] } = {}) {
@@ -792,6 +792,19 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     expect(JSON.stringify(handback)).not.toMatch(/deny/)
   })
 
+  test('bei verschachtelten Agenten erfährt auch der laufende Eltern-Agent die Korrektur', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    await $.agent.spawn({ prompt: 'Prüfe.', description: 'Unterauftrag', subagentType: 'general-purpose', parentAgentId: 'sub-1' } as never)
+    await step($, { agentId: 'sub-2' })
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'detail:sub-2' })
+    await ui.redraw()
+    await ui.input({ key: 'say:sub-2:0', text: 'Nur lesen' })
+    await ui.unmount()
+    expect(seen.appended.some(row => row.agentId === 'sub-1' && (row.message.content[0]?.text ?? '').includes('Nur lesen'))).toBe(true)
+  })
+
   test('der Kasten zeigt geschickt und gelesen, der Detailkasten nennt den Stand', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
@@ -1067,6 +1080,19 @@ describe('Aussehen in der Leiste', () => {
     const text = await screen(ui)
     expect(text).toContain(PALETTES.mono.agent)
     expect(text).toMatch(/◐ läuft/)
+    await ui.unmount()
+  })
+
+  test('eine Wahl ändert im Speicher nur ihre Zeile', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    seen.stored.look = { style: 'braille', colors: 'original', light: 'standard' }
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'look:open' })
+    await ui.redraw()
+    await ui.press({ key: 'look:colors:retro' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.storeSets.at(-1)).toEqual({ key: 'look', value: { style: 'braille', colors: 'retro', light: 'standard' } })
     await ui.unmount()
   })
 
