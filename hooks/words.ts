@@ -84,6 +84,8 @@ export type Words = {
     advisor: (d: Record<string, string | number>) => string
     choice: (d: Record<string, string | number>) => string
     stopRequested: (d: Record<string, string | number>) => string
+    correction: (d: Record<string, string | number>) => string
+    correctionFailed: (d: Record<string, string | number>) => string
   }
 }
 
@@ -173,6 +175,8 @@ export const WORDS: Record<Lang, Words> = {
       advisor: d => `gefragt aus ${d.where ? d.where : 'Hauptsitzung'}`,
       choice: d => `Modell für ${d.who ? d.who : 'neue Unteragenten'}: ${familyOr(d.family, 'Standard')}`,
       stopRequested: d => `Stopp für ${d.type} angefordert`,
+      correction: d => `Korrektur an ${d.type}: ${d.text}`,
+      correctionFailed: d => `Korrektur an ${d.type} nicht zugestellt`,
     },
   },
   en: {
@@ -258,6 +262,8 @@ export const WORDS: Record<Lang, Words> = {
       advisor: d => `consulted from ${d.where ? d.where : 'main session'}`,
       choice: d => `Model for ${d.who ? d.who : 'new sub-agents'}: ${familyOr(d.family, 'Default')}`,
       stopRequested: d => `Stop requested for ${d.type}`,
+      correction: d => `Correction to ${d.type}: ${d.text}`,
+      correctionFailed: d => `Correction to ${d.type} not delivered`,
     },
   },
 }

@@ -23,6 +23,19 @@ export type AgentTreeNode = {
   task?: string
   answer?: string
   answerTokens?: number
+  toolTimes?: number[]
+}
+
+export type AgentTreeCorrectionState = 'sent' | 'read' | 'failed'
+
+export type AgentTreeCorrection = {
+  at: number
+  text: string
+  via?: 'append' | 'send'
+  state: AgentTreeCorrectionState
+  readAt?: number
+  count: number
+  held?: boolean
 }
 
 export type AgentTreeAdvisorCall = {
@@ -91,6 +104,8 @@ export type AgentTreeState = {
   detail?: AgentTreeDetail
   stopping?: string[]
   stopSent?: string[]
+  corrections?: Record<string, AgentTreeCorrection>
+  lookOpen?: boolean
   orphans?: Record<string, AgentTreeOrphanEnd>
   main: AgentTreeMain
   agents: AgentTreeNode[]

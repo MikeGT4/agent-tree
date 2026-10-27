@@ -8,6 +8,10 @@ import {
   clockTime,
   closed,
   completed,
+  correctionFailed,
+  correctionHeld,
+  correctionRead,
+  correctionSent,
   counts,
   createTree,
   detailLoaded,
@@ -19,9 +23,11 @@ import {
   fmtTokens,
   groups,
   isStopping,
+  lookOpened,
   measured,
   MODEL_FAMILIES,
   modelLabel,
+  pendingCorrection,
   phaseOf,
   pickerOpened,
   spawned,
@@ -31,6 +37,7 @@ import {
   stopRequested,
   stopSent,
   synced,
+  TOOL_TIMES_KEPT,
   toolLabel,
   toolRan,
   trimmed,
@@ -500,5 +507,81 @@ describe('Datenmodell', () => {
       'Sub-agents [1/1] · context [1%] · $0.42',
     ])
     expect([fmtTokens(12345, '.'), fmtTokens(12345)]).toEqual(['12.3k', '12,3k'])
+  })
+})
+
+describe('Korrekturen', () => {
+  const one = () => spawned(createTree(0), spawn('sub-1'), 1)
+
+  test('eine Korrektur wird als geschickt vermerkt, gezählt und maskiert protokolliert', () => {
+    const s = correctionSent(one(), { agentId: 'sub-1', text: 'Nimm token=abc123 raus', via: 'append' }, 1000)
+    const c = s.corrections?.['sub-1']
+    expect([c?.state, c?.count, c?.via, c?.at]).toEqual(['sent', 1, 'append', 1000])
+    expect(c?.text).toContain('•••')
+    expect(c?.text).not.toContain('abc123')
+    expect(line(s.log.at(-1))).toBe('Korrektur an Explore: Nimm ••• raus')
+  })
+
+  test('eine zweite Korrektur zählt weiter', () => {
+    let s = correctionSent(one(), { agentId: 'sub-1', text: 'A', via: 'append' }, 2)
+    s = correctionSent(s, { agentId: 'sub-1', text: 'B', via: 'send' }, 3)
+    const c = s.corrections?.['sub-1']
+    expect([c?.count, c?.via, c?.text, c?.state]).toEqual([2, 'send', 'B', 'sent'])
+  })
+
+  test('der nächste Schritt setzt gelesen, nur aus geschickt', () => {
+    const fresh = one()
+    expect(correctionRead(fresh, 'sub-1', 5)).toBe(fresh)
+    let s = correctionSent(fresh, { agentId: 'sub-1', text: 'A', via: 'append' }, 2)
+    s = correctionRead(s, 'sub-1', 2000)
+    expect([s.corrections?.['sub-1']?.state, s.corrections?.['sub-1']?.readAt]).toEqual(['read', 2000])
+    expect(correctionRead(s, 'sub-1', 3000)).toBe(s)
+  })
+
+  test('fehlgeschlagen behält den Zähler', () => {
+    let s = correctionSent(one(), { agentId: 'sub-1', text: 'A', via: 'append' }, 2)
+    s = correctionFailed(s, 'sub-1', 3)
+    expect([s.corrections?.['sub-1']?.state, s.corrections?.['sub-1']?.count]).toEqual(['failed', 1])
+    expect(line(s.log.at(-1))).toBe('Korrektur an Explore nicht zugestellt')
+  })
+
+  test('pendingCorrection kennt nur geschickte', () => {
+    const fresh = one()
+    expect(pendingCorrection(fresh, 'sub-1')).toBeUndefined()
+    const s = correctionSent(fresh, { agentId: 'sub-1', text: 'A', via: 'append' }, 2)
+    expect(pendingCorrection(s, 'sub-1')?.count).toBe(1)
+    expect(pendingCorrection(correctionRead(s, 'sub-1', 3), 'sub-1')).toBeUndefined()
+    expect(pendingCorrection(correctionFailed(s, 'sub-1', 3), 'sub-1')).toBeUndefined()
+    expect(pendingCorrection(s, undefined)).toBeUndefined()
+  })
+
+  test('correctionHeld merkt sich das Anhalten der Rückgabe einmal', () => {
+    const s = correctionSent(one(), { agentId: 'sub-1', text: 'A', via: 'append' }, 2)
+    const held = correctionHeld(s, 'sub-1')
+    expect(held.corrections?.['sub-1']?.held).toBe(true)
+    expect(correctionHeld(one(), 'sub-1').corrections).toBeUndefined()
+  })
+
+  test('ein langer Text wird gekürzt vermerkt', () => {
+    const s = correctionSent(one(), { agentId: 'sub-1', text: 'x'.repeat(5000), via: 'append' }, 2)
+    expect(s.corrections?.['sub-1']?.text.length ?? 0).toBeLessThanOrEqual(160)
+    expect(String(s.log.at(-1)?.data?.text ?? '').length).toBeLessThanOrEqual(60)
+  })
+
+  test('toolRan merkt sich höchstens 64 Zeiten', () => {
+    let s = one()
+    for (let i = 1; i <= 70; i++) s = toolRan(s, { agentId: 'sub-1', label: 'Read' }, 100 + i)
+    const times = s.agents[0]?.toolTimes ?? []
+    expect([times.length, times.at(-1), TOOL_TIMES_KEPT]).toEqual([64, 170, 64])
+  })
+
+  test('Aussehen und Modellwahl schließen einander', () => {
+    let s = pickerOpened(one(), 'sub-1')
+    s = lookOpened(s)
+    expect([s.lookOpen, s.choices?.picker]).toEqual([true, undefined])
+    s = pickerOpened(s, 'sub-1')
+    expect([s.lookOpen, s.choices?.picker]).toEqual([undefined, 'sub-1'])
+    s = closed(lookOpened(s))
+    expect([s.lookOpen, s.choices?.picker]).toEqual([undefined, undefined])
   })
 })

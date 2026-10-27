@@ -1,6 +1,7 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import type {
   AgentTreeChoices,
+  AgentTreeCorrection,
   AgentTreeCounts,
   AgentTreeDetail,
   AgentTreeGroup,
@@ -17,6 +18,7 @@ export const DESCRIPTION_LIMIT = 80
 export const LABEL_LIMIT = 40
 export const ADVISOR_CALLS_KEPT = 20
 export const TOOLS_KEPT = 5
+export const TOOL_TIMES_KEPT = 64
 export const DETAIL_LIMIT = 160
 
 export type AdvisorUse = { id: string; startedAt: number; endedAt?: number }
@@ -73,11 +75,59 @@ export function familyLabel(family: string | undefined): string {
 }
 
 export function pickerOpened(s: AgentTreeState, target: string | undefined): AgentTreeState {
-  return { ...s, detail: target === undefined ? s.detail : undefined, choices: { ...choicesOf(s), picker: target } }
+  return {
+    ...s,
+    detail: target === undefined ? s.detail : undefined,
+    lookOpen: target === undefined ? s.lookOpen : undefined,
+    choices: { ...choicesOf(s), picker: target },
+  }
+}
+
+export function lookOpened(s: AgentTreeState): AgentTreeState {
+  return { ...s, lookOpen: true, choices: { ...choicesOf(s), picker: undefined } }
 }
 
 export function closed(s: AgentTreeState): AgentTreeState {
-  return { ...s, detail: undefined, choices: { ...choicesOf(s), picker: undefined } }
+  return { ...s, detail: undefined, lookOpen: undefined, choices: { ...choicesOf(s), picker: undefined } }
+}
+
+export function correctionSent(
+  s: AgentTreeState,
+  input: { agentId: string; text: string; via: 'append' | 'send' },
+  now: number,
+): AgentTreeState {
+  const node = findAgent(s, input.agentId)
+  if (!node) return s
+  const count = (s.corrections?.[input.agentId]?.count ?? 0) + 1
+  const correction: AgentTreeCorrection = { at: now, text: excerpt(input.text), via: input.via, state: 'sent', count }
+  const next = { ...s, corrections: { ...s.corrections, [input.agentId]: correction } }
+  return logged(next, 'agent', 'correction', { type: node.type, text: oneLine(input.text).slice(0, LOG_EXCERPT) }, now)
+}
+
+export function correctionFailed(s: AgentTreeState, agentId: string, now: number): AgentTreeState {
+  const node = findAgent(s, agentId)
+  if (!node) return s
+  const before = s.corrections?.[agentId]
+  const correction: AgentTreeCorrection = { at: now, text: before?.text ?? '', state: 'failed', count: before?.count ?? 0 }
+  const next = { ...s, corrections: { ...s.corrections, [agentId]: correction } }
+  return logged(next, 'agent', 'correctionFailed', { type: node.type }, now)
+}
+
+export function correctionRead(s: AgentTreeState, agentId: string, now: number): AgentTreeState {
+  const pending = pendingCorrection(s, agentId)
+  if (!pending) return s
+  return { ...s, corrections: { ...s.corrections, [agentId]: { ...pending, state: 'read', readAt: now } } }
+}
+
+export function correctionHeld(s: AgentTreeState, agentId: string): AgentTreeState {
+  const pending = pendingCorrection(s, agentId)
+  if (!pending) return s
+  return { ...s, corrections: { ...s.corrections, [agentId]: { ...pending, held: true } } }
+}
+
+export function pendingCorrection(s: AgentTreeState, agentId: string | undefined): AgentTreeCorrection | undefined {
+  const correction = agentId === undefined ? undefined : s.corrections?.[agentId]
+  return correction?.state === 'sent' ? correction : undefined
 }
 
 export function detailOpened(s: AgentTreeState, agentId: string): AgentTreeState {
@@ -365,6 +415,7 @@ export function toolRan(s: AgentTreeState, input: { agentId?: string; label: str
     toolCount: n.toolCount + 1,
     lastTool: input.label,
     tools: [...(n.tools ?? []), input.label].slice(-TOOLS_KEPT),
+    toolTimes: [...(n.toolTimes ?? []), now].slice(-TOOL_TIMES_KEPT),
   }))
 }
 
