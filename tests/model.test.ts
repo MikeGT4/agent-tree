@@ -45,7 +45,7 @@ import {
   typeLabel,
   wasStopSent,
 } from '../hooks/model.ts'
-import { connector, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, timelineBar } from '../hooks/view.tsx'
+import { connector, inputKey, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, timelineBar } from '../hooks/view.tsx'
 import { logLine, resolveLang, toolText } from '../hooks/words.ts'
 
 const line = (entry: AgentTreeLogEntry | undefined) => (entry ? logLine(entry, 'de') : undefined)
@@ -583,5 +583,17 @@ describe('Korrekturen', () => {
     expect([s.lookOpen, s.choices?.picker]).toEqual([undefined, 'sub-1'])
     s = closed(lookOpened(s))
     expect([s.lookOpen, s.choices?.picker]).toEqual([undefined, undefined])
+  })
+})
+
+describe('Textfeld', () => {
+  test('inputKey schickt nur bei submit', () => {
+    const said: [string, string][] = []
+    const actions = { pick: () => {}, choose: () => {}, close: () => {}, detail: () => {}, stop: () => {}, say: (id: string, value: string) => void said.push([id, value]) }
+    expect(inputKey(actions, 'say:sub-1:0', 'submit', 'x')).toBe(true)
+    expect(said).toEqual([['sub-1', 'x']])
+    expect(inputKey(actions, 'say:sub-1:0', 'change', 'y')).toBe(false)
+    expect(inputKey(actions, 'other:sub-1', 'submit', 'z')).toBe(false)
+    expect(said.length).toBe(1)
   })
 })

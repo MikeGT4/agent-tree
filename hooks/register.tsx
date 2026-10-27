@@ -9,12 +9,17 @@ import {
   chosen,
   closed,
   completed,
+  correctionFailed,
+  correctionHeld,
+  correctionRead,
+  correctionSent,
   counts,
   createTree,
   detailLoaded,
   detailOpened,
   isStopping,
   measured,
+  pendingCorrection,
   phaseOf,
   pickerOpened,
   spawned,
@@ -28,10 +33,11 @@ import {
   toolRan,
   trimmed,
   turnStarted,
+  typeLabel,
   wasStopSent,
   withAdvisorModel,
 } from './model.ts'
-import { drawTree, pressKey, statusText } from './view.tsx'
+import { drawTree, inputKey, pressKey, statusText } from './view.tsx'
 import type { TreeActions } from './view.tsx'
 import { resolveLang, wordsFor } from './words.ts'
 import type { Lang } from './words.ts'
@@ -127,6 +133,40 @@ async function openDetail($: EngineInterface, agentId: string): Promise<void> {
   await change($, t => detailLoaded(t, agentId, summarize(rows)))
 }
 
+async function appendRow($: EngineInterface, text: string, agentId?: string): Promise<boolean> {
+  const row = { message: { type: 'user' as const, content: [{ type: 'text' as const, text }] }, ...(agentId ? { agentId } : {}) }
+  return $.session.append(row).then(
+    result => !(result as { deny?: string }).deny,
+    () => false,
+  )
+}
+
+async function sayTo($: EngineInterface, agentId: string, text: string): Promise<void> {
+  if (!text.trim()) return
+  const w = wordsFor(lang)
+  const node = (await read($, tree)).agents.find(n => n.id === agentId)
+  if (!node) {
+    $.ui.status(w.correctionFailedStatus)
+    return
+  }
+  const now = await clock($)
+  const framed = w.correctionFrame(text)
+  let via: 'append' | 'send' | undefined
+  if (node.status === 'running' && (await appendRow($, framed, agentId))) via = 'append'
+  if (!via) {
+    const sent = await $.session.send({ to: { agentId }, text: framed }).catch(() => undefined)
+    if (sent?.isDelivered) via = 'send'
+  }
+  if (!via) {
+    await change($, t => correctionFailed(t, agentId, now))
+    $.ui.status(w.correctionFailedStatus)
+    return
+  }
+  const delivered = via
+  await change($, t => correctionSent(t, { agentId, text, via: delivered }, now))
+  await appendRow($, w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text))
+}
+
 function actionsFor($: EngineInterface): TreeActions {
   const ignore = () => undefined
   return {
@@ -135,6 +175,7 @@ function actionsFor($: EngineInterface): TreeActions {
     close: () => void change($, t => closed(t)).catch(ignore),
     detail: agentId => void openDetail($, agentId).catch(ignore),
     stop: agentId => void clock($).then(now => change($, t => stopRequested(t, agentId, now))).catch(ignore),
+    say: (agentId, text) => void sayTo($, agentId, text).catch(ignore),
   }
 }
 
@@ -212,6 +253,10 @@ export const register: Register = (on, options) => {
         usage: null,
       }
     }
+    if (agentId && before && pendingCorrection(before, agentId)) {
+      const readAt = await clock($)
+      await change($, s => correctionRead(s, agentId, readAt)).catch(() => undefined)
+    }
     const family = before && e.agentId ? choicesOf(before).agents[e.agentId] : undefined
     const model = before && family ? stepModelFor(before, family) : undefined
     const result = yield* next(model ? { ...e, model } : e)
@@ -267,13 +312,21 @@ export const register: Register = (on, options) => {
   on('tool.call', async ($, e, next) => {
     const agentId = e.agentId
     if (!agentId) return next(e)
-    if (stoppingIds.has(agentId)) {
+    const stopping = stoppingIds.has(agentId)
+    if (stopping) {
       if (e.tool !== HANDBACK) {
         const current = await read($, tree)
         return { deny: wordsFor(lang).stopAnswer(current.agents.find(n => n.id === agentId)?.toolCount ?? 0) }
       }
       if (stopSentIds.has(agentId)) return next(e)
       await change($, s => stopCancelled(s, agentId)).catch(() => undefined)
+    }
+    if (!stopping && e.tool === HANDBACK) {
+      const waiting = pendingCorrection(await read($, tree), agentId)
+      if (waiting && !waiting.held) {
+        await change($, s => correctionHeld(s, agentId)).catch(() => undefined)
+        return { deny: wordsFor(lang).correctionWaiting }
+      }
     }
     const label = toolLabel(String(e.tool), e as unknown as Record<string, unknown>)
     const noted = (async () => {
@@ -318,11 +371,11 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button } = $.ui.resolve(e)
+    const { Box, Text, Button, Input } = $.ui.resolve(e)
     const s = await read($, tree)
     const tick = animate ? await read($, frame) : 0
     const now = await clock($)
-    return drawTree({ Box, Text, Button } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {
+    return drawTree({ Box, Text, Button, Input } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {
       frame: tick,
       animate,
       now,
@@ -334,4 +387,12 @@ export const register: Register = (on, options) => {
   on('ui.press', { component: 'Pane', requestId: PANE }, async ($, e, next) =>
     pressKey(actionsFor($), e.element) ? { element: e.element } : next(e),
   )
+
+  on('ui.input', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    let work: Promise<void> | undefined
+    const actions = { ...actionsFor($), say: (agentId: string, text: string) => void (work = sayTo($, agentId, text)) }
+    if (!inputKey(actions, e.element, e.kind, e.value)) return next(e)
+    await work?.catch(() => undefined)
+    return { element: e.element, value: e.value }
+  })
 }

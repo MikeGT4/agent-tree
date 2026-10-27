@@ -65,6 +65,12 @@ export type Words = {
   stop: string
   stopping: string
   stopAnswer: (tools: number) => string
+  sayPlaceholder: string
+  send: string
+  correctionFrame: (text: string) => string
+  mainNote: (agent: string, text: string) => string
+  correctionWaiting: string
+  correctionFailedStatus: string
   toolWords: Record<string, string>
   commandDescription: string
   opened: (count: number) => string
@@ -153,6 +159,13 @@ export const WORDS: Record<Lang, Words> = {
     stop: 'stoppen',
     stopping: 'hält an …',
     stopAnswer: n => `Im Agent Tree vom Nutzer gestoppt, nach ${n} ${n === 1 ? 'Werkzeugaufruf' : 'Werkzeugaufrufen'}.`,
+    sayPlaceholder: 'Nachricht an diesen Agenten …',
+    send: 'senden',
+    correctionFrame: text => `Nachricht des Nutzers über Agent Tree: ${text}`,
+    mainNote: (agent, text) =>
+      `Der Nutzer hat dem Unteragenten ${agent} über Agent Tree geschrieben: „${text}“. Sein Ergebnis kann deshalb vom Auftrag abweichen.`,
+    correctionWaiting: 'Bevor du abschließt: Der Nutzer hat dir eine neue Nachricht geschrieben. Lies sie und berücksichtige sie.',
+    correctionFailedStatus: 'Agent Tree: Korrektur nicht zugestellt',
     toolWords: { SubagentHandback: 'Antwort übergeben' },
     commandDescription: 'Agentenbaum der Sitzung als Kästen (stop, clear)',
     opened: n => `Agent Tree geöffnet · ${n} ${n === 1 ? 'Agent' : 'Agenten'} bisher · /agent-tree stop schließt`,
@@ -240,6 +253,13 @@ export const WORDS: Record<Lang, Words> = {
     stop: 'stop',
     stopping: 'stopping …',
     stopAnswer: n => `Stopped by the user in Agent Tree after ${n} tool ${n === 1 ? 'call' : 'calls'}.`,
+    sayPlaceholder: 'Message to this agent …',
+    send: 'send',
+    correctionFrame: text => `Message from the user via Agent Tree: ${text}`,
+    mainNote: (agent, text) =>
+      `The user wrote to the sub-agent ${agent} via Agent Tree: "${text}". Its result may differ from the task for that reason.`,
+    correctionWaiting: 'Before you finish: the user sent you a new message. Read it and take it into account.',
+    correctionFailedStatus: 'Agent Tree: correction not delivered',
     toolWords: { SubagentHandback: 'answer handed back' },
     commandDescription: "The session's agent tree as boxes (stop, clear)",
     opened: n => `Agent Tree opened · ${n} ${n === 1 ? 'agent' : 'agents'} so far · /agent-tree stop closes`,

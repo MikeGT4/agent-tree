@@ -23,7 +23,7 @@ import type { Lang, Words } from './words.ts'
 export { WORDS, logLine, wordsFor }
 export type { Lang }
 
-type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
+type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button' | 'Input'>
 
 export const WIDE_FROM = 84
 export const TIGHT_BELOW = 36
@@ -41,7 +41,7 @@ export const ADVISOR_BASE_ROWS = 15
 export const ADVISOR_COMPACT_ROWS = 4
 export const LEGEND_EFFORT_FROM = 60
 export const BAR_WIDTH = 15
-export const DETAIL_ROWS = 8
+export const DETAIL_ROWS = 10
 
 const COLOR = {
   main: '#E6845D',
@@ -69,6 +69,7 @@ export type TreeActions = {
   close: () => void
   detail: (agentId: string) => void
   stop: (agentId: string) => void
+  say: (agentId: string, text: string) => void
 }
 
 export type TreeLook = { frame: number; animate: boolean; now?: number; lang?: Lang; actions?: TreeActions }
@@ -84,6 +85,15 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   else if (kind === 'detail') actions.detail(rest)
   else if (kind === 'stop') actions.stop(rest)
   else return false
+  return true
+}
+
+export function inputKey(actions: TreeActions, element: string, kind: string, value: string): boolean {
+  if (kind !== 'submit' || !element.startsWith('say:')) return false
+  const rest = element.slice('say:'.length)
+  const cut = rest.lastIndexOf(':')
+  if (cut < 1) return false
+  actions.say(rest.slice(0, cut), value)
   return true
 }
 
@@ -330,7 +340,7 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 }
 
 export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: number, look: TreeLook = { frame: 0, animate: false }) {
-  const { Box, Text, Button } = ui
+  const { Box, Text, Button, Input } = ui
   const lang: Lang = look.lang ?? 'de'
   const w = wordsFor(lang)
   const spin = runningMark(look.frame, look.animate)
@@ -767,6 +777,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             <Button key="detail:close" plain hotkey="x" label={w.close} onPress={() => actions.close()} />
           </Box>
         </Box>
+        <Input
+          key={`say:${detailNode.id}:${s.corrections?.[detailNode.id]?.count ?? 0}`}
+          rows={2}
+          placeholder={w.sayPlaceholder}
+          submitLabel={w.send}
+          onSubmit={value => actions.say(detailNode.id, value)}
+        />
         <Text wrap="truncate-end">{`${w.task}: ${missing(detailNode.task, '?')}`}</Text>
         <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
           {`${w.tools}: ${detailNode.tools?.length ? detailNode.tools.map(t => toolText(t, lang)).join(' · ') : '0'}`}
