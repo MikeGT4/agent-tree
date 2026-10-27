@@ -1,7 +1,15 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import type { Elements } from 'claude-code'
 
-import type { AgentTreeAdvisorCall, AgentTreeGroup, AgentTreeLogSource, AgentTreeNode, AgentTreeState, AgentTreeStatus } from '../types'
+import type {
+  AgentTreeAdvisorCall,
+  AgentTreeCorrectionState,
+  AgentTreeGroup,
+  AgentTreeLogSource,
+  AgentTreeNode,
+  AgentTreeState,
+  AgentTreeStatus,
+} from '../types'
 import {
   MODEL_FAMILIES,
   NEW_AGENTS,
@@ -41,7 +49,7 @@ export const ADVISOR_BASE_ROWS = 15
 export const ADVISOR_COMPACT_ROWS = 4
 export const LEGEND_EFFORT_FROM = 60
 export const BAR_WIDTH = 15
-export const DETAIL_ROWS = 10
+export const DETAIL_ROWS = 11
 
 const COLOR = {
   main: '#E6845D',
@@ -57,6 +65,14 @@ const SIZE = { title: 'heading', detail: 'footnote', note: 'caption' } as const
 const STATUS_MARK: Record<AgentTreeStatus, string> = { running: '◐', done: '●', failed: '✗', stopped: '○' }
 
 const SPIN = ['◐', '◓', '◑', '◒']
+
+const CORRECTION_MARK: Partial<Record<AgentTreeCorrectionState, string>> = { sent: '✉', read: '✓' }
+
+function correctionMark(s: AgentTreeState, agentId: string): string {
+  const state = s.corrections?.[agentId]?.state
+  const mark = state ? CORRECTION_MARK[state] : undefined
+  return mark ? ` ${mark}` : ''
+}
 
 export function runningMark(frame: number, animate: boolean): string {
   if (!animate) return STATUS_MARK.running
@@ -83,7 +99,7 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   else if (kind === 'pick') actions.pick(rest)
   else if (kind === 'choose') return chooseKey(actions, rest)
   else if (kind === 'detail') actions.detail(rest)
-  else if (kind === 'stop') actions.stop(rest)
+  else if (kind === 'stop' || kind === 'halt') actions.stop(rest)
   else return false
   return true
 }
@@ -435,23 +451,27 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     const n = g.node
     const running = n.status === 'running'
     const nested = parentOf(s, n)
+    const stopping = (s.stopping ?? []).includes(n.id)
     const statusLine =
-      n.status === 'running'
-        ? `${spin} ${w.status.running}${n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''}`
+      (n.status === 'running'
+        ? stopping
+          ? `${spin} ${w.stopping}`
+          : `${spin} ${w.status.running}${n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''}`
         : n.status === 'done' && n.endedAt !== undefined
           ? `${STATUS_MARK.done} ${w.status.done} · ${fmtShortDuration(n.endedAt - n.startedAt)}`
-          : `${STATUS_MARK[n.status]} ${w.status[n.status]}`
+          : `${STATUS_MARK[n.status]} ${w.status[n.status]}`) + correctionMark(s, n.id)
     return (
       <Box key={`ag:${n.id}`} width={AGENT_WIDTH} marginLeft={marginLeft} borderStyle="single" borderColor={running ? COLOR.agent : n.status === 'failed' ? COLOR.failed : COLOR.dim} flexDirection="column" alignItems="center">
         {typeButton(n, running)}
         {running && actions ? (
-          <Box key={`pick-row:${n.id}`} width={AGENT_WIDTH - 2} flexDirection="row" justifyContent="center">
+          <Box key={`pick-row:${n.id}`} width={AGENT_WIDTH - 2} flexDirection="row" justifyContent="center" columnGap={1}>
             <Button
               key={`pick:${n.id}`}
               plain
-              label={clip(`${choices.agents[n.id] ? `→ ${familyLabel(choices.agents[n.id])}` : modelLabel(n.model) || w.model} ▾`, AGENT_WIDTH - 2)}
+              label={clip(`${choices.agents[n.id] ? `→ ${familyLabel(choices.agents[n.id])}` : modelLabel(n.model) || w.model} ▾`, AGENT_WIDTH - 5)}
               onPress={() => actions.pick(n.id)}
             />
+            {stopping ? null : <Button key={`halt:${n.id}`} plain label="■" onPress={() => actions.stop(n.id)} />}
           </Box>
         ) : (
           <Text color={running ? undefined : COLOR.dim} wrap="truncate-end">
@@ -497,16 +517,18 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     const n = g.node
     const indent = parentOf(s, n) ? '↳ ' : ''
     const size = n.status === 'running' && n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''
-    const text = `${indent}${n.status === 'running' ? spin : STATUS_MARK[n.status]} ${w.status[n.status]} · ${typeLabel(n.type)} · ${n.description}${size}`
+    const text = `${indent}${n.status === 'running' ? spin : STATUS_MARK[n.status]} ${w.status[n.status]} · ${typeLabel(n.type)} · ${n.description}${size}${correctionMark(s, n.id)}`
+    const halt = n.status === 'running' && actions && !(s.stopping ?? []).includes(n.id)
     return (
-      <Box key={`ag:${n.id}`} width={treeWidth}>
+      <Box key={`ag:${n.id}`} width={treeWidth} flexDirection="row" columnGap={1}>
         {actions ? (
-          <Button key={`detail:${n.id}`} plain label={clip(text, treeWidth)} onPress={() => actions.detail(n.id)} />
+          <Button key={`detail:${n.id}`} plain label={clip(text, halt ? treeWidth - 2 : treeWidth)} onPress={() => actions.detail(n.id)} />
         ) : (
           <Text color={STATUS_COLOR[n.status]} wrap="truncate-end">
             {text}
           </Text>
         )}
+        {halt ? <Button key={`halt:${n.id}`} plain label="■" onPress={() => actions.stop(n.id)} /> : null}
       </Box>
     )
   }
@@ -760,6 +782,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     detail?.state === 'loading' ? w.loading : value || (detail?.state === 'denied' ? w.noAccess : empty)
   const detailRunning = detailNode?.status === 'running'
   const detailStopping = detailNode !== undefined && (s.stopping ?? []).includes(detailNode.id)
+  const detailCorrection = detailNode ? s.corrections?.[detailNode.id] : undefined
   const detailBox =
     detail && detailNode && actions ? (
       <Box key="detail" width={width} borderStyle="single" borderColor={COLOR.agent} flexDirection="column" marginTop={1}>
@@ -784,6 +807,11 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           submitLabel={w.send}
           onSubmit={value => actions.say(detailNode.id, value)}
         />
+        {detailCorrection ? (
+          <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
+            {`${w.correctionLabel}: ${w.correction[detailCorrection.state]} · ${clockTime(detailCorrection.at)}${detailCorrection.text ? ` · „${detailCorrection.text}“` : ''}`}
+          </Text>
+        ) : null}
         <Text wrap="truncate-end">{`${w.task}: ${missing(detailNode.task, '?')}`}</Text>
         <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
           {`${w.tools}: ${detailNode.tools?.length ? detailNode.tools.map(t => toolText(t, lang)).join(' · ') : '0'}`}

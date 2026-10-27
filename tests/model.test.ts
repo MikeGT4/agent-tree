@@ -597,3 +597,12 @@ describe('Textfeld', () => {
     expect(said.length).toBe(1)
   })
 })
+
+describe('Stopp am Kasten', () => {
+  test('pressKey kennt halt', () => {
+    const stopped: string[] = []
+    const actions = { pick: () => {}, choose: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), say: () => {} }
+    expect(pressKey(actions, 'halt:sub-1')).toBe(true)
+    expect(stopped).toEqual(['sub-1'])
+  })
+})

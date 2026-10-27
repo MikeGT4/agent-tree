@@ -641,3 +641,79 @@ describe('Korrektur', () => {
     expect(text(seen.appended[0])).toContain('x'.repeat(5000))
   })
 })
+
+describe('Textfeld, Status und Stopp am Kasten', () => {
+  async function openDetail($: Engine, columns = 90) {
+    const ui = await $.ui.mount(pane(columns))
+    await ui.press({ key: 'detail:sub-1' })
+    await ui.redraw()
+    return ui
+  }
+
+  test('der Detailkasten eines Unteragenten hat ein Textfeld', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    expect(await ui.find({ key: 'say:sub-1:0' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('nach dem Senden ist das Feld leer, nach einer gescheiterten Korrektur bleibt es', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await ui.input({ key: 'say:sub-1:0', text: 'Nur lesen' })
+    await ui.redraw()
+    expect(await ui.find({ key: 'say:sub-1:1' })).toBeDefined()
+    expect(await ui.find({ key: 'say:sub-1:0' })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('eine gescheiterte Korrektur lässt das Feld stehen', de, async ($, on) => {
+    engine(on, [], { append: true, send: true })
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await ui.input({ key: 'say:sub-1:0', text: 'Nur lesen' })
+    await ui.redraw()
+    expect(await ui.find({ key: 'say:sub-1:0' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('der Kasten zeigt geschickt und gelesen, der Detailkasten nennt den Stand', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await ui.input({ key: 'say:sub-1:0', text: 'Nur lesen' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/läuft[^"]*✉/)
+    expect(await screen(ui)).toMatch(/Korrektur: geschickt/)
+    await step($, { agentId: 'sub-1' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/läuft[^"]*✓/)
+    expect(await screen(ui)).toMatch(/Korrektur: gelesen/)
+    await ui.unmount()
+  })
+
+  test('der Stopp-Knopf am Kasten stoppt den Agenten', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await ui.find({ key: 'halt:sub-1' })).toBeDefined()
+    await ui.press({ key: 'halt:sub-1' })
+    await ui.redraw()
+    expect(await ui.find({ key: 'halt:sub-1' })).toBeUndefined()
+    expect(await screen(ui)).toMatch(/hält an …/)
+    const denied = await $.tool.call({ tool: 'Read', file_path: '/x/b.ts', agentId: 'sub-1' } as never)
+    expect(JSON.stringify(denied)).toMatch(/Im Agent Tree vom Nutzer gestoppt/)
+    await ui.unmount()
+  })
+
+  test('bei 38 Spalten haben Zeile und Detailkasten Stopp-Knopf und Textfeld', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($, 38)
+    expect(await ui.find({ key: 'halt:sub-1' })).toBeDefined()
+    expect(await ui.find({ key: 'say:sub-1:0' })).toBeDefined()
+    await ui.unmount()
+  })
+})

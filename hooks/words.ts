@@ -1,5 +1,5 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
-import type { AgentTreeLogEntry, AgentTreeLogSource, AgentTreePhase, AgentTreeStatus } from '../types'
+import type { AgentTreeCorrectionState, AgentTreeLogEntry, AgentTreeLogSource, AgentTreePhase, AgentTreeStatus } from '../types'
 import { familyLabel, fmtDuration, fmtTokens } from './model.ts'
 
 export type Lang = 'de' | 'en'
@@ -71,6 +71,8 @@ export type Words = {
   mainNote: (agent: string, text: string) => string
   correctionWaiting: string
   correctionFailedStatus: string
+  correctionLabel: string
+  correction: Record<AgentTreeCorrectionState, string>
   toolWords: Record<string, string>
   commandDescription: string
   opened: (count: number) => string
@@ -143,7 +145,7 @@ export const WORDS: Record<Lang, Words> = {
     source: { session: 'sitzung', main: 'haupt', agent: 'agent', advisor: 'berater' },
     pickerFor: name => `Modell für ${name}:`,
     newAgents: 'neue Unteragenten',
-    help: 'ctrl+x tab: Leiste · Tab, Pfeile: wandern · m: Modell · 0 bis 4: wählen · x: schließen · s: stoppen · Typ anklicken: Details',
+    help: 'ctrl+x tab: Leiste · Tab, Pfeile: wandern · m: Modell · 0 bis 4: wählen · x: schließen · s: stoppen · Typ anklicken: Details · Esc: Textfeld verlassen',
     task: 'Auftrag',
     reply: 'Antwort',
     loading: 'lädt …',
@@ -166,6 +168,8 @@ export const WORDS: Record<Lang, Words> = {
       `Der Nutzer hat dem Unteragenten ${agent} über Agent Tree geschrieben: „${text}“. Sein Ergebnis kann deshalb vom Auftrag abweichen.`,
     correctionWaiting: 'Bevor du abschließt: Der Nutzer hat dir eine neue Nachricht geschrieben. Lies sie und berücksichtige sie.',
     correctionFailedStatus: 'Agent Tree: Korrektur nicht zugestellt',
+    correctionLabel: 'Korrektur',
+    correction: { sent: 'geschickt', read: 'gelesen', failed: 'nicht zugestellt' },
     toolWords: { SubagentHandback: 'Antwort übergeben' },
     commandDescription: 'Agentenbaum der Sitzung als Kästen (stop, clear)',
     opened: n => `Agent Tree geöffnet · ${n} ${n === 1 ? 'Agent' : 'Agenten'} bisher · /agent-tree stop schließt`,
@@ -237,7 +241,7 @@ export const WORDS: Record<Lang, Words> = {
     source: { session: 'session', main: 'main', agent: 'agent', advisor: 'advisor' },
     pickerFor: name => `Model for ${name}:`,
     newAgents: 'new sub-agents',
-    help: 'ctrl+x tab: pane · Tab, arrows: move · m: model · 0 to 4: choose · x: close · s: stop · click a type: details',
+    help: 'ctrl+x tab: pane · Tab, arrows: move · m: model · 0 to 4: choose · x: close · s: stop · click a type: details · Esc: leave the text field',
     task: 'Task',
     reply: 'Answer',
     loading: 'loading …',
@@ -260,6 +264,8 @@ export const WORDS: Record<Lang, Words> = {
       `The user wrote to the sub-agent ${agent} via Agent Tree: "${text}". Its result may differ from the task for that reason.`,
     correctionWaiting: 'Before you finish: the user sent you a new message. Read it and take it into account.',
     correctionFailedStatus: 'Agent Tree: correction not delivered',
+    correctionLabel: 'Correction',
+    correction: { sent: 'sent', read: 'read', failed: 'not delivered' },
     toolWords: { SubagentHandback: 'answer handed back' },
     commandDescription: "The session's agent tree as boxes (stop, clear)",
     opened: n => `Agent Tree opened · ${n} ${n === 1 ? 'agent' : 'agents'} so far · /agent-tree stop closes`,
