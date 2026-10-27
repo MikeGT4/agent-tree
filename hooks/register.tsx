@@ -351,7 +351,7 @@ export const register: Register = (on, options) => {
       const waiting = pendingCorrection(await read($, tree), agentId)
       if (waiting && !waiting.held) {
         await change($, s => correctionHeld(s, agentId)).catch(() => undefined)
-        return { deny: wordsFor(lang).correctionWaiting }
+        return { deny: wordsFor(lang).correctionWaiting(HANDBACK) }
       }
     }
     const label = toolLabel(String(e.tool), e as unknown as Record<string, unknown>)

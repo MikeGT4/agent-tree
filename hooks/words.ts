@@ -71,7 +71,7 @@ export type Words = {
   send: string
   correctionFrame: (text: string) => string
   mainNote: (agent: string, text: string) => string
-  correctionWaiting: string
+  correctionWaiting: (tool: string) => string
   correctionFailedStatus: string
   correctionLabel: string
   correction: Record<AgentTreeCorrectionState, string>
@@ -175,7 +175,8 @@ export const WORDS: Record<Lang, Words> = {
     correctionFrame: text => `Nachricht des Nutzers über Agent Tree: ${text}`,
     mainNote: (agent, text) =>
       `Der Nutzer hat dem Unteragenten ${agent} über Agent Tree geschrieben: „${text}“. Sein Ergebnis kann deshalb vom Auftrag abweichen.`,
-    correctionWaiting: 'Bevor du abschließt: Der Nutzer hat dir eine neue Nachricht geschrieben. Lies sie und berücksichtige sie.',
+    correctionWaiting: tool =>
+      `Bevor du abschließt: Der Nutzer hat dir eine neue Nachricht geschrieben, sie steht oben. Setz sie um und ruf danach ${tool} erneut auf, mit einem Bericht, der sie berücksichtigt.`,
     correctionFailedStatus: 'Agent Tree: Korrektur nicht zugestellt',
     correctionLabel: 'Korrektur',
     correction: { sent: 'geschickt', read: 'gelesen', failed: 'nicht zugestellt' },
@@ -282,7 +283,7 @@ export const WORDS: Record<Lang, Words> = {
     correctionFrame: text => `Message from the user via Agent Tree: ${text}`,
     mainNote: (agent, text) =>
       `The user wrote to the sub-agent ${agent} via Agent Tree: "${text}". Its result may differ from the task for that reason.`,
-    correctionWaiting: 'Before you finish: the user sent you a new message. Read it and take it into account.',
+    correctionWaiting: tool => `Before you finish: the user sent you a new message, shown above. Act on it, then call ${tool} again with a report that reflects it.`,
     correctionFailedStatus: 'Agent Tree: correction not delivered',
     correctionLabel: 'Correction',
     correction: { sent: 'sent', read: 'read', failed: 'not delivered' },

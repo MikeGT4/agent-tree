@@ -45,7 +45,7 @@ import {
   wasStopSent,
 } from '../hooks/model.ts'
 import { connector, inputKey, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, timelineBar } from '../hooks/view.tsx'
-import { lookChoice, logLine, resolveLang, toolText } from '../hooks/words.ts'
+import { lookChoice, logLine, resolveLang, toolText, WORDS } from '../hooks/words.ts'
 import { contrast, DEFAULT_LOOK, frameEdges, isLookChoice, lookFrom, LOOK_OPTIONS, PALETTES, restyleLine, STYLES } from '../hooks/looks.ts'
 
 const line = (entry: AgentTreeLogEntry | undefined) => (entry ? logLine(entry, 'de') : undefined)
@@ -576,6 +576,11 @@ describe('Korrekturen', () => {
     expect([s.lookOpen, s.choices?.picker]).toEqual([undefined, 'sub-1'])
     s = closed(lookOpened(s))
     expect([s.lookOpen, s.choices?.picker]).toEqual([undefined, undefined])
+  })
+
+  test('der Hinweis beim Anhalten verlangt eine neue Abgabe über das genannte Werkzeug', () => {
+    expect(WORDS.de.correctionWaiting('SubagentHandback')).toMatch(/SubagentHandback erneut/)
+    expect(WORDS.en.correctionWaiting('SubagentHandback')).toMatch(/SubagentHandback again/)
   })
 
   test('Aussehen und Detailkasten schließen einander', () => {

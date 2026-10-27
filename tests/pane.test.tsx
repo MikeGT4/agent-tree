@@ -605,6 +605,7 @@ describe('Korrektur', () => {
     const first = await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
     expect(JSON.stringify(first)).toMatch(/deny/)
     expect(JSON.stringify(first)).toMatch(/neue Nachricht/)
+    expect(JSON.stringify(first)).toMatch(/SubagentHandback erneut/)
     const second = await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
     expect(JSON.stringify(second)).not.toMatch(/deny/)
   })
