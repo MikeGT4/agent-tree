@@ -394,8 +394,12 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     detailRows: detailNode && actions ? DETAIL_ROWS : 0,
     helpRows: tight ? 0 : 1,
   })
-  const shown = current.slice(0, plan.shown)
-  const rest = current.slice(shown.length)
+  const detailAt = detail ? current.findIndex(g => g.kind === 'agent' && g.node.id === detail.agentId) : -1
+  const shown =
+    detailAt >= plan.shown && plan.shown > 0
+      ? [...current.slice(0, plan.shown - 1), current[detailAt] as AgentTreeGroup]
+      : current.slice(0, plan.shown)
+  const rest = current.filter(g => !shown.includes(g))
   const hiddenRunning = rest.filter(isRunning).length
   const mainModel = modelLabel(s.main.model)
   const advisorModel = modelLabel(s.advisor.model)

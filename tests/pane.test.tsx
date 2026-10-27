@@ -719,3 +719,20 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await ui.unmount()
   })
 })
+
+describe('Sichtbarkeit beim Korrigieren', () => {
+  test('der Agent mit offenem Detailkasten bleibt als Kasten sichtbar', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    await $.agent.spawn({ prompt: 'B.', description: 'Tests prüfen', subagentType: 'general-purpose' })
+    await $.agent.spawn({ prompt: 'C.', description: 'Doku holen', subagentType: 'general-purpose' })
+    await step($, { agentId: 'sub-2' })
+    await step($, { agentId: 'sub-3' })
+    const ui = await $.ui.mount(pane(73, 46))
+    await ui.press({ key: 'detail:sub-3' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/weitere/)
+    expect(await ui.find({ key: 'ag:sub-3' })).toBeDefined()
+    await ui.unmount()
+  })
+})
