@@ -107,6 +107,7 @@ export type TreeLook = {
   lang?: Lang
   actions?: TreeActions
   appearance?: AgentTreeLook
+  canAdvise?: boolean
 }
 
 export function pressKey(actions: TreeActions, key: string): boolean {
@@ -867,7 +868,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       <Text size={SIZE.detail} color={palette.advisor} wrap="truncate-end">
         {advisorState}
       </Text>
-      {actions ? (
+      {actions && look.canAdvise !== false ? (
         <Box key="advisor-toggle-row" flexDirection="row">
           <Button key="advisor:toggle" plain label={advisorModel ? w.advisorOff : w.advisorOn} onPress={() => actions.advisor()} />
         </Box>
@@ -906,7 +907,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             {`${w.advisor} · ${advisorModel ? `${advisorModel} · ${w.onCall}` : w.off} · ${w.calls} ${s.advisor.total}`}
           </Text>
         </Box>
-        {actions ? (
+        {actions && look.canAdvise !== false ? (
           <Button key="advisor:toggle" plain label={advisorModel ? w.advisorOff : w.advisorOn} onPress={() => actions.advisor()} />
         ) : null}
       </Box>

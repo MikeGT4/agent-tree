@@ -79,6 +79,7 @@ export type Words = {
   subModel: string
   advisorOn: string
   advisorOff: string
+  advisorUnavailable: string
   look: string
   lookRow: Record<LookRow, string>
   lookOption: { [R in LookRow]: Record<(typeof LOOK_OPTIONS)[R][number], string> }
@@ -189,6 +190,7 @@ export const WORDS: Record<Lang, Words> = {
     subModel: 'Unteragenten-Modell',
     advisorOn: 'einschalten',
     advisorOff: 'ausschalten',
+    advisorUnavailable: 'Agent Tree: /advisor ist in dieser Sitzung nicht verfügbar',
     look: 'Aussehen',
     lookRow: { style: 'Stil', colors: 'Farben', light: 'Licht' },
     lookOption: {
@@ -301,6 +303,7 @@ export const WORDS: Record<Lang, Words> = {
     subModel: 'Sub-agent model',
     advisorOn: 'turn on',
     advisorOff: 'turn off',
+    advisorUnavailable: 'Agent Tree: /advisor is not available in this session',
     look: 'Look',
     lookRow: { style: 'Style', colors: 'Colors', light: 'Glow' },
     lookOption: {

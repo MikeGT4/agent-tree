@@ -67,6 +67,7 @@ let stoppingIds = new Set<string>()
 let stopSentIds = new Set<string>()
 const unread = new Map<string, string>()
 let lastAdvisor = 'opus'
+let advisorCommand = true
 
 function busy(s: AgentTreeState): boolean {
   return counts(s).running > 0 || phaseOf(s) === 'reviewing'
@@ -216,7 +217,7 @@ async function toggleAdvisor($: EngineInterface): Promise<void> {
     () => false,
   )
   if (!ran) {
-    await $.prompt.fill({ text: `/advisor ${args}`, mode: 'replace' }).catch(() => undefined)
+    $.ui.toast(wordsFor(lang).advisorUnavailable)
     return
   }
   await change($, s => withAdvisorModel(s, args === 'off' ? undefined : args))
@@ -243,7 +244,10 @@ function actionsFor($: EngineInterface): TreeActions {
     choose: (target, family) => void clock($).then(now => change($, t => chosen(t, target, family, now))).catch(ignore),
     close: () => void change($, t => closed(t)).catch(ignore),
     detail: agentId => void openDetail($, agentId).catch(ignore),
-    stop: agentId => void clock($).then(now => change($, t => stopRequested(t, agentId, now))).catch(ignore),
+    stop: agentId => {
+      unread.delete(agentId)
+      void clock($).then(now => change($, t => stopRequested(t, agentId, now))).catch(ignore)
+    },
     say: (agentId, text) => void sayTo($, agentId, text).catch(ignore),
     advisor: () => void toggleAdvisor($).catch(ignore),
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
@@ -269,6 +273,8 @@ export const register: Register = (on, options) => {
       .catch(() => undefined)
     const saved = await $.store.get(LOOK_KEY).catch(() => undefined)
     await update($, appearance, () => lookFrom(saved)).catch(() => undefined)
+    const listed = await $.command.list().catch(() => undefined)
+    advisorCommand = !listed || listed.some(c => c.name === 'advisor')
     await readAdvisor($).catch(() => undefined)
     await catchUp($, await clock($), keep).catch(() => undefined)
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
@@ -471,6 +477,7 @@ export const register: Register = (on, options) => {
       lang,
       actions: actionsFor($),
       appearance: await read($, appearance),
+      canAdvise: advisorCommand,
     })
   })
 

@@ -10,7 +10,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; onSend?: () => Promise<unknown> } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; onSend?: () => Promise<unknown> } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -24,6 +24,14 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   const settings: Record<string, unknown> = {}
   const commands: { command: string; args: string }[] = []
   const fills: string[] = []
+  const toasts: string[] = []
+  on('ui.toast', (_, e) => {
+    toasts.push((e as { text: string }).text)
+    return { value: undefined } as never
+  })
+  on('command.list', () =>
+    ({ value: refuse.noAdvisor ? [] : [{ name: 'advisor', description: 'Advisor', source: 'builtin' }] }) as never,
+  )
   const focused: string[] = []
   on('ui.focus', (_, e) => {
     focused.push(JSON.stringify(e))
@@ -94,7 +102,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
         : {}),
     }
   })
-  return { status, spawnModels, stepModels, appended, sent, storeSets, settings, commands, fills, focused, stored }
+  return { status, spawnModels, stepModels, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts }
 }
 
 async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[] } = {}) {
@@ -752,6 +760,18 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     expect(seen.sent.length).toBe(1)
   })
 
+  test('ein angeforderter Stopp verhindert das Nachschicken', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await ui.input({ key: 'say:sub-1:0', text: 'Nimm b.ts' })
+    await ui.press({ key: 'stop:sub-1' })
+    await ui.unmount()
+    await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
+    await $.turn.complete(finished)
+    expect(seen.sent.length).toBe(0)
+  })
+
   test('eine gelesene Korrektur wird beim Ende nicht nachgeschickt', de, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
@@ -907,13 +927,22 @@ describe('Berater per Knopf', () => {
     await ui.unmount()
   })
 
-  test('lehnt Claude Code den Befehl ab, steht er als Entwurf in der Eingabe', de, async ($, on) => {
+  test('lehnt Claude Code den Befehl ab, bleibt die Eingabe unberührt und eine Meldung erscheint', de, async ($, on) => {
     const seen = engine(on, [], { command: true })
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))
     await ui.press({ key: 'advisor:toggle' })
     for (let i = 0; i < 3; i++) await ui.redraw()
-    expect(seen.fills).toEqual(['/advisor opus'])
+    expect(seen.fills).toEqual([])
+    expect(seen.toasts.join(' ')).toMatch(/advisor/)
+    await ui.unmount()
+  })
+
+  test('ohne /advisor zeigt die Leiste keinen Berater-Knopf', de, async ($, on) => {
+    engine(on, [], { noAdvisor: true })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await ui.find({ key: 'advisor:toggle' })).toBeUndefined()
     await ui.unmount()
   })
 
