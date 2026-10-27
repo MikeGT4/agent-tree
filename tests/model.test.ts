@@ -44,7 +44,7 @@ import {
   typeLabel,
   wasStopSent,
 } from '../hooks/model.ts'
-import { AGENT_WIDTH, connector, inputKey, litCells, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
+import { AGENT_WIDTH, connector, drawTree, inputKey, litCells, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
 import { lookChoice, logLine, resolveLang, toolText, WORDS } from '../hooks/words.ts'
 import { contrast, DEFAULT_LOOK, frameEdges, isLookChoice, lookFrom, LOOK_OPTIONS, PALETTES, restyleLine, STYLES } from '../hooks/looks.ts'
 
@@ -693,6 +693,13 @@ describe('Aussehen', () => {
     expect(statusWithMark('◐ läuft', '', ' · 70,9k', width)).toBe('◐ läuft · 70,9k')
     expect([...statusWithMark('◐ ein sehr langes Statuswort', '✉', '', width)].length).toBeLessThanOrEqual(width)
     expect(at(statusWithMark('◐ ein sehr langes Statuswort', '✉', '', width), '✉')).toBe(width - 1)
+  })
+
+  test('ein unbekanntes Aussehen zeichnet wie der Standard', () => {
+    const ui = { Box: 'Box', Text: 'Text', Button: 'Button', Input: 'Input' } as never
+    const draw = (appearance?: unknown) =>
+      JSON.stringify(drawTree(ui, spawned(createTree(0), spawn('sub-1'), 1), 90, 60, { frame: 0, animate: false, now: 5000, ...(appearance ? { appearance: appearance as never } : {}) }))
+    expect(draw({ style: 'zickzack', colors: 'neon', light: 'blitz' })).toBe(draw())
   })
 
   test('der Spinner folgt dem Stil', () => {
