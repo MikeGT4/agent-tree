@@ -14,6 +14,7 @@ import {
   correctionFailed,
   correctionHeld,
   correctionRead,
+  correctionCounted,
   correctionResent,
   correctionSent,
   counts,
@@ -59,13 +60,13 @@ const HANDBACK = 'SubagentHandback'
 const tree = atom({ plugin: 'agent-tree', key: 'tree' } as const, createTree(0), { shape: SHAPE })
 const frame = atom({ plugin: 'agent-tree', key: 'frame' } as const, 0)
 const appearance = atom({ plugin: 'agent-tree', key: 'look' } as const, DEFAULT_LOOK, { shape: LOOK_SHAPE })
+const unreadTexts = atom({ plugin: 'agent-tree', key: 'unread' } as const, {} as Record<string, string[]>)
 
 let ticker: Timer | undefined
 let animate = true
 let lang: Lang = 'en'
 let stoppingIds = new Set<string>()
 let stopSentIds = new Set<string>()
-const unread = new Map<string, string>()
 let lastAdvisor = 'opus'
 let advisorCommand = true
 
@@ -119,8 +120,24 @@ async function change($: EngineInterface, apply: (s: AgentTreeState) => AgentTre
   return next
 }
 
+function without(texts: Record<string, string[]>, agentId: string): Record<string, string[]> {
+  return Object.fromEntries(Object.entries(texts).filter(([id]) => id !== agentId))
+}
+
+async function remember($: EngineInterface, agentId: string, text: string): Promise<void> {
+  await update($, unreadTexts, texts => ({ ...texts, [agentId]: [...(texts[agentId] ?? []), text] }))
+}
+
+async function forget($: EngineInterface, agentId: string): Promise<void> {
+  await update($, unreadTexts, texts => without(texts, agentId))
+}
+
 async function restyle($: EngineInterface, row: LookRow, id: string): Promise<void> {
-  const stored = lookFrom(await $.store.get(LOOK_KEY).catch(() => undefined))
+  const saved = await $.store.get(LOOK_KEY).then(
+    value => ({ value }),
+    () => undefined,
+  )
+  const stored = lookFrom(saved ? saved.value : await read($, appearance))
   await $.store.set(LOOK_KEY, lookFrom({ ...stored, [row]: id })).catch(() => undefined)
   await update($, appearance, look => lookFrom({ ...lookFrom(look), [row]: id }))
 }
@@ -184,17 +201,18 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
   const now = await clock($)
   const framed = w.correctionFrame(text, HANDBACK)
   if (node.status === 'running' && (await appendRow($, framed, agentId))) {
-    unread.set(agentId, framed)
+    await remember($, agentId, framed)
     await change($, t => correctionSent(t, { agentId, text, via: 'append' }, now))
   } else {
-    unread.delete(agentId)
-    await change($, t => correctionSent(t, { agentId, text, via: 'send' }, now))
+    await forget($, agentId)
+    await change($, t => correctionSent(t, { agentId, text, via: 'send', recount: false }, now))
     const sent = await $.session.send({ to: { agentId }, text: framed }).catch(() => undefined)
     if (!sent?.isDelivered) {
       await change($, t => correctionFailed(t, { agentId, text, before }, now))
       $.ui.status(w.correctionFailedStatus)
       return
     }
+    await change($, t => correctionCounted(t, agentId))
   }
   focusField($, await read($, tree), agentId)
   const note = w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text)
@@ -223,18 +241,21 @@ async function toggleAdvisor($: EngineInterface): Promise<void> {
   await change($, s => withAdvisorModel(s, args === 'off' ? undefined : args))
 }
 
-async function resendUnread($: EngineInterface, s: AgentTreeState, agentId: string, now: number): Promise<void> {
+async function settleUnread($: EngineInterface, s: AgentTreeState, agentId: string, now: number): Promise<void> {
+  const texts = (await read($, unreadTexts))[agentId] ?? []
+  await forget($, agentId)
   const waiting = pendingCorrection(s, agentId)
-  const text = unread.get(agentId)
-  unread.delete(agentId)
-  if (!waiting || waiting.via !== 'append' || !text || s.agents.find(n => n.id === agentId)?.status !== 'done') return
-  const sent = await $.session.send({ to: { agentId }, text }).catch(() => undefined)
-  if (sent?.isDelivered) {
+  const node = s.agents.find(n => n.id === agentId)
+  if (!waiting || !node) return
+  const w = wordsFor(lang)
+  if (node.status === 'done' && waiting.via === 'append' && texts.length) {
     await change($, t => correctionResent(t, agentId, now))
-    return
+    const sent = await $.session.send({ to: { agentId }, text: w.resendFrame(texts.join('\n\n')) }).catch(() => undefined)
+    if (sent?.isDelivered) return
   }
-  await change($, t => correctionFailed(t, { agentId, text: waiting.text }, now))
-  $.ui.status(wordsFor(lang).correctionFailedStatus)
+  await change($, t => correctionFailed(t, { agentId, text: waiting.text, count: waiting.count }, now))
+  $.ui.status(w.correctionFailedStatus)
+  await appendRow($, w.mainNoteLost(`${typeLabel(node.type)} · ${node.description}`))
 }
 
 function actionsFor($: EngineInterface): TreeActions {
@@ -245,8 +266,10 @@ function actionsFor($: EngineInterface): TreeActions {
     close: () => void change($, t => closed(t)).catch(ignore),
     detail: agentId => void openDetail($, agentId).catch(ignore),
     stop: agentId => {
-      unread.delete(agentId)
-      void clock($).then(now => change($, t => stopRequested(t, agentId, now))).catch(ignore)
+      void forget($, agentId)
+        .then(() => clock($))
+        .then(now => change($, t => stopRequested(t, agentId, now)))
+        .catch(ignore)
     },
     say: (agentId, text) => void sayTo($, agentId, text).catch(ignore),
     advisor: () => void toggleAdvisor($).catch(ignore),
@@ -298,11 +321,17 @@ export const register: Register = (on, options) => {
       await restyle($, row, id)
       return { text: w.lookSet(w.lookRow[row], lookOptionLabel(w, row, id)) }
     }
+    if (word === 'aussehen' || word === 'look') {
+      await resetLook($)
+      return { text: w.lookResetDone }
+    }
     const now = await clock($)
     if (arg === 'clear') {
       await change($, s => withAdvisorModel(createTree(now), s.advisor.model))
+      await update($, unreadTexts, () => ({}))
       return { text: w.cleared }
     }
+    if (arg) return { text: w.commandUnknown(e.args.trim()) }
     await catchUp($, now, keep)
     try {
       await $.ui.open({ id: PANE, title: TITLE, focus: true, columns, rows: INLINE_ROWS })
@@ -346,7 +375,7 @@ export const register: Register = (on, options) => {
     }
     if (agentId && before && pendingCorrection(before, agentId)) {
       const readAt = await clock($)
-      unread.delete(agentId)
+      await forget($, agentId).catch(() => undefined)
       await change($, s => correctionRead(s, agentId, readAt)).catch(() => undefined)
     }
     const family = before && e.agentId ? choicesOf(before).agents[e.agentId] : undefined
@@ -438,7 +467,7 @@ export const register: Register = (on, options) => {
     const after = await change($, s =>
       completed(s, { agentId: e.agentId, answer: e.answer, reason: e.reason, isAborted: e.isAborted, durationMs: e.durationMs }, now),
     ).catch(() => undefined)
-    if (e.agentId && after) await resendUnread($, after, e.agentId, now).catch(() => undefined)
+    if (e.agentId && after) await settleUnread($, after, e.agentId, now).catch(() => undefined)
     if (!e.agentId) await catchUp($, now, keep).catch(() => undefined)
     return result
   })
@@ -456,7 +485,10 @@ export const register: Register = (on, options) => {
   on('session.end', async ($, e, next) => {
     const reset =
       e.reason === 'clear' || e.reason === 'resume'
-        ? clock($).then(now => change($, s => withAdvisorModel(createTree(now), s.advisor.model))).catch(() => undefined)
+        ? clock($)
+            .then(now => change($, s => withAdvisorModel(createTree(now), s.advisor.model)))
+            .then(() => update($, unreadTexts, () => ({})))
+            .catch(() => undefined)
         : Promise.resolve()
     const result = await next(e)
     await reset

@@ -12,6 +12,7 @@ import {
   correctionHeld,
   correctionRead,
   correctionResent,
+  correctionCounted,
   correctionSent,
   counts,
   createTree,
@@ -45,7 +46,7 @@ import {
   typeLabel,
   wasStopSent,
 } from '../hooks/model.ts'
-import { AGENT_WIDTH, connector, drawTree, inputKey, litCells, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
+import { AGENT_WIDTH, connector, drawTree, inputKey, litCells, lookLines, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
 import { lookChoice, logLine, resolveLang, toolText, WORDS } from '../hooks/words.ts'
 import { contrast, DEFAULT_LOOK, frameEdges, isLookChoice, lightColor, lookFrom, LOOK_OPTIONS, PALETTES, restyleLine, STYLES } from '../hooks/looks.ts'
 
@@ -570,6 +571,15 @@ describe('Korrekturen', () => {
     expect([t.corrections?.['sub-1']?.state, t.corrections?.['sub-1']?.text, t.corrections?.['sub-1']?.count]).toEqual(['failed', 'Nur B', 0])
   })
 
+  test('correctionSent ohne Neuzählung behält den Zähler, correctionCounted zählt weiter', () => {
+    let s = correctionSent(one(), { agentId: 'sub-1', text: 'A', via: 'send', recount: false }, 2)
+    expect([s.corrections?.['sub-1']?.state, s.corrections?.['sub-1']?.count]).toEqual(['sent', 0])
+    s = correctionCounted(s, 'sub-1')
+    expect([s.corrections?.['sub-1']?.state, s.corrections?.['sub-1']?.count]).toEqual(['sent', 1])
+    const kept = correctionFailed(s, { agentId: 'sub-1', text: 'A', count: 7 }, 3)
+    expect([kept.corrections?.['sub-1']?.state, kept.corrections?.['sub-1']?.count]).toEqual(['failed', 7])
+  })
+
   test('correctionResent vermerkt das Nachschicken über send', () => {
     const s = correctionResent(correctionSent(one(), { agentId: 'sub-1', text: 'A', via: 'append' }, 2), 'sub-1', 4)
     expect([s.corrections?.['sub-1']?.state, s.corrections?.['sub-1']?.via, s.corrections?.['sub-1']?.at]).toEqual(['sent', 'send', 4])
@@ -709,6 +719,7 @@ describe('Aussehen', () => {
     expect(lookChoice('licht', 'weiss')).toEqual({ row: 'light', id: 'white' })
     expect(lookChoice('licht', 'weiß')).toEqual({ row: 'light', id: 'white' })
     expect(lookChoice('licht', 'zickzack')).toEqual({ row: 'light' })
+    expect([lookChoice('stil', 'standard'), lookChoice('farben', 'default'), lookChoice('licht', 'standard')]).toEqual([{ row: 'style', id: 'line' }, { row: 'colors', id: 'original' }, { row: 'light', id: 'standard' }])
     expect([lookChoice('glow', 'gold'), WORDS.en.lookRow.light]).toEqual([{ row: 'light', id: 'gold' }, 'Glow'])
     expect(lookChoice('clear', '')).toBeUndefined()
   })
@@ -741,6 +752,19 @@ describe('Aussehen', () => {
       if (color) expect(contrast(color, '#FFFFFF')).toBeGreaterThanOrEqual(3)
     }
     expect([lightColor({ ...DEFAULT_LOOK, light: 'white' }), lightColor(DEFAULT_LOOK)]).toEqual(['#FFFFFF', undefined])
+  })
+
+  test('die Auswahl zählt die Licht-Vorschau mit', () => {
+    expect([lookLines(60, 'de'), lookLines(90, 'de')]).toEqual([7, 6])
+  })
+
+  test('ohne Input zeichnet der Detailkasten kein Textfeld und stürzt nicht ab', () => {
+    const ui = { Box: 'Box', Text: 'Text', Button: 'Button' } as never
+    const s = detailOpened(spawned(createTree(0), spawn('sub-1'), 1), 'sub-1')
+    const noop = () => {}
+    const actions = { pick: noop, choose: noop, close: noop, detail: noop, stop: noop, say: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop }
+    const text = JSON.stringify(drawTree(ui, s, 90, 60, { frame: 0, animate: false, now: 5000, actions }))
+    expect(text).not.toMatch(/say:sub-1/)
   })
 
   test('der Spinner folgt dem Stil', () => {

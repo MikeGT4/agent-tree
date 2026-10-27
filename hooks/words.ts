@@ -1,7 +1,7 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import type { AgentTreeCorrectionState, AgentTreeLogEntry, AgentTreeLogSource, AgentTreePhase, AgentTreeStatus } from '../types'
 import type { LookRow } from './looks.ts'
-import { LOOK_OPTIONS } from './looks.ts'
+import { DEFAULT_LOOK, LOOK_OPTIONS } from './looks.ts'
 import { familyLabel, fmtDuration, fmtTokens } from './model.ts'
 
 export type Lang = 'de' | 'en'
@@ -71,6 +71,8 @@ export type Words = {
   send: string
   correctionFrame: (text: string, tool: string) => string
   mainNote: (agent: string, text: string) => string
+  mainNoteLost: (agent: string) => string
+  resendFrame: (text: string) => string
   correctionWaiting: (tool: string) => string
   correctionFailedStatus: string
   correctionLabel: string
@@ -88,6 +90,8 @@ export type Words = {
   lookUnknown: (name: string, row: string, options: string) => string
   commandDescription: string
   commandHint: string
+  commandUnknown: (arg: string) => string
+  lookResetDone: string
   opened: (count: number) => string
   closedText: string
   cleared: string
@@ -159,7 +163,7 @@ export const WORDS: Record<Lang, Words> = {
     source: { session: 'sitzung', main: 'haupt', agent: 'agent', advisor: 'berater' },
     pickerFor: name => `Modell für ${name}:`,
     newAgents: 'neue Unteragenten',
-    help: 'ctrl+x tab: Leiste · Tab, Pfeile: wandern · m: Modell · a: Aussehen · 0 bis 4: wählen · x: schließen · s: stoppen · Typ anklicken: Details · Esc: Textfeld verlassen',
+    help: 'ctrl+x tab: Leiste · Tab: wandern · Typ: Details · m: Modell · a: Aussehen · ■: stoppen',
     task: 'Auftrag',
     reply: 'Antwort',
     loading: 'lädt …',
@@ -181,6 +185,8 @@ export const WORDS: Record<Lang, Words> = {
       `Nachricht des Nutzers über Agent Tree: ${text}\n\nSie gilt ab jetzt für deinen Auftrag. Berücksichtige sie bei der weiteren Arbeit und in deinem Bericht über ${tool}.`,
     mainNote: (agent, text) =>
       `Der Nutzer hat dem Unteragenten ${agent} über Agent Tree geschrieben: „${text}“. Sein Ergebnis kann deshalb vom Auftrag abweichen.`,
+    mainNoteLost: agent => `Hinweis: Die Nachricht des Nutzers an ${agent} ist nicht mehr angekommen; sein Ergebnis berücksichtigt sie nicht.`,
+    resendFrame: text => `Diese Nachricht kam vor deinem Abschluss an und blieb ungelesen:\n\n${text}`,
     correctionWaiting: tool =>
       `Bevor du abschließt: Der Nutzer hat dir eine neue Nachricht geschrieben, sie steht oben. Setz sie um und ruf danach ${tool} erneut auf, mit einem Bericht, der sie berücksichtigt.`,
     correctionFailedStatus: 'Agent Tree: Korrektur nicht zugestellt',
@@ -202,7 +208,9 @@ export const WORDS: Record<Lang, Words> = {
     lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
     lookUnknown: (name, row, options) => `Agent Tree: ${name ? `„${name}“ gibt es nicht. ` : ''}${row}: ${options}`,
     commandDescription: 'Agentenbaum der Sitzung als Kästen (stop, clear, stil, farben, licht)',
-    commandHint: '[stop|clear|stil <name>|farben <name>|licht <name>]',
+    commandHint: '[stop|clear|stil <name>|farben <name>|licht <name>|aussehen zurück]',
+    commandUnknown: arg => `Agent Tree: „${arg}“ gibt es nicht. Möglich: stop, clear, stil <Name>, farben <Name>, licht <Name>, aussehen zurück`,
+    lookResetDone: 'Agent Tree · Aussehen zurück auf Standard',
     opened: n => `Agent Tree geöffnet · ${n} ${n === 1 ? 'Agent' : 'Agenten'} bisher · /agent-tree stop schließt`,
     closedText: 'Agent Tree geschlossen',
     cleared: 'Agent Tree geleert',
@@ -273,7 +281,7 @@ export const WORDS: Record<Lang, Words> = {
     source: { session: 'session', main: 'main', agent: 'agent', advisor: 'advisor' },
     pickerFor: name => `Model for ${name}:`,
     newAgents: 'new sub-agents',
-    help: 'ctrl+x tab: pane · Tab, arrows: move · m: model · a: look · 0 to 4: choose · x: close · s: stop · click a type: details · Esc: leave the text field',
+    help: 'ctrl+x tab: pane · Tab: move · type: details · m: model · a: look · ■: stop',
     task: 'Task',
     reply: 'Answer',
     loading: 'loading …',
@@ -295,6 +303,8 @@ export const WORDS: Record<Lang, Words> = {
       `Message from the user via Agent Tree: ${text}\n\nIt applies to your task from now on. Take it into account in your remaining work and in your report via ${tool}.`,
     mainNote: (agent, text) =>
       `The user wrote to the sub-agent ${agent} via Agent Tree: "${text}". Its result may differ from the task for that reason.`,
+    mainNoteLost: agent => `Note: the user's message to ${agent} did not arrive; its result does not reflect it.`,
+    resendFrame: text => `This message arrived before you finished and was not read:\n\n${text}`,
     correctionWaiting: tool => `Before you finish: the user sent you a new message, shown above. Act on it, then call ${tool} again with a report that reflects it.`,
     correctionFailedStatus: 'Agent Tree: correction not delivered',
     correctionLabel: 'Correction',
@@ -315,7 +325,9 @@ export const WORDS: Record<Lang, Words> = {
     lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
     lookUnknown: (name, row, options) => `Agent Tree: ${name ? `"${name}" is not a choice. ` : ''}${row}: ${options}`,
     commandDescription: "The session's agent tree as boxes (stop, clear, style, colors, glow)",
-    commandHint: '[stop|clear|style <name>|colors <name>|glow <name>]',
+    commandHint: '[stop|clear|style <name>|colors <name>|glow <name>|look reset]',
+    commandUnknown: arg => `Agent Tree: "${arg}" is not a command. Try: stop, clear, style <name>, colors <name>, glow <name>, look reset`,
+    lookResetDone: 'Agent Tree · look back to default',
     opened: n => `Agent Tree opened · ${n} ${n === 1 ? 'agent' : 'agents'} so far · /agent-tree stop closes`,
     closedText: 'Agent Tree closed',
     cleared: 'Agent Tree cleared',
@@ -365,6 +377,7 @@ export function lookChoice(word: string, name: string): { row: LookRow; id?: str
   const row = LOOK_WORDS.get(word.toLowerCase())
   if (!row) return undefined
   const wanted = fold(name)
+  if (wanted === 'standard' || wanted === 'default') return { row, id: DEFAULT_LOOK[row] }
   const id = (LOOK_OPTIONS[row] as readonly string[]).find(option =>
     [option, lookOptionLabel(WORDS.de, row, option), lookOptionLabel(WORDS.en, row, option)].some(label => fold(label) === wanted),
   )

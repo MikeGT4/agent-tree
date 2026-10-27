@@ -92,12 +92,12 @@ export function closed(s: AgentTreeState): AgentTreeState {
 
 export function correctionSent(
   s: AgentTreeState,
-  input: { agentId: string; text: string; via: 'append' | 'send' },
+  input: { agentId: string; text: string; via: 'append' | 'send'; recount?: boolean },
   now: number,
 ): AgentTreeState {
   const node = findAgent(s, input.agentId)
   if (!node) return s
-  const count = (s.corrections?.[input.agentId]?.count ?? 0) + 1
+  const count = (s.corrections?.[input.agentId]?.count ?? 0) + (input.recount === false ? 0 : 1)
   const correction: AgentTreeCorrection = { at: now, text: excerpt(input.text), via: input.via, state: 'sent', count }
   const next = { ...s, corrections: { ...s.corrections, [input.agentId]: correction } }
   return logged(next, 'agent', 'correction', { type: node.type, text: oneLine(input.text).slice(0, LOG_EXCERPT) }, now)
@@ -105,15 +105,23 @@ export function correctionSent(
 
 export function correctionFailed(
   s: AgentTreeState,
-  input: { agentId: string; text: string; before?: AgentTreeCorrection },
+  input: { agentId: string; text: string; before?: AgentTreeCorrection; count?: number },
   now: number,
 ): AgentTreeState {
   const node = findAgent(s, input.agentId)
   if (!node) return s
   const kept: AgentTreeCorrection =
-    input.before?.state === 'sent' ? input.before : { at: now, text: excerpt(input.text), state: 'failed', count: input.before?.count ?? 0 }
+    input.before?.state === 'sent'
+      ? input.before
+      : { at: now, text: excerpt(input.text), state: 'failed', count: input.count ?? input.before?.count ?? 0 }
   const next = { ...s, corrections: { ...s.corrections, [input.agentId]: kept } }
   return logged(next, 'agent', 'correctionFailed', { type: node.type, text: oneLine(input.text).slice(0, LOG_EXCERPT) }, now)
+}
+
+export function correctionCounted(s: AgentTreeState, agentId: string): AgentTreeState {
+  const current = s.corrections?.[agentId]
+  if (!current) return s
+  return { ...s, corrections: { ...s.corrections, [agentId]: { ...current, count: current.count + 1 } } }
 }
 
 export function correctionResent(s: AgentTreeState, agentId: string, now: number): AgentTreeState {

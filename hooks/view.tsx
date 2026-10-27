@@ -34,7 +34,7 @@ import type { Lang, Words } from './words.ts'
 export { WORDS, logLine, wordsFor }
 export type { Lang }
 
-type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button' | 'Input'>
+type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'> & { Input?: Elements['terminal']['Input'] }
 
 export const WIDE_FROM = 84
 export const TIGHT_BELOW = 36
@@ -53,6 +53,7 @@ export const ADVISOR_COMPACT_ROWS = 4
 export const LEGEND_EFFORT_FROM = 60
 export const BAR_WIDTH = 15
 export const DETAIL_ROWS = 11
+export const LIGHT_SAMPLE = 9
 
 const SIZE = { title: 'heading', detail: 'footnote', note: 'caption' } as const
 
@@ -385,7 +386,14 @@ export function lookLines(width: number, lang: Lang = 'de'): number {
   const w = wordsFor(lang)
   const label = ' '.repeat(lookLabelWidth(w))
   const rows = LOOK_ROWS.map(row =>
-    wrappedLines([label, ...(LOOK_OPTIONS[row] as readonly string[]).map(id => `[ ${lookOptionLabel(w, row, id)} ]`)], width),
+    wrappedLines(
+      [
+        label,
+        ...(LOOK_OPTIONS[row] as readonly string[]).map(id => `[ ${lookOptionLabel(w, row, id)} ]`),
+        ...(row === 'light' ? [' '.repeat(LIGHT_SAMPLE)] : []),
+      ],
+      width,
+    ),
   )
   return 2 + rows.reduce((sum, n) => sum + n, 0) + wrappedLines([`[ ${w.lookReset} ]`, '[ × ]'], width)
 }
@@ -438,7 +446,11 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const phase = phaseOf(s)
   const roundStart = s.main.roundStartedAt ?? 0
   const all = groups(s)
-  const current = all.filter(g => isRunning(g) || startOf(g) >= roundStart || endedSince(g, roundStart))
+  const endedThisRound = (g: AgentTreeGroup) =>
+    g.kind === 'agent'
+      ? endedSince(g, roundStart)
+      : g.running === 0 && s.agents.some(n => n.workflowRunId === g.runId && (n.endedAt ?? 0) >= roundStart)
+  const current = all.filter(g => isRunning(g) || startOf(g) >= roundStart || endedThisRound(g))
   const earlier = all.length - current.length
   const recentCalls = s.advisor.calls.slice(-ADVISOR_ROWS)
   const pickerTarget = choices.picker
@@ -650,7 +662,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     const indent = parentOf(s, n) ? '↳ ' : ''
     const size = n.status === 'running' && n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''
     const mark = correctionGlyph(s, n.id)
-    const text = `${indent}${n.status === 'running' ? spin : statusMark(glyphs, n.status)} ${w.status[n.status]}${mark ? ` ${mark}` : ''} · ${typeLabel(n.type)} · ${n.description}${size}`
+    const text = `${indent}${n.status === 'running' ? spin : statusMark(glyphs, n.status)} ${n.status === 'running' && (s.stopping ?? []).includes(n.id) ? w.stopping : w.status[n.status]}${mark ? ` ${mark}` : ''} · ${typeLabel(n.type)} · ${n.description}${size}`
     const halt = n.status === 'running' && actions && !(s.stopping ?? []).includes(n.id)
     return (
       <Box key={`ag:${n.id}`} width={treeWidth} flexDirection="row" columnGap={1}>
@@ -772,10 +784,18 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       <Text color={palette.agent} wrap="truncate-end">
         {`${glyphs.node} ${w.toAgents}`}
       </Text>
-      {pickNew ? <Text color={palette.dim}>{' · '}</Text> : null}
-      {pickNew}
-      {lookButton ? <Text color={palette.dim}>{' · '}</Text> : null}
-      {lookButton}
+      {pickNew ? (
+        <Box key="pick-group" flexDirection="row">
+          <Text color={palette.dim}>{' · '}</Text>
+          {pickNew}
+        </Box>
+      ) : null}
+      {lookButton ? (
+        <Box key="look-group" flexDirection="row">
+          <Text color={palette.dim}>{' · '}</Text>
+          {lookButton}
+        </Box>
+      ) : null}
     </Box>
   )
 
@@ -806,10 +826,18 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       <Box key="agents" flexDirection="column" alignItems="center">
         <Box key="none" flexDirection="row" flexWrap="wrap">
           <Text size={SIZE.note} color={palette.dim}>{w.noAgents}</Text>
-          {pickNew ? <Text color={palette.dim}>{' · '}</Text> : null}
-          {pickNew}
-          {lookButton ? <Text color={palette.dim}>{' · '}</Text> : null}
-          {lookButton}
+          {pickNew ? (
+            <Box key="pick-group" flexDirection="row">
+              <Text color={palette.dim}>{' · '}</Text>
+              {pickNew}
+            </Box>
+          ) : null}
+          {lookButton ? (
+            <Box key="look-group" flexDirection="row">
+              <Text color={palette.dim}>{' · '}</Text>
+              {lookButton}
+            </Box>
+          ) : null}
         </Box>
         {notes}
       </Box>
@@ -961,14 +989,16 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             <Button key="detail:close" plain hotkey="x" label={w.close} onPress={() => actions.close()} />
           </Box>
         </Box>
-        <Input
-          key={`say:${detailNode.id}:${s.corrections?.[detailNode.id]?.count ?? 0}`}
-          rows={2}
-          autoFocus
-          placeholder={w.sayPlaceholder}
-          submitLabel={w.send}
-          onSubmit={value => actions.say(detailNode.id, value)}
-        />
+        {Input ? (
+          <Input
+            key={`say:${detailNode.id}:${s.corrections?.[detailNode.id]?.count ?? 0}`}
+            rows={2}
+            autoFocus
+            placeholder={w.sayPlaceholder}
+            submitLabel={w.send}
+            onSubmit={value => actions.say(detailNode.id, value)}
+          />
+        ) : null}
         {detailCorrection ? (
           <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
             {`${w.correctionLabel}: ${w.correction[detailCorrection.state]} · ${clockTime(detailCorrection.at)}${detailCorrection.text ? ` · „${detailCorrection.text}“` : ''}`}
@@ -1033,7 +1063,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
                 onPress={() => actions.restyle(row, id)}
               />
             ))}
-            {row === 'light' ? <Box key="look-light-sample">{streakLine(glyphs.bar.full.repeat(9), palette.agent, 5)}</Box> : null}
+            {row === 'light' ? <Box key="look-light-sample">{streakLine(glyphs.bar.full.repeat(LIGHT_SAMPLE), palette.agent, 5)}</Box> : null}
           </Box>
         ))}
         <Box key="look-end" flexDirection="row" columnGap={1}>

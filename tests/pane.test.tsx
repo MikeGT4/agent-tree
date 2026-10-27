@@ -10,11 +10,14 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; onSend?: () => Promise<unknown> } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown> } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
-  on('store.get', (_, e) => ({ value: stored[(e as { key: string }).key] }) as never)
+  on('store.get', (_, e) => {
+    if (refuse.storeGet) throw new Error('store')
+    return { value: stored[(e as { key: string }).key] } as never
+  })
   on('store.set', (_, e) => {
     const { key, value } = e as { key: string; value: unknown }
     stored[key] = value
@@ -772,6 +775,100 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     expect(seen.sent.length).toBe(0)
   })
 
+  test('beim Nachschicken liest ein sofort startender Agent die Korrektur ohne Anhalten', de, async ($, on) => {
+    const refuse: { onSend?: () => Promise<unknown> } = {}
+    engine(on, [], refuse)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await ui.input({ key: 'say:sub-1:0', text: 'Nimm b.ts' })
+    await ui.unmount()
+    refuse.onSend = () => step($, { agentId: 'sub-1' })
+    await $.turn.complete(finished)
+    const handback = await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
+    expect(JSON.stringify(handback)).not.toMatch(/deny/)
+  })
+
+  test('scheitert das Nachschicken, gilt die Korrektur als nicht zugestellt und die Hauptsitzung erfährt es', de, async ($, on) => {
+    const refuse = { send: false }
+    const seen = engine(on, [], refuse)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await ui.input({ key: 'say:sub-1:0', text: 'Nimm b.ts' })
+    refuse.send = true
+    await $.turn.complete(finished)
+    await ui.redraw()
+    expect(await ui.find({ key: 'say:sub-1:1' })).toBeDefined()
+    expect(await screen(ui)).toMatch(/Korrektur: nicht zugestellt/)
+    expect(seen.appended.some(row => !row.agentId && (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(true)
+    await ui.unmount()
+  })
+
+  test('nach einem Stopp bleibt keine ungelesene Korrektur als geschickt stehen', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await ui.input({ key: 'say:sub-1:0', text: 'Nimm b.ts' })
+    await ui.press({ key: 'stop:sub-1' })
+    await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
+    await $.turn.complete(finished)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Korrektur: nicht zugestellt/)
+    expect(seen.sent.length).toBe(0)
+    await ui.unmount()
+  })
+
+  test('mehrere ungelesene Korrekturen gehen zusammen nach', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await ui.input({ key: 'say:sub-1:0', text: 'Erstens A' })
+    await ui.input({ key: 'say:sub-1:1', text: 'Zweitens B' })
+    await ui.unmount()
+    await $.turn.complete(finished)
+    expect(seen.sent.length).toBe(1)
+    expect(seen.sent[0]?.text).toMatch(/Erstens A[\s\S]*Zweitens B/)
+  })
+
+  test('nach /agent-tree clear wird keine alte Korrektur nachgeschickt', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await ui.input({ key: 'say:sub-1:0', text: 'Nimm b.ts' })
+    await ui.unmount()
+    await $.command.run({ command: 'agent-tree', args: 'clear', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+    await $.turn.complete(finished)
+    expect(seen.sent.length).toBe(0)
+  })
+
+  test('in der Zeilenansicht steht beim Stoppen „hält an“', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(38))
+    await ui.press({ key: 'halt:sub-1' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(String((await ui.find({ key: 'detail:sub-1' }))?.props.label ?? '')).toMatch(/hält an/)
+    await ui.unmount()
+  })
+
+  test('ein in dieser Runde beendeter Workflow bleibt sichtbar', de, async ($, on) => {
+    engine(on)
+    let tick = 1000
+    on('clock.now', () => ({ value: (tick += 10) }) as never)
+    await startSession($)
+    await $.turn.start({ text: 'Lauf', turnId: 't1' })
+    for (let i = 1; i <= 2; i++) {
+      await $.agent.spawn({ prompt: 'P.', description: `Teil ${i}`, subagentType: 'general-purpose', workflow: { runId: 'wf_r', agentIndex: i } } as never)
+    }
+    await $.turn.complete({ answer: 'ok', durationMs: 900, isAborted: false, turnId: 't1', reason: 'answer' })
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    for (let i = 1; i <= 2; i++) {
+      await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't2', agentId: `sub-${i}`, reason: 'answer' })
+    }
+    const ui = await $.ui.mount(pane(38))
+    expect(await screen(ui)).toMatch(/Workflow · 2/)
+    await ui.unmount()
+  })
+
   test('eine gelesene Korrektur wird beim Ende nicht nachgeschickt', de, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
@@ -1110,6 +1207,42 @@ describe('Aussehen in der Leiste', () => {
     expect(text).toContain(PALETTES.mono.agent)
     expect(text).toMatch(/◐ läuft/)
     await ui.unmount()
+  })
+
+  test('kann der Speicher nicht gelesen werden, gilt beim Speichern das aktuelle Aussehen', de, async ($, on) => {
+    const refuse = { storeGet: false }
+    const seen = engine(on, [], refuse)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'look:open' })
+    await ui.redraw()
+    await ui.press({ key: 'look:style:braille' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    refuse.storeGet = true
+    await ui.press({ key: 'look:colors:retro' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.storeSets.at(-1)).toEqual({ key: 'look', value: { style: 'braille', colors: 'retro', light: 'standard' } })
+    await ui.unmount()
+  })
+
+  test('der Trennpunkt bricht mit dem Aussehen-Knopf um', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/"key":"look-group"/)
+    await ui.unmount()
+  })
+
+  test('Aussehen zurück per Befehl, ein unbekanntes Argument nennt die gültigen', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    await command($, 'stil braille')
+    await command($, 'aussehen zurück')
+    expect(seen.storeSets.at(-1)).toEqual({ key: 'look', value: DEFAULT_LOOK })
+    const help = (await command($, 'stopt')).text ?? ''
+    expect(help).toMatch(/stop/)
+    expect(help).toMatch(/clear/)
+    expect(help).not.toMatch(/geöffnet/)
   })
 
   test('eine Wahl ändert im Speicher nur ihre Zeile', de, async ($, on) => {
