@@ -423,6 +423,16 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   return rows
 }
 
+export function helpLine(items: readonly string[], width: number): string {
+  let line = items[0] ?? ''
+  for (const item of items.slice(1)) {
+    const next = `${line} · ${item}`
+    if (next.length > width) break
+    line = next
+  }
+  return line
+}
+
 export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: number, look: TreeLook = { frame: 0, animate: false }) {
   const { Box, Text, Button, Input } = ui
   const lang: Lang = look.lang ?? 'de'
@@ -1093,7 +1103,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       {logBox}
       {tight ? null : (
         <Text key="help" size={SIZE.note} color={palette.dim} wrap="truncate-end">
-          {w.help}
+          {helpLine(w.help, width)}
         </Text>
       )}
     </Box>

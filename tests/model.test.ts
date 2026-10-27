@@ -46,7 +46,7 @@ import {
   typeLabel,
   wasStopSent,
 } from '../hooks/model.ts'
-import { AGENT_WIDTH, connector, drawTree, inputKey, litCells, lookLines, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
+import { AGENT_WIDTH, connector, drawTree, helpLine, inputKey, litCells, lookLines, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
 import { lookChoice, logLine, resolveLang, toolText, WORDS } from '../hooks/words.ts'
 import { contrast, DEFAULT_LOOK, frameEdges, isLookChoice, lightColor, lookFrom, LOOK_OPTIONS, PALETTES, restyleLine, STYLES } from '../hooks/looks.ts'
 
@@ -752,6 +752,13 @@ describe('Aussehen', () => {
       if (color) expect(contrast(color, '#FFFFFF')).toBeGreaterThanOrEqual(3)
     }
     expect([lightColor({ ...DEFAULT_LOOK, light: 'white' }), lightColor(DEFAULT_LOOK)]).toEqual(['#FFFFFF', undefined])
+  })
+
+  test('die Hilfezeile zeigt nur ganze Einträge, die wichtigsten zuerst', () => {
+    expect(helpLine(WORDS.de.help, 77)).toBe('ctrl+x tab: Leiste · Typ: Details · ■: stoppen · m: Modell · a: Aussehen')
+    expect(helpLine(WORDS.en.help, 77)).toBe('ctrl+x tab: pane · type: details · ■: stop · m: model · a: look · Tab: move')
+    expect(helpLine(WORDS.de.help, 30)).toBe('ctrl+x tab: Leiste')
+    expect(helpLine(WORDS.de.help, 10)).toBe('ctrl+x tab: Leiste')
   })
 
   test('die Auswahl zählt die Licht-Vorschau mit', () => {

@@ -51,7 +51,7 @@ export type Words = {
   source: Record<AgentTreeLogSource, string>
   pickerFor: (name: string) => string
   newAgents: string
-  help: string
+  help: readonly string[]
   task: string
   reply: string
   loading: string
@@ -163,7 +163,7 @@ export const WORDS: Record<Lang, Words> = {
     source: { session: 'sitzung', main: 'haupt', agent: 'agent', advisor: 'berater' },
     pickerFor: name => `Modell für ${name}:`,
     newAgents: 'neue Unteragenten',
-    help: 'ctrl+x tab: Leiste · Tab: wandern · Typ: Details · m: Modell · a: Aussehen · ■: stoppen',
+    help: ['ctrl+x tab: Leiste', 'Typ: Details', '■: stoppen', 'm: Modell', 'a: Aussehen', 'Tab: wandern'],
     task: 'Auftrag',
     reply: 'Antwort',
     loading: 'lädt …',
@@ -281,7 +281,7 @@ export const WORDS: Record<Lang, Words> = {
     source: { session: 'session', main: 'main', agent: 'agent', advisor: 'advisor' },
     pickerFor: name => `Model for ${name}:`,
     newAgents: 'new sub-agents',
-    help: 'ctrl+x tab: pane · Tab: move · type: details · m: model · a: look · ■: stop',
+    help: ['ctrl+x tab: pane', 'type: details', '■: stop', 'm: model', 'a: look', 'Tab: move'],
     task: 'Task',
     reply: 'Answer',
     loading: 'loading …',
