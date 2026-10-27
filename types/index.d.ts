@@ -23,8 +23,15 @@ export type AgentTreeNode = {
   task?: string
   answer?: string
   answerTokens?: number
-  toolTimes?: number[]
 }
+
+export type AgentTreeStyle = 'line' | 'pixel' | 'braille' | 'hud' | 'ascii'
+
+export type AgentTreeColors = 'original' | 'light' | 'retro' | 'mono'
+
+export type AgentTreeLight = 'standard' | 'white' | 'gold' | 'cyan' | 'magenta'
+
+export type AgentTreeLook = { style: AgentTreeStyle; colors: AgentTreeColors; light: AgentTreeLight }
 
 export type AgentTreeCorrectionState = 'sent' | 'read' | 'failed'
 
@@ -136,6 +143,6 @@ export type AgentTreeGroup =
 
 declare module 'claude-code' {
   interface PluginState {
-    'agent-tree': { tree: Shaped<AgentTreeState>; frame: number }
+    'agent-tree': { tree: Shaped<AgentTreeState>; frame: number; look: Shaped<AgentTreeLook> }
   }
 }

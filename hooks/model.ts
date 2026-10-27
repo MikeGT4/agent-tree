@@ -18,7 +18,6 @@ export const DESCRIPTION_LIMIT = 80
 export const LABEL_LIMIT = 40
 export const ADVISOR_CALLS_KEPT = 20
 export const TOOLS_KEPT = 5
-export const TOOL_TIMES_KEPT = 64
 export const DETAIL_LIMIT = 160
 
 export type AdvisorUse = { id: string; startedAt: number; endedAt?: number }
@@ -84,7 +83,7 @@ export function pickerOpened(s: AgentTreeState, target: string | undefined): Age
 }
 
 export function lookOpened(s: AgentTreeState): AgentTreeState {
-  return { ...s, lookOpen: true, choices: { ...choicesOf(s), picker: undefined } }
+  return { ...s, lookOpen: true, detail: undefined, choices: { ...choicesOf(s), picker: undefined } }
 }
 
 export function closed(s: AgentTreeState): AgentTreeState {
@@ -134,7 +133,7 @@ export function detailOpened(s: AgentTreeState, agentId: string): AgentTreeState
   const node = findAgent(s, agentId)
   if (!node || s.detail?.agentId === agentId) return { ...s, detail: undefined }
   const detail: AgentTreeDetail = { agentId, state: node.task ? 'ready' : 'loading' }
-  return { ...s, detail, choices: { ...choicesOf(s), picker: undefined } }
+  return { ...s, detail, lookOpen: undefined, choices: { ...choicesOf(s), picker: undefined } }
 }
 
 export function detailLoaded(
@@ -415,7 +414,6 @@ export function toolRan(s: AgentTreeState, input: { agentId?: string; label: str
     toolCount: n.toolCount + 1,
     lastTool: input.label,
     tools: [...(n.tools ?? []), input.label].slice(-TOOLS_KEPT),
-    toolTimes: [...(n.toolTimes ?? []), now].slice(-TOOL_TIMES_KEPT),
   }))
 }
 

@@ -3,13 +3,24 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES } from '../hooks/looks.ts'
+
 const usage = { input_tokens: 2000, output_tokens: 40, cache_read_input_tokens: 30000, cache_creation_input_tokens: 0 }
 const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<string, string>)[model] ?? model
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean } = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
+  const stored: Record<string, unknown> = { ...saved }
+  const storeSets: { key: string; value: unknown }[] = []
+  on('store.get', (_, e) => ({ value: stored[(e as { key: string }).key] }) as never)
+  on('store.set', (_, e) => {
+    const { key, value } = e as { key: string; value: unknown }
+    stored[key] = value
+    storeSets.push({ key, value })
+    return { value: undefined } as never
+  })
   const appended: Appended[] = []
   const sent: { to: unknown; text: string }[] = []
   on('session.append', async (_, e, next) => {
@@ -61,7 +72,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
         : {}),
     }
   })
-  return { status, spawnModels, stepModels, appended, sent }
+  return { status, spawnModels, stepModels, appended, sent, storeSets }
 }
 
 async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[] } = {}) {
@@ -733,6 +744,161 @@ describe('Sichtbarkeit beim Korrigieren', () => {
     await ui.redraw()
     expect(await screen(ui)).toMatch(/weitere/)
     expect(await ui.find({ key: 'ag:sub-3' })).toBeDefined()
+    await ui.unmount()
+  })
+})
+
+describe('Aussehen in der Leiste', () => {
+  const command = ($: Engine, args: string) =>
+    $.command.run({ command: 'agent-tree', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+
+  async function openLook($: Engine, columns = 90) {
+    const ui = await $.ui.mount(pane(columns))
+    await ui.press({ key: 'look:open' })
+    await ui.redraw()
+    return ui
+  }
+
+  test('der Knopf Aussehen hat die Taste a und öffnet alle Möglichkeiten', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'look:open' }))?.props.hotkey).toBe('a')
+    await ui.press({ key: 'look:open' })
+    await ui.redraw()
+    for (const row of ['style', 'colors', 'light'] as const) {
+      for (const id of LOOK_OPTIONS[row]) expect(await ui.find({ key: `look:${row}:${id}` })).toBeDefined()
+    }
+    expect((await ui.find({ key: 'look:style:line' }))?.props.variant).toBe('primary')
+    expect(await ui.find({ key: 'look:default' })).toBeDefined()
+    expect((await ui.find({ key: 'look:close' }))?.props.hotkey).toBe('x')
+    await ui.press({ key: 'look:close' })
+    await ui.redraw()
+    expect(await ui.find({ key: 'look:style:line' })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('ein Stil wirkt sofort und wird gespeichert', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openLook($)
+    await ui.press({ key: 'look:style:braille' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toMatch(/⡏/)
+    expect(text).toMatch(/⣿/)
+    expect(seen.storeSets.at(-1)).toEqual({ key: 'look', value: { ...DEFAULT_LOOK, style: 'braille' } })
+    await ui.unmount()
+  })
+
+  test('ein Farbschema färbt mit seinen Werten', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openLook($)
+    await ui.press({ key: 'look:colors:light' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain(PALETTES.light.agent)
+    expect(await screen(ui)).not.toContain(PALETTES.original.agent)
+    await ui.unmount()
+  })
+
+  test('eine gespeicherte Wahl gilt beim Start', de, async ($, on) => {
+    engine(on, [], {}, { look: { style: 'ascii', colors: 'retro' } })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    expect(text).toContain(PALETTES.retro.agent)
+    expect(text).toMatch(/#{5}/)
+    await ui.unmount()
+  })
+
+  test('zurück auf Standard setzt alles zurück', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openLook($)
+    await ui.press({ key: 'look:style:hud' })
+    await ui.press({ key: 'look:colors:mono' })
+    await ui.press({ key: 'look:default' })
+    await ui.redraw()
+    expect(seen.storeSets.at(-1)).toEqual({ key: 'look', value: DEFAULT_LOOK })
+    expect(await screen(ui)).toContain(PALETTES.original.agent)
+    await ui.unmount()
+  })
+
+  test('der Befehl stellt Stil, Farben und Licht um', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    expect((await command($, 'stil braille')).text).toMatch(/Braille/)
+    expect((await command($, 'farben retro')).text).toMatch(/Retro/)
+    expect((await command($, 'licht gold')).text).toMatch(/Gold/)
+    expect(seen.storeSets.at(-1)).toEqual({ key: 'look', value: { style: 'braille', colors: 'retro', light: 'gold' } })
+  })
+
+  test('ein unbekannter Name nennt die Möglichkeiten', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const text = (await command($, 'stil zickzack')).text ?? ''
+    expect(text).toMatch(/Linie/)
+    expect(text).toMatch(/ASCII/)
+    expect(seen.storeSets.length).toBe(0)
+  })
+
+  test('bei 38 Spalten sind alle Knöpfe der Auswahl da', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openLook($, 38)
+    for (const row of ['style', 'colors', 'light'] as const) {
+      for (const id of LOOK_OPTIONS[row]) expect(await ui.find({ key: `look:${row}:${id}` })).toBeDefined()
+    }
+    await ui.unmount()
+  })
+
+  test('mit Bewegung färbt die Lichtfarbe eine Zelle des Balkens', de, async ($, on) => {
+    engine(on, [], {}, { look: { light: 'gold' } })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toContain('#F2C14E')
+    await ui.unmount()
+  })
+
+  test('ohne Bewegung kein Lichtstreifen', { options: { language: 'de', animate: false } }, async ($, on) => {
+    engine(on, [], {}, { look: { light: 'gold' } })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    expect(text).not.toContain('#F2C14E')
+    expect(text).not.toMatch(/[▓▒]/)
+    await ui.unmount()
+  })
+
+  test('Mono behält die Statuszeichen', de, async ($, on) => {
+    engine(on, [], {}, { look: { colors: 'mono' } })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    expect(text).toContain(PALETTES.mono.agent)
+    expect(text).toMatch(/◐ läuft/)
+    await ui.unmount()
+  })
+
+  test('Pixel zeichnet Rahmen aus Halbblöcken und kräftige Äste', de, async ($, on) => {
+    engine(on, [], {}, { look: { style: 'pixel' } })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    expect(text).toMatch(/▗▄/)
+    expect(text).toMatch(/▝▀/)
+    expect(text).toMatch(/[━┃]/)
+    await ui.unmount()
+  })
+
+  test('HUD zeichnet nur Ecken', de, async ($, on) => {
+    engine(on, [], {}, { look: { style: 'hud' } })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    expect(text).toMatch(/┌╴/)
+    expect(text).toMatch(/╶┐/)
     await ui.unmount()
   })
 })

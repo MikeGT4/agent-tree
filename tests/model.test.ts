@@ -37,7 +37,6 @@ import {
   stopRequested,
   stopSent,
   synced,
-  TOOL_TIMES_KEPT,
   toolLabel,
   toolRan,
   trimmed,
@@ -46,7 +45,8 @@ import {
   wasStopSent,
 } from '../hooks/model.ts'
 import { connector, inputKey, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, timelineBar } from '../hooks/view.tsx'
-import { logLine, resolveLang, toolText } from '../hooks/words.ts'
+import { lookChoice, logLine, resolveLang, toolText } from '../hooks/words.ts'
+import { contrast, DEFAULT_LOOK, frameEdges, isLookChoice, lookFrom, LOOK_OPTIONS, PALETTES, restyleLine, STYLES } from '../hooks/looks.ts'
 
 const line = (entry: AgentTreeLogEntry | undefined) => (entry ? logLine(entry, 'de') : undefined)
 
@@ -568,13 +568,6 @@ describe('Korrekturen', () => {
     expect(String(s.log.at(-1)?.data?.text ?? '').length).toBeLessThanOrEqual(60)
   })
 
-  test('toolRan merkt sich höchstens 64 Zeiten', () => {
-    let s = one()
-    for (let i = 1; i <= 70; i++) s = toolRan(s, { agentId: 'sub-1', label: 'Read' }, 100 + i)
-    const times = s.agents[0]?.toolTimes ?? []
-    expect([times.length, times.at(-1), TOOL_TIMES_KEPT]).toEqual([64, 170, 64])
-  })
-
   test('Aussehen und Modellwahl schließen einander', () => {
     let s = pickerOpened(one(), 'sub-1')
     s = lookOpened(s)
@@ -583,6 +576,14 @@ describe('Korrekturen', () => {
     expect([s.lookOpen, s.choices?.picker]).toEqual([undefined, 'sub-1'])
     s = closed(lookOpened(s))
     expect([s.lookOpen, s.choices?.picker]).toEqual([undefined, undefined])
+  })
+
+  test('Aussehen und Detailkasten schließen einander', () => {
+    let s = detailOpened(one(), 'sub-1')
+    s = lookOpened(s)
+    expect([s.lookOpen, s.detail]).toEqual([true, undefined])
+    s = detailOpened(s, 'sub-1')
+    expect([s.lookOpen, s.detail?.agentId]).toEqual([undefined, 'sub-1'])
   })
 })
 
@@ -604,5 +605,78 @@ describe('Stopp am Kasten', () => {
     const actions = { pick: () => {}, choose: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), say: () => {} }
     expect(pressKey(actions, 'halt:sub-1')).toBe(true)
     expect(stopped).toEqual(['sub-1'])
+  })
+})
+
+describe('Aussehen', () => {
+  const hex = (value: string) => /^#[0-9A-F]{6}$/i.test(value)
+
+  test('contrast rechnet nach WCAG', () => {
+    const round = (n: number) => Math.round(n * 100) / 100
+    expect(round(contrast('#FFFFFF', '#000000'))).toBe(21)
+    expect(round(contrast('#7BE396', '#FFFFFF'))).toBe(1.58)
+  })
+
+  test('Hell erreicht auf Weiß 4,5 zu 1, die dunklen Schemata auf #1C1C26', () => {
+    for (const value of Object.values(PALETTES.light).filter(hex)) expect(contrast(value, '#FFFFFF')).toBeGreaterThanOrEqual(4.5)
+    for (const name of ['original', 'retro', 'mono'] as const) {
+      for (const value of Object.values(PALETTES[name]).filter(hex)) expect(contrast(value, '#1C1C26')).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  test('Original entspricht den Farben von 0.3.0', () => {
+    expect(PALETTES.original).toEqual({ main: '#E6845D', agent: '#7CAAE8', advisor: '#B1A7E6', done: '#7BE396', dim: '#8E8E9A', failed: 'error' })
+  })
+
+  test('lookFrom übernimmt gültige Felder und füllt den Rest mit Standard', () => {
+    expect(lookFrom({ style: 'braille', colors: 'zickzack' })).toEqual({ ...DEFAULT_LOOK, style: 'braille' })
+    expect(lookFrom({ style: 'hud', colors: 'retro', light: 'gold' })).toEqual({ style: 'hud', colors: 'retro', light: 'gold' })
+    expect(lookFrom(null)).toEqual(DEFAULT_LOOK)
+    expect(lookFrom(7)).toEqual(DEFAULT_LOOK)
+  })
+
+  test('restyleLine setzt Äste in die Zeichen des Stils um', () => {
+    expect(restyleLine('┌──┼──┐', STYLES.braille)).toBe('⡖⠒⠒⡗⠒⠒⡆')
+    expect(restyleLine('┌─•·┼─┐', STYLES.ascii)).toBe('+-*.+-+')
+    expect(restyleLine('└─┴─┘ ▼', STYLES.pixel)).toBe('┗━┻━┛ ▼')
+    expect(restyleLine('┌─•·┼─┐', STYLES.line)).toBe('┌─•·┼─┐')
+  })
+
+  test('jeder Stil ist vollständig', () => {
+    expect(Object.keys(STYLES).sort()).toEqual([...LOOK_OPTIONS.style].sort())
+    for (const glyphs of Object.values(STYLES)) {
+      expect(Object.keys(glyphs.lines).sort()).toEqual(['·', '┌', '┐', '└', '┘', '├', '┤', '┬', '┴', '┼', '─', '│', '•', '▼'].sort())
+      expect(glyphs.spinner.length).toBeGreaterThanOrEqual(4)
+      expect([glyphs.frame.tl, glyphs.frame.t, glyphs.frame.tr, glyphs.frame.l, glyphs.frame.r, glyphs.frame.bl, glyphs.frame.b, glyphs.frame.br].every(c => [...c].length === 1)).toBe(true)
+    }
+    expect([STYLES.line.border, STYLES.ascii.border]).toEqual(['single', 'classic'])
+  })
+
+  test('frameEdges zeichnet Kanten in voller Breite, HUD mit Strichen an den Ecken', () => {
+    expect(frameEdges(STYLES.pixel, 6)).toEqual({ top: '▗▄▄▄▄▖', bottom: '▝▀▀▀▀▘' })
+    expect(frameEdges(STYLES.hud, 8)).toEqual({ top: '┌╴    ╶┐', bottom: '└╴    ╶┘' })
+    expect(frameEdges(STYLES.hud, 3)).toEqual({ top: '┌ ┐', bottom: '└ ┘' })
+    expect(frameEdges(STYLES.braille, 1)).toEqual({ top: '⡏', bottom: '⣇' })
+  })
+
+  test('isLookChoice kennt nur Zeilen und Möglichkeiten der Auswahl', () => {
+    expect([isLookChoice('style', 'hud'), isLookChoice('colors', 'hud'), isLookChoice('toString', 'hud'), isLookChoice('light', 'gold')]).toEqual([true, false, false, true])
+  })
+
+  test('lookChoice versteht Befehle auf Deutsch und Englisch', () => {
+    expect(lookChoice('stil', 'braille')).toEqual({ row: 'style', id: 'braille' })
+    expect(lookChoice('style', 'linie')).toEqual({ row: 'style', id: 'line' })
+    expect(lookChoice('farben', 'hell')).toEqual({ row: 'colors', id: 'light' })
+    expect(lookChoice('colors', 'light')).toEqual({ row: 'colors', id: 'light' })
+    expect(lookChoice('licht', 'weiss')).toEqual({ row: 'light', id: 'white' })
+    expect(lookChoice('licht', 'weiß')).toEqual({ row: 'light', id: 'white' })
+    expect(lookChoice('licht', 'zickzack')).toEqual({ row: 'light' })
+    expect(lookChoice('clear', '')).toBeUndefined()
+  })
+
+  test('der Spinner folgt dem Stil', () => {
+    expect(runningMark(1, true, STYLES.braille.spinner)).toBe('⠙')
+    expect(runningMark(5, false, STYLES.braille.spinner)).toBe('⠋')
+    expect(runningMark(2, true)).toBe('◑')
   })
 })

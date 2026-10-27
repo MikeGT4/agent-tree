@@ -6,6 +6,7 @@ import type {
   AgentTreeCorrectionState,
   AgentTreeGroup,
   AgentTreeLogSource,
+  AgentTreeLook,
   AgentTreeNode,
   AgentTreeState,
   AgentTreeStatus,
@@ -25,7 +26,9 @@ import {
   phaseOf,
   typeLabel,
 } from './model.ts'
-import { WORDS, familyOr, logLine, toolText, wordsFor } from './words.ts'
+import { DEFAULT_LOOK, LIGHTS, LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, restyleLine } from './looks.ts'
+import type { Glyphs, LookRow, Palette } from './looks.ts'
+import { WORDS, familyOr, logLine, lookOptionLabel, toolText, wordsFor } from './words.ts'
 import type { Lang, Words } from './words.ts'
 
 export { WORDS, logLine, wordsFor }
@@ -51,20 +54,7 @@ export const LEGEND_EFFORT_FROM = 60
 export const BAR_WIDTH = 15
 export const DETAIL_ROWS = 11
 
-const COLOR = {
-  main: '#E6845D',
-  agent: '#7CAAE8',
-  advisor: '#B1A7E6',
-  done: '#7BE396',
-  dim: '#8E8E9A',
-  failed: 'error',
-}
-
 const SIZE = { title: 'heading', detail: 'footnote', note: 'caption' } as const
-
-const STATUS_MARK: Record<AgentTreeStatus, string> = { running: '◐', done: '●', failed: '✗', stopped: '○' }
-
-const SPIN = ['◐', '◓', '◑', '◒']
 
 const CORRECTION_MARK: Partial<Record<AgentTreeCorrectionState, string>> = { sent: '✉', read: '✓' }
 
@@ -74,9 +64,22 @@ function correctionMark(s: AgentTreeState, agentId: string): string {
   return mark ? ` ${mark}` : ''
 }
 
-export function runningMark(frame: number, animate: boolean): string {
-  if (!animate) return STATUS_MARK.running
-  return SPIN[((frame % SPIN.length) + SPIN.length) % SPIN.length] ?? STATUS_MARK.running
+export function runningMark(frame: number, animate: boolean, spinner: readonly string[] = STYLES.line.spinner): string {
+  const first = spinner[0] ?? '◐'
+  if (!animate || spinner.length === 0) return first
+  return spinner[((frame % spinner.length) + spinner.length) % spinner.length] ?? first
+}
+
+function statusMark(glyphs: Glyphs, status: AgentTreeStatus): string {
+  return status === 'running' ? runningMark(0, false, glyphs.spinner) : glyphs.marks[status]
+}
+
+function statusColor(palette: Palette, status: AgentTreeStatus): string {
+  return status === 'running' ? palette.agent : status === 'done' ? palette.done : status === 'failed' ? palette.failed : palette.dim
+}
+
+function sourceColor(palette: Palette, source: AgentTreeLogSource): string {
+  return source === 'session' ? palette.dim : palette[source]
 }
 
 export type TreeActions = {
@@ -86,16 +89,27 @@ export type TreeActions = {
   detail: (agentId: string) => void
   stop: (agentId: string) => void
   say: (agentId: string, text: string) => void
+  look: () => void
+  restyle: (row: LookRow, id: string) => void
+  restyleDefault: () => void
 }
 
-export type TreeLook = { frame: number; animate: boolean; now?: number; lang?: Lang; actions?: TreeActions }
+export type TreeLook = {
+  frame: number
+  animate: boolean
+  now?: number
+  lang?: Lang
+  actions?: TreeActions
+  appearance?: AgentTreeLook
+}
 
 export function pressKey(actions: TreeActions, key: string): boolean {
   const cut = key.indexOf(':')
   if (cut < 0) return false
   const kind = key.slice(0, cut)
   const rest = key.slice(cut + 1)
-  if (key === 'picker:close' || key === 'detail:close') actions.close()
+  if (key === 'picker:close' || key === 'detail:close' || key === 'look:close') actions.close()
+  else if (kind === 'look') return lookKey(actions, rest)
   else if (kind === 'pick') actions.pick(rest)
   else if (kind === 'choose') return chooseKey(actions, rest)
   else if (kind === 'detail') actions.detail(rest)
@@ -121,18 +135,17 @@ function chooseKey(actions: TreeActions, rest: string): boolean {
   return true
 }
 
-const STATUS_COLOR: Record<AgentTreeStatus, string> = {
-  running: COLOR.agent,
-  done: COLOR.done,
-  failed: COLOR.failed,
-  stopped: COLOR.dim,
-}
-
-const SOURCE_COLOR: Record<AgentTreeLogSource, string> = {
-  session: COLOR.dim,
-  main: COLOR.main,
-  agent: COLOR.agent,
-  advisor: COLOR.advisor,
+function lookKey(actions: TreeActions, rest: string): boolean {
+  if (rest === 'open') actions.look()
+  else if (rest === 'default') actions.restyleDefault()
+  else {
+    const cut = rest.indexOf(':')
+    const row = rest.slice(0, cut)
+    const id = rest.slice(cut + 1)
+    if (cut < 1 || !isLookChoice(row, id)) return false
+    actions.restyle(row, id)
+  }
+  return true
 }
 
 const GLYPH: Record<string, string> = {
@@ -265,19 +278,26 @@ export function connector(width: number, points: readonly number[], join: number
   return line
 }
 
-export function timelineBar(start: number, end: number, from: number, to: number, width = BAR_WIDTH): string {
-  if (!(to > from)) return '█'.repeat(width)
+export function timelineBar(
+  start: number,
+  end: number,
+  from: number,
+  to: number,
+  width = BAR_WIDTH,
+  cells: Glyphs['bar'] = STYLES.line.bar,
+): string {
+  if (!(to > from)) return cells.full.repeat(width)
   const scale = (t: number) => Math.round(((Math.min(Math.max(t, from), to) - from) / (to - from)) * width)
   const a = Math.min(width - 1, scale(start))
   const b = Math.max(a + 1, scale(end))
-  return '░'.repeat(a) + '█'.repeat(b - a) + '░'.repeat(width - b)
+  return cells.empty.repeat(a) + cells.full.repeat(b - a) + cells.empty.repeat(width - b)
 }
 
-export function shimmer(line: string, frame: number): string {
+export function shimmer(line: string, frame: number, cells: Glyphs['bar'] = STYLES.line.bar): string {
   const chars = [...line]
   if (chars.length === 0) return line
   const at = ((frame % chars.length) + chars.length) % chars.length
-  return chars.map((c, i) => (i === at ? (c === '█' ? '▓' : '▒') : c)).join('')
+  return chars.map((c, i) => (i === at ? (c === cells.full ? cells.litFull : cells.litEmpty) : c)).join('')
 }
 
 function marks(width: number, points: readonly number[], glyph: string): string {
@@ -292,9 +312,13 @@ function mostCommon(values: readonly (string | undefined)[]): string | undefined
   return best
 }
 
-function effortLine(effort: string | undefined): string {
+function effortCells(effort: string | undefined, glyphs: Glyphs): string {
+  return [...effortBar(effort)].map(cell => (cell === '▮' ? glyphs.effort[0] : glyphs.effort[1])).join('')
+}
+
+function effortLine(effort: string | undefined, glyphs: Glyphs): string {
   if (!effort) return ' '
-  const bar = effortBar(effort)
+  const bar = effortCells(effort, glyphs)
   return bar ? `${bar} ${effort}` : `Effort ${effort}`
 }
 
@@ -330,7 +354,23 @@ function callPlace(call: AgentTreeAdvisorCall, w: Words): string {
 
 export function pickerLines(name: string, width: number, lang: Lang = 'de'): number {
   const w = wordsFor(lang)
-  const parts = [w.pickerFor(name), `[ ${w.standard} ]`, ...MODEL_FAMILIES.map(family => `[ ${familyLabel(family)} ]`), '[ × ]']
+  return wrappedLines([w.pickerFor(name), `[ ${w.standard} ]`, ...MODEL_FAMILIES.map(family => `[ ${familyLabel(family)} ]`), '[ × ]'], width)
+}
+
+function lookLabelWidth(w: Words): number {
+  return Math.max(...LOOK_ROWS.map(row => w.lookRow[row].length))
+}
+
+export function lookLines(width: number, lang: Lang = 'de'): number {
+  const w = wordsFor(lang)
+  const label = ' '.repeat(lookLabelWidth(w))
+  const rows = LOOK_ROWS.map(row =>
+    wrappedLines([label, ...(LOOK_OPTIONS[row] as readonly string[]).map(id => `[ ${lookOptionLabel(w, row, id)} ]`)], width),
+  )
+  return 2 + rows.reduce((sum, n) => sum + n, 0) + wrappedLines([`[ ${w.lookReset} ]`, '[ × ]'], width)
+}
+
+function wrappedLines(parts: readonly string[], width: number): number {
   let lines = 1
   let used = 0
   for (const part of parts) {
@@ -359,7 +399,11 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const { Box, Text, Button, Input } = ui
   const lang: Lang = look.lang ?? 'de'
   const w = wordsFor(lang)
-  const spin = runningMark(look.frame, look.animate)
+  const appearance = look.appearance ?? DEFAULT_LOOK
+  const palette = PALETTES[appearance.colors]
+  const glyphs = STYLES[appearance.style]
+  const light = LIGHTS[appearance.light]
+  const spin = runningMark(look.frame, look.animate, glyphs.spinner)
   const choices = choicesOf(s)
   const actions = look.actions
   const now = look.now ?? Date.now()
@@ -390,7 +434,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     total: current.length,
     advisorRows: wide ? ADVISOR_BASE_ROWS + recentCalls.length : ADVISOR_COMPACT_ROWS,
     earlier: earlier > 0,
-    pickerRows: pickerTarget && actions ? 1 + pickerLines(pickerName, width, lang) : 0,
+    pickerRows: (pickerTarget && actions ? 1 + pickerLines(pickerName, width, lang) : 0) + (s.lookOpen && actions ? lookLines(width, lang) : 0),
     detailRows: detailNode && actions ? DETAIL_ROWS : 0,
     helpRows: tight ? 0 : 1,
   })
@@ -416,7 +460,50 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const spanFrom = current.length ? Math.min(...current.map(startOf)) : now
   const spanTo = current.length ? Math.max(...current.map(groupEnd)) : now
 
-  const bar = (g: AgentTreeGroup) => timelineBar(startOf(g), groupEnd(g), spanFrom, spanTo)
+  const bar = (g: AgentTreeGroup) => timelineBar(startOf(g), groupEnd(g), spanFrom, spanTo, BAR_WIDTH, glyphs.bar)
+
+  const barLine = (line: string, tint: string, lit: boolean) => {
+    if (!lit) return <Text color={tint}>{line}</Text>
+    if (!light) return <Text color={tint}>{shimmer(line, look.frame, glyphs.bar)}</Text>
+    const cells = [...line]
+    const at = ((look.frame % cells.length) + cells.length) % cells.length
+    return (
+      <Text color={tint}>
+        {cells.slice(0, at).join('')}
+        <Text color={light}>{cells[at] ?? ''}</Text>
+        {cells.slice(at + 1).join('')}
+      </Text>
+    )
+  }
+
+  const sideRows = Math.max(120, height ?? 0)
+
+  const frameProps = (color: string, strong = false) =>
+    glyphs.border
+      ? { borderStyle: strong ? (glyphs.strongBorder ?? glyphs.border) : glyphs.border, borderColor: color }
+      : { paddingX: 1, paddingY: 1 }
+
+  const frameParts = (key: string, boxWidth: number, color: string, strong = false) => {
+    if (glyphs.border) return null
+    const { top, bottom } = frameEdges(glyphs, boxWidth)
+    const column = (glyph: string) => Array.from({ length: sideRows }, () => glyph).join('\n')
+    const side = (edge: 'left' | 'right', glyph: string) =>
+      glyph.trim() ? (
+        <Box key={`${key}:${edge}`} position="absolute" top={1} bottom={1} left={edge === 'left' ? 0 : undefined} right={edge === 'right' ? 0 : undefined} width={1} overflow="hidden">
+          <Text color={color} bold={strong}>{column(glyph)}</Text>
+        </Box>
+      ) : null
+    return [
+      <Box key={`${key}:top`} position="absolute" top={0} left={0} width={boxWidth} height={1} overflow="hidden">
+        <Text color={color} bold={strong}>{top}</Text>
+      </Box>,
+      <Box key={`${key}:bottom`} position="absolute" bottom={0} left={0} width={boxWidth} height={1} overflow="hidden">
+        <Text color={color} bold={strong}>{bottom}</Text>
+      </Box>,
+      side('left', glyphs.frame.l),
+      side('right', glyphs.frame.r),
+    ]
+  }
 
   const typeButton = (n: AgentTreeNode, running: boolean) =>
     actions ? (
@@ -424,31 +511,32 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         <Button key={`detail:${n.id}`} plain label={clip(typeLabel(n.type), AGENT_WIDTH - 2)} onPress={() => actions.detail(n.id)} />
       </Box>
     ) : (
-      <Text bold size={SIZE.title} color={running ? COLOR.agent : undefined} wrap="truncate-end">
+      <Text bold size={SIZE.title} color={running ? palette.agent : undefined} wrap="truncate-end">
         {typeLabel(n.type)}
       </Text>
     )
 
   const agentBox = (g: AgentTreeGroup, marginLeft: number) => {
     if (g.kind === 'workflow') {
-      const color = g.running > 0 ? COLOR.agent : g.failed > 0 ? COLOR.failed : COLOR.dim
+      const color = g.running > 0 ? palette.agent : g.failed > 0 ? palette.failed : palette.dim
       return (
-        <Box key={`wf:${g.runId}`} width={AGENT_WIDTH} marginLeft={marginLeft} borderStyle="single" borderColor={color} flexDirection="column" alignItems="center">
-          <Text bold size={SIZE.title} color={g.running > 0 ? COLOR.agent : undefined} wrap="truncate-end">
+        <Box key={`wf:${g.runId}`} width={AGENT_WIDTH} marginLeft={marginLeft} {...frameProps(color)} flexDirection="column" alignItems="center">
+          <Text bold size={SIZE.title} color={g.running > 0 ? palette.agent : undefined} wrap="truncate-end">
             {`Workflow · ${g.size}`}
           </Text>
-          <Text size={SIZE.detail} color={COLOR.agent} wrap="truncate-end">
+          <Text size={SIZE.detail} color={palette.agent} wrap="truncate-end">
             {`${spin} ${w.running(g.running)}`}
           </Text>
-          <Text size={SIZE.detail} color={COLOR.done} wrap="truncate-end">{`${STATUS_MARK.done} ${g.done} ${w.done}`}</Text>
-          <Text size={SIZE.detail} color={g.failed ? COLOR.failed : COLOR.dim} wrap="truncate-end">
-            {`${STATUS_MARK.failed} ${g.failed} ${w.status.failed}`}
+          <Text size={SIZE.detail} color={palette.done} wrap="truncate-end">{`${glyphs.marks.done} ${g.done} ${w.done}`}</Text>
+          <Text size={SIZE.detail} color={g.failed ? palette.failed : palette.dim} wrap="truncate-end">
+            {`${glyphs.marks.failed} ${g.failed} ${w.status.failed}`}
           </Text>
           <Text size={SIZE.detail} wrap="truncate-end">{g.lastDescription || ' '}</Text>
-          <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
-            {g.stopped ? `${STATUS_MARK.stopped} ${g.stopped} ${w.status.stopped}` : ' '}
+          <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
+            {g.stopped ? `${glyphs.marks.stopped} ${g.stopped} ${w.status.stopped}` : ' '}
           </Text>
-          <Text color={color}>{g.running > 0 && look.animate ? shimmer(bar(g), look.frame) : bar(g)}</Text>
+          {barLine(bar(g), color, g.running > 0 && look.animate)}
+          {frameParts(`wf:${g.runId}`, AGENT_WIDTH, color)}
         </Box>
       )
     }
@@ -462,10 +550,11 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           ? `${spin} ${w.stopping}`
           : `${spin} ${w.status.running}${n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''}`
         : n.status === 'done' && n.endedAt !== undefined
-          ? `${STATUS_MARK.done} ${w.status.done} · ${fmtShortDuration(n.endedAt - n.startedAt)}`
-          : `${STATUS_MARK[n.status]} ${w.status[n.status]}`) + correctionMark(s, n.id)
+          ? `${glyphs.marks.done} ${w.status.done} · ${fmtShortDuration(n.endedAt - n.startedAt)}`
+          : `${statusMark(glyphs, n.status)} ${w.status[n.status]}`) + correctionMark(s, n.id)
+    const edge = running ? palette.agent : n.status === 'failed' ? palette.failed : palette.dim
     return (
-      <Box key={`ag:${n.id}`} width={AGENT_WIDTH} marginLeft={marginLeft} borderStyle="single" borderColor={running ? COLOR.agent : n.status === 'failed' ? COLOR.failed : COLOR.dim} flexDirection="column" alignItems="center">
+      <Box key={`ag:${n.id}`} width={AGENT_WIDTH} marginLeft={marginLeft} {...frameProps(edge)} flexDirection="column" alignItems="center">
         {typeButton(n, running)}
         {running && actions ? (
           <Box key={`pick-row:${n.id}`} width={AGENT_WIDTH - 2} flexDirection="row" justifyContent="center" columnGap={1}>
@@ -478,38 +567,39 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             {stopping ? null : <Button key={`halt:${n.id}`} plain label="■" onPress={() => actions.stop(n.id)} />}
           </Box>
         ) : (
-          <Text color={running ? undefined : COLOR.dim} wrap="truncate-end">
+          <Text color={running ? undefined : palette.dim} wrap="truncate-end">
             {modelLabel(n.model) || ' '}
           </Text>
         )}
-        <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
-          {nested ? `↳ ${w.under} ${nested}` : effortLine(n.effort)}
+        <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
+          {nested ? `↳ ${w.under} ${nested}` : effortLine(n.effort, glyphs)}
         </Text>
-        <Text size={SIZE.detail} color={running ? undefined : COLOR.dim} wrap="truncate-end">
+        <Text size={SIZE.detail} color={running ? undefined : palette.dim} wrap="truncate-end">
           {n.description || ' '}
         </Text>
-        <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
+        <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
           {toolText(n.lastTool, lang) ?? `${w.tools}: ${n.toolCount}`}
         </Text>
-        <Text size={SIZE.detail} color={STATUS_COLOR[n.status]} wrap="truncate-end">
+        <Text size={SIZE.detail} color={statusColor(palette, n.status)} wrap="truncate-end">
           {statusLine}
         </Text>
-        <Text color={STATUS_COLOR[n.status]}>{running && look.animate ? shimmer(bar(g), look.frame) : bar(g)}</Text>
+        {barLine(bar(g), statusColor(palette, n.status), running && look.animate)}
+        {frameParts(`ag:${n.id}`, AGENT_WIDTH, edge)}
       </Box>
     )
   }
 
   const agentRow = (g: AgentTreeGroup) => {
     if (g.kind === 'workflow') {
-      const color = g.running > 0 ? COLOR.agent : g.failed > 0 ? COLOR.failed : COLOR.dim
+      const color = g.running > 0 ? palette.agent : g.failed > 0 ? palette.failed : palette.dim
       const state =
         g.running > 0
           ? `${spin} ${w.running(g.running)}`
           : g.failed > 0
-            ? `${STATUS_MARK.failed} ${g.failed} ${w.status.failed}`
+            ? `${glyphs.marks.failed} ${g.failed} ${w.status.failed}`
             : g.done > 0
-              ? `${STATUS_MARK.done} ${w.done}`
-              : `${STATUS_MARK.stopped} ${w.status.stopped}`
+              ? `${glyphs.marks.done} ${w.done}`
+              : `${glyphs.marks.stopped} ${w.status.stopped}`
       return (
         <Box key={`wf:${g.runId}`} width={treeWidth}>
           <Text color={color} wrap="truncate-end">
@@ -521,14 +611,14 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     const n = g.node
     const indent = parentOf(s, n) ? '↳ ' : ''
     const size = n.status === 'running' && n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''
-    const text = `${indent}${n.status === 'running' ? spin : STATUS_MARK[n.status]} ${w.status[n.status]} · ${typeLabel(n.type)} · ${n.description}${size}${correctionMark(s, n.id)}`
+    const text = `${indent}${n.status === 'running' ? spin : statusMark(glyphs, n.status)} ${w.status[n.status]} · ${typeLabel(n.type)} · ${n.description}${size}${correctionMark(s, n.id)}`
     const halt = n.status === 'running' && actions && !(s.stopping ?? []).includes(n.id)
     return (
       <Box key={`ag:${n.id}`} width={treeWidth} flexDirection="row" columnGap={1}>
         {actions ? (
           <Button key={`detail:${n.id}`} plain label={clip(text, halt ? treeWidth - 2 : treeWidth)} onPress={() => actions.detail(n.id)} />
         ) : (
-          <Text color={STATUS_COLOR[n.status]} wrap="truncate-end">
+          <Text color={statusColor(palette, n.status)} wrap="truncate-end">
             {text}
           </Text>
         )}
@@ -539,11 +629,11 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const arrowRow = (key: string, boxWidth: number, box: unknown) => {
     const side = Math.max(0, (treeWidth - boxWidth) / 2)
-    const arrow = wide && side >= 3 ? `${'┄'.repeat(side - 2)}▶ ` : ' '
+    const arrow = wide && side >= 3 ? `${glyphs.rail.h.repeat(side - 2)}${glyphs.rail.head} ` : ' '
     return (
       <Box key={key} flexDirection="row" width={treeWidth}>
         <Box width={side} flexShrink={0} flexDirection="column" justifyContent="center" alignItems="flex-end">
-          <Text color={consulted ? COLOR.advisor : COLOR.dim}>{side > 0 ? arrow : ''}</Text>
+          <Text color={consulted ? palette.advisor : palette.dim}>{side > 0 ? arrow : ''}</Text>
         </Box>
         {box}
         <Box width={side} flexShrink={0} />
@@ -562,16 +652,16 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     <Box key="head" flexDirection="column" alignItems="center" width={width}>
       <Text bold size={SIZE.title} wrap="truncate-end">
         {'AGENT TREE'}
-        {mainModel ? <Text color={COLOR.main}>{` · ${mainModel.toUpperCase()} ${verb}`}</Text> : null}
-        {advisorModel && wide ? <Text color={COLOR.advisor}>{` · ${w.advisorOnCall(advisorModel.toUpperCase())}`}</Text> : null}
+        {mainModel ? <Text color={palette.main}>{` · ${mainModel.toUpperCase()} ${verb}`}</Text> : null}
+        {advisorModel && wide ? <Text color={palette.advisor}>{` · ${w.advisorOnCall(advisorModel.toUpperCase())}`}</Text> : null}
       </Text>
-      <Text color={COLOR.dim}>{'─'.repeat(Math.max(1, width - 2))}</Text>
+      <Text color={palette.dim}>{restyleLine('─', glyphs).repeat(Math.max(1, width - 2))}</Text>
       <Text size={SIZE.note} wrap="truncate-end">
-        <Text color={COLOR.main}>{'■'}</Text>
+        <Text color={palette.main}>{glyphs.marks.legend}</Text>
         {` ${w.main}${legendEffort && s.main.effort ? ` · ${s.main.effort}` : ''}   `}
-        <Text color={COLOR.agent}>{'■'}</Text>
+        <Text color={palette.agent}>{glyphs.marks.legend}</Text>
         {` ${w.agents}${legendEffort && agentEffort ? ` · ${agentEffort}` : ''}   `}
-        <Text color={COLOR.advisor}>{'■'}</Text>
+        <Text color={palette.advisor}>{glyphs.marks.legend}</Text>
         {` ${w.advisor}`}
       </Text>
     </Box>
@@ -580,55 +670,59 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const roundLine = s.main.turn ? `${w.round} ${s.main.turn}${s.main.costUsd !== undefined ? ` · ${w.cost(s.main.costUsd)}` : ''}` : w.noRound
 
   const mainBox = (
-    <Box key="main" width={mainWidth} flexShrink={0} borderStyle="single" borderColor={COLOR.main} flexDirection="column" alignItems="center">
-      <Text bold size={SIZE.title} color={COLOR.main} wrap="truncate-end">
+    <Box key="main" width={mainWidth} flexShrink={0} {...frameProps(palette.main)} flexDirection="column" alignItems="center">
+      <Text bold size={SIZE.title} color={palette.main} wrap="truncate-end">
         {[mainModel, w.main].filter(Boolean).join(' · ')}
       </Text>
       <Text wrap="truncate-end">{w.phase[phase]}</Text>
-      {s.main.effort && effortBar(s.main.effort) ? (
+      {s.main.effort && effortCells(s.main.effort, glyphs) ? (
         <Text size={SIZE.detail} wrap="truncate-end">
-          <Text color={COLOR.dim}>{'Effort '}</Text>
-          <Text color={COLOR.main}>{effortBar(s.main.effort)}</Text>
+          <Text color={palette.dim}>{'Effort '}</Text>
+          <Text color={palette.main}>{effortCells(s.main.effort, glyphs)}</Text>
           {` ${s.main.effort}`}
         </Text>
       ) : (
-        <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
+        <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
           {s.main.effort ? `Effort ${s.main.effort}` : w.effortNone}
         </Text>
       )}
-      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
         {contextLine(s, w)}
       </Text>
-      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
         {roundLine}
       </Text>
+      {frameParts('main', mainWidth, palette.main)}
     </Box>
   )
 
   const backBox = (
-    <Box key="back" width={backWidth} flexShrink={0} borderStyle={phase === 'reviewing' ? 'bold' : 'single'} borderColor={COLOR.main} flexDirection="column" alignItems="center">
-      <Text bold size={SIZE.title} color={COLOR.main} wrap="truncate-end">
+    <Box key="back" width={backWidth} flexShrink={0} {...frameProps(palette.main, phase === 'reviewing')} flexDirection="column" alignItems="center">
+      <Text bold size={SIZE.title} color={palette.main} wrap="truncate-end">
         {`${w.back}${s.main.effort ? ` · ${s.main.effort}` : ''}`}
       </Text>
       <Text wrap="truncate-end">{phase === 'reviewing' ? w.phase.reviewing : phase === 'delegating' ? w.waiting : w.ready}</Text>
-      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
         {`${w.answers(s.main.returned)} · ↑ ${fmtTokens(s.main.returnedTokens, w.decimal) || '0'}`}
       </Text>
+      {frameParts('back', backWidth, palette.main, phase === 'reviewing')}
     </Box>
   )
 
   const notes = [
     rest.length > 0 ? (
-      <Text key="hidden" size={SIZE.note} color={COLOR.dim} wrap="truncate-end">
+      <Text key="hidden" size={SIZE.note} color={palette.dim} wrap="truncate-end">
         {w.more(rest.length, hiddenRunning)}
       </Text>
     ) : null,
     earlier > 0 ? (
-      <Text key="earlier" size={SIZE.note} color={COLOR.dim} wrap="truncate-end">
+      <Text key="earlier" size={SIZE.note} color={palette.dim} wrap="truncate-end">
         {w.earlier(earlier)}
       </Text>
     ) : null,
   ]
+
+  const lookButton = actions ? <Button key="look:open" plain hotkey="a" label={`${w.look} ▾`} onPress={() => actions.look()} /> : null
 
   const pickNew = actions ? (
     <Button key="pick:new" plain hotkey="m" label={`${w.model}: ${familyOr(choices.newAgents, w.standard)} ▾`} onPress={() => actions.pick(NEW_AGENTS)} />
@@ -636,23 +730,30 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const delegationLabel = (
     <Box key="label" flexDirection="row">
-      <Text color={COLOR.agent} wrap="truncate-end">
-        {`● ${w.toAgents}${agentEffort ? ` · Effort ${agentEffort}` : ''}`}
+      <Text color={palette.agent} wrap="truncate-end">
+        {`${glyphs.node} ${w.toAgents}${agentEffort ? ` · Effort ${agentEffort}` : ''}`}
       </Text>
-      {pickNew ? <Text color={COLOR.dim}>{' · '}</Text> : null}
+      {pickNew ? <Text color={palette.dim}>{' · '}</Text> : null}
       {pickNew}
+      {lookButton ? <Text color={palette.dim}>{' · '}</Text> : null}
+      {lookButton}
     </Box>
   )
 
   const flowing = look.animate && phase === 'delegating'
   const returning = look.animate && (phase === 'reviewing' || (phase === 'delegating' && s.main.returned > 0))
-  const stemTop = flowing && look.frame % 2 === 0 ? '●' : '│'
-  const stemMid = flowing && look.frame % 2 === 1 ? '●' : '│'
-  const backMark = returning && look.frame % 2 === 0 ? '●' : '▼'
+  const vertical = restyleLine('│', glyphs)
+  const stemTop = flowing && look.frame % 2 === 0 ? glyphs.node : vertical
+  const stemMid = flowing && look.frame % 2 === 1 ? glyphs.node : vertical
+  const backMark = returning && look.frame % 2 === 0 ? glyphs.node : restyleLine('▼', glyphs)
 
   const flowText = (key: string, line: string, color: string) => (
-    <Text key={key} color={COLOR.dim}>
-      {line.split(/([•·]+)/).map((part, i) => (/^[•·]+$/.test(part) ? <Text key={`${key}:${i}`} color={color}>{part}</Text> : part))}
+    <Text key={key} color={palette.dim}>
+      {line
+        .split(/([•·]+)/)
+        .map((part, i) =>
+          /^[•·]+$/.test(part) ? <Text key={`${key}:${i}`} color={color}>{restyleLine(part, glyphs)}</Text> : restyleLine(part, glyphs),
+        )}
     </Text>
   )
 
@@ -665,9 +766,11 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     shown.length === 0 ? (
       <Box key="agents" flexDirection="column" alignItems="center">
         <Box key="none" flexDirection="row">
-          <Text size={SIZE.note} color={COLOR.dim}>{w.noAgents}</Text>
-          {pickNew ? <Text color={COLOR.dim}>{' · '}</Text> : null}
+          <Text size={SIZE.note} color={palette.dim}>{w.noAgents}</Text>
+          {pickNew ? <Text color={palette.dim}>{' · '}</Text> : null}
           {pickNew}
+          {lookButton ? <Text color={palette.dim}>{' · '}</Text> : null}
+          {lookButton}
         </Box>
         {notes}
       </Box>
@@ -677,16 +780,16 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         <Box key="rows" flexDirection="column" width={treeWidth}>
           {shown.map(agentRow)}
         </Box>
-        <Text color={COLOR.main}>{backMark}</Text>
+        <Text color={palette.main}>{backMark}</Text>
         {arrowRow('back-row', backWidth, backBox)}
         {notes}
       </Box>
     ) : (
       <Box key="agents" flexDirection="column" alignItems="center">
         {delegationLabel}
-        <Text color={stemMid === '●' ? COLOR.agent : COLOR.dim}>{stemMid}</Text>
-        {flowText('split', connector(frame, centersOf(boxRows[0] ?? []), join, 'split', flowing ? look.frame * 2 : undefined), COLOR.agent)}
-        <Text color={COLOR.agent}>{marks(frame, centersOf(boxRows[0] ?? []), '▼')}</Text>
+        <Text color={stemMid === glyphs.node ? palette.agent : palette.dim}>{stemMid}</Text>
+        {flowText('split', connector(frame, centersOf(boxRows[0] ?? []), join, 'split', flowing ? look.frame * 2 : undefined), palette.agent)}
+        <Text color={palette.agent}>{restyleLine(marks(frame, centersOf(boxRows[0] ?? []), '▼'), glyphs)}</Text>
         <Box key="boxes" flexDirection="column" alignItems="center" rowGap={1} width={frame}>
           {boxRows.map((row, r) => (
             <Box key={`row:${r}`} flexDirection="row" width={rowWidth(row.length)}>
@@ -694,8 +797,8 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             </Box>
           ))}
         </Box>
-        {flowText('merge', connector(frame, centersOf(boxRows.at(-1) ?? []), join, 'merge', returning ? look.frame * 2 : undefined), COLOR.main)}
-        <Text color={COLOR.main}>{backMark}</Text>
+        {flowText('merge', connector(frame, centersOf(boxRows.at(-1) ?? []), join, 'merge', returning ? look.frame * 2 : undefined), palette.main)}
+        <Text color={palette.main}>{backMark}</Text>
         {arrowRow('back-row', backWidth, backBox)}
         {notes}
       </Box>
@@ -704,7 +807,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const tree = (
     <Box key="tree" flexDirection="column" alignItems="center" width={treeWidth}>
       {arrowRow('main-row', mainWidth, mainBox)}
-      <Text color={stemTop === '●' ? COLOR.agent : COLOR.dim}>{stemTop}</Text>
+      <Text color={stemTop === glyphs.node ? palette.agent : palette.dim}>{stemTop}</Text>
       {delegation}
     </Box>
   )
@@ -713,20 +816,20 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const railLine = (key: string, text: string, plain = false) => (
     <Text key={key} size={SIZE.detail} wrap="truncate-end">
-      <Text color={COLOR.advisor} dimColor>{'┆ '}</Text>
-      <Text color={plain ? undefined : COLOR.dim}>{text || ' '}</Text>
+      <Text color={palette.advisor} dimColor>{`${glyphs.rail.v} `}</Text>
+      <Text color={plain ? undefined : palette.dim}>{text || ' '}</Text>
     </Text>
   )
 
   const advisorColumn = (
-    <Box key="advisor" width={ADVISOR_WIDTH} flexShrink={0} borderStyle="single" borderColor={COLOR.advisor} flexDirection="column">
-      <Text bold size={SIZE.title} color={COLOR.advisor} wrap="truncate-end">
+    <Box key="advisor" width={ADVISOR_WIDTH} flexShrink={0} {...frameProps(palette.advisor)} flexDirection="column">
+      <Text bold size={SIZE.title} color={palette.advisor} wrap="truncate-end">
         {w.advisorTitle}
       </Text>
-      <Text size={SIZE.detail} color={COLOR.advisor} wrap="truncate-end">
+      <Text size={SIZE.detail} color={palette.advisor} wrap="truncate-end">
         {advisorState}
       </Text>
-      <Text size={SIZE.detail} color={COLOR.advisor} wrap="truncate-end">
+      <Text size={SIZE.detail} color={palette.advisor} wrap="truncate-end">
         {advisorModel ? w.onCall : ' '}
       </Text>
       {railLine('reads-0', w.reads[0])}
@@ -739,7 +842,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       {railLine('gap-2', '')}
       {recentCalls.map(call => (
         <Box key={`adv:${call.id}`}>
-          <Text size={SIZE.detail} color={COLOR.advisor} wrap="truncate-end">
+          <Text size={SIZE.detail} color={palette.advisor} wrap="truncate-end">
             {`◆ ${clockTime(call.at)} ${callPlace(call, w)}`}
           </Text>
         </Box>
@@ -747,17 +850,19 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       <Box key="advisor-fill" flexGrow={1} />
       {railLine('writes-0', w.writes[0])}
       {railLine('writes-1', w.writes[1])}
+      {frameParts('advisor', ADVISOR_WIDTH, palette.advisor)}
     </Box>
   )
 
   const advisorCompact = (
-    <Box key="advisor" width={width} borderStyle="single" borderColor={COLOR.advisor} flexDirection="column">
-      <Text color={COLOR.advisor} wrap="truncate-end">
+    <Box key="advisor" width={width} {...frameProps(palette.advisor)} flexDirection="column">
+      <Text color={palette.advisor} wrap="truncate-end">
         {`${w.advisor} · ${advisorModel ? `${advisorModel} · ${w.onCall}` : w.off} · ${w.calls} ${s.advisor.total}`}
       </Text>
-      <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
         {lastCall ? `${w.fromMain} ${s.advisor.fromMain} · ${w.fromSub} ${s.advisor.fromAgents} · ${w.last} ${clockTime(lastCall.at)}` : w.notAsked}
       </Text>
+      {frameParts('advisor', width, palette.advisor)}
     </Box>
   )
 
@@ -765,7 +870,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const pickerRow =
     pickerTarget && actions ? (
       <Box key="picker" flexDirection="row" flexWrap="wrap" columnGap={1} width={width} marginTop={1}>
-        <Text color={COLOR.agent} wrap="truncate-end">
+        <Text color={palette.agent} wrap="truncate-end">
           {w.pickerFor(pickerName)}
         </Text>
         <Button key={`choose:${pickerTarget}:default`} hotkey="0" label={w.standard} variant={pickerCurrent === undefined ? 'primary' : undefined} onPress={() => actions.choose(pickerTarget, undefined)} />
@@ -789,10 +894,10 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const detailCorrection = detailNode ? s.corrections?.[detailNode.id] : undefined
   const detailBox =
     detail && detailNode && actions ? (
-      <Box key="detail" width={width} borderStyle="single" borderColor={COLOR.agent} flexDirection="column" marginTop={1}>
+      <Box key="detail" width={width} {...frameProps(palette.agent)} flexDirection="column" marginTop={1}>
         <Box key="detail-head" flexDirection="row" justifyContent="space-between">
           <Box key="detail-title" flexShrink={1}>
-            <Text bold size={SIZE.title} color={COLOR.agent} wrap="truncate-end">
+            <Text bold size={SIZE.title} color={palette.agent} wrap="truncate-end">
               {`${typeLabel(detailNode.type)} · ${detailNode.description}`}
             </Text>
           </Box>
@@ -800,7 +905,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             {detailRunning && !detailStopping ? (
               <Button key={`stop:${detailNode.id}`} hotkey="s" label={w.stop} onPress={() => actions.stop(detailNode.id)} />
             ) : null}
-            {detailStopping ? <Text color={COLOR.dim}>{w.stopping}</Text> : null}
+            {detailStopping ? <Text color={palette.dim}>{w.stopping}</Text> : null}
             <Button key="detail:close" plain hotkey="x" label={w.close} onPress={() => actions.close()} />
           </Box>
         </Box>
@@ -813,35 +918,36 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           onSubmit={value => actions.say(detailNode.id, value)}
         />
         {detailCorrection ? (
-          <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
+          <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
             {`${w.correctionLabel}: ${w.correction[detailCorrection.state]} · ${clockTime(detailCorrection.at)}${detailCorrection.text ? ` · „${detailCorrection.text}“` : ''}`}
           </Text>
         ) : null}
         <Text wrap="truncate-end">{`${w.task}: ${missing(detailNode.task, '?')}`}</Text>
-        <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
+        <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
           {`${w.tools}: ${detailNode.tools?.length ? detailNode.tools.map(t => toolText(t, lang)).join(' · ') : '0'}`}
         </Text>
         <Text wrap="truncate-end">{`${detailRunning ? w.latest : w.reply}: ${missing(detailNode.answer, w.noReply)}`}</Text>
-        <Text size={SIZE.detail} color={COLOR.dim} wrap="truncate-end">
+        <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
           {`${modelLabel(detailNode.model) || w.model} · ${w.status[detailNode.status]} · ${fmtShortDuration((detailNode.endedAt ?? now) - detailNode.startedAt)}`}
         </Text>
+        {frameParts('detail', width, palette.agent)}
       </Box>
     ) : null
 
   const rows = s.log.slice(-plan.logRows)
   const logBox = (
-    <Box key="log" width={width} borderStyle="single" borderColor={COLOR.dim} flexDirection="column" marginTop={1}>
-      <Text size={SIZE.note} color={COLOR.dim}>{w.log}</Text>
+    <Box key="log" width={width} {...frameProps(palette.dim)} flexDirection="column" marginTop={1}>
+      <Text size={SIZE.note} color={palette.dim}>{w.log}</Text>
       {rows.length === 0 ? (
-        <Text size={SIZE.note} color={COLOR.dim}>{w.logEmpty}</Text>
+        <Text size={SIZE.note} color={palette.dim}>{w.logEmpty}</Text>
       ) : (
         rows.map((row, i) => (
           <Box key={`log:${i}:${row.at}`} flexDirection="row">
             <Box width={10} flexShrink={0}>
-              <Text size={SIZE.detail} color={COLOR.dim}>{clockTime(row.at)}</Text>
+              <Text size={SIZE.detail} color={palette.dim}>{clockTime(row.at)}</Text>
             </Box>
             <Box width={9} flexShrink={0}>
-              <Text bold size={SIZE.detail} color={SOURCE_COLOR[row.source]}>
+              <Text bold size={SIZE.detail} color={sourceColor(palette, row.source)}>
                 {w.source[row.source]}
               </Text>
             </Box>
@@ -851,13 +957,44 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           </Box>
         ))
       )}
+      {frameParts('log', width, palette.dim)}
     </Box>
   )
+
+  const labelWidth = lookLabelWidth(w)
+  const lookRow =
+    s.lookOpen && actions ? (
+      <Box key="look" flexDirection="column" width={width} marginTop={1}>
+        <Text color={palette.agent} wrap="truncate-end">
+          {w.look}
+        </Text>
+        {LOOK_ROWS.map(row => (
+          <Box key={`look-row:${row}`} flexDirection="row" flexWrap="wrap" columnGap={1} width={width}>
+            <Box key={`look-label:${row}`} width={labelWidth} flexShrink={0}>
+              <Text color={palette.dim}>{w.lookRow[row]}</Text>
+            </Box>
+            {(LOOK_OPTIONS[row] as readonly string[]).map(id => (
+              <Button
+                key={`look:${row}:${id}`}
+                label={lookOptionLabel(w, row, id)}
+                variant={appearance[row] === id ? 'primary' : undefined}
+                onPress={() => actions.restyle(row, id)}
+              />
+            ))}
+          </Box>
+        ))}
+        <Box key="look-end" flexDirection="row" columnGap={1}>
+          <Button key="look:default" hotkey="0" label={w.lookReset} onPress={() => actions.restyleDefault()} />
+          <Button key="look:close" hotkey="x" label="×" onPress={() => actions.close()} />
+        </Box>
+      </Box>
+    ) : null
 
   return (
     <Box flexDirection="column" width={width}>
       {header}
       {pickerRow}
+      {lookRow}
       {wide ? (
         <Box key="body" flexDirection="row" columnGap={2} marginTop={1}>
           {advisorColumn}
@@ -872,7 +1009,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       {detailBox}
       {logBox}
       {tight ? null : (
-        <Text key="help" size={SIZE.note} color={COLOR.dim} wrap="truncate-end">
+        <Text key="help" size={SIZE.note} color={palette.dim} wrap="truncate-end">
           {w.help}
         </Text>
       )}

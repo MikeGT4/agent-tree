@@ -1,5 +1,7 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import type { AgentTreeCorrectionState, AgentTreeLogEntry, AgentTreeLogSource, AgentTreePhase, AgentTreeStatus } from '../types'
+import type { LookRow } from './looks.ts'
+import { LOOK_OPTIONS } from './looks.ts'
 import { familyLabel, fmtDuration, fmtTokens } from './model.ts'
 
 export type Lang = 'de' | 'en'
@@ -74,7 +76,14 @@ export type Words = {
   correctionLabel: string
   correction: Record<AgentTreeCorrectionState, string>
   toolWords: Record<string, string>
+  look: string
+  lookRow: Record<LookRow, string>
+  lookOption: { [R in LookRow]: Record<(typeof LOOK_OPTIONS)[R][number], string> }
+  lookReset: string
+  lookSet: (row: string, option: string) => string
+  lookUnknown: (name: string, row: string, options: string) => string
   commandDescription: string
+  commandHint: string
   opened: (count: number) => string
   closedText: string
   cleared: string
@@ -145,7 +154,7 @@ export const WORDS: Record<Lang, Words> = {
     source: { session: 'sitzung', main: 'haupt', agent: 'agent', advisor: 'berater' },
     pickerFor: name => `Modell für ${name}:`,
     newAgents: 'neue Unteragenten',
-    help: 'ctrl+x tab: Leiste · Tab, Pfeile: wandern · m: Modell · 0 bis 4: wählen · x: schließen · s: stoppen · Typ anklicken: Details · Esc: Textfeld verlassen',
+    help: 'ctrl+x tab: Leiste · Tab, Pfeile: wandern · m: Modell · a: Aussehen · 0 bis 4: wählen · x: schließen · s: stoppen · Typ anklicken: Details · Esc: Textfeld verlassen',
     task: 'Auftrag',
     reply: 'Antwort',
     loading: 'lädt …',
@@ -171,7 +180,18 @@ export const WORDS: Record<Lang, Words> = {
     correctionLabel: 'Korrektur',
     correction: { sent: 'geschickt', read: 'gelesen', failed: 'nicht zugestellt' },
     toolWords: { SubagentHandback: 'Antwort übergeben' },
-    commandDescription: 'Agentenbaum der Sitzung als Kästen (stop, clear)',
+    look: 'Aussehen',
+    lookRow: { style: 'Stil', colors: 'Farben', light: 'Licht' },
+    lookOption: {
+      style: { line: 'Linie', pixel: 'Pixel', braille: 'Braille', hud: 'HUD', ascii: 'ASCII' },
+      colors: { original: 'Original', light: 'Hell', retro: 'Retro', mono: 'Mono' },
+      light: { standard: 'Standard', white: 'Weiß', gold: 'Gold', cyan: 'Cyan', magenta: 'Magenta' },
+    },
+    lookReset: 'zurück auf Standard',
+    lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
+    lookUnknown: (name, row, options) => `Agent Tree: ${name ? `„${name}“ gibt es nicht. ` : ''}${row}: ${options}`,
+    commandDescription: 'Agentenbaum der Sitzung als Kästen (stop, clear, stil, farben, licht)',
+    commandHint: '[stop|clear|stil <name>|farben <name>|licht <name>]',
     opened: n => `Agent Tree geöffnet · ${n} ${n === 1 ? 'Agent' : 'Agenten'} bisher · /agent-tree stop schließt`,
     closedText: 'Agent Tree geschlossen',
     cleared: 'Agent Tree geleert',
@@ -241,7 +261,7 @@ export const WORDS: Record<Lang, Words> = {
     source: { session: 'session', main: 'main', agent: 'agent', advisor: 'advisor' },
     pickerFor: name => `Model for ${name}:`,
     newAgents: 'new sub-agents',
-    help: 'ctrl+x tab: pane · Tab, arrows: move · m: model · 0 to 4: choose · x: close · s: stop · click a type: details · Esc: leave the text field',
+    help: 'ctrl+x tab: pane · Tab, arrows: move · m: model · a: look · 0 to 4: choose · x: close · s: stop · click a type: details · Esc: leave the text field',
     task: 'Task',
     reply: 'Answer',
     loading: 'loading …',
@@ -267,7 +287,18 @@ export const WORDS: Record<Lang, Words> = {
     correctionLabel: 'Correction',
     correction: { sent: 'sent', read: 'read', failed: 'not delivered' },
     toolWords: { SubagentHandback: 'answer handed back' },
-    commandDescription: "The session's agent tree as boxes (stop, clear)",
+    look: 'Look',
+    lookRow: { style: 'Style', colors: 'Colors', light: 'Light' },
+    lookOption: {
+      style: { line: 'Line', pixel: 'Pixel', braille: 'Braille', hud: 'HUD', ascii: 'ASCII' },
+      colors: { original: 'Original', light: 'Light', retro: 'Retro', mono: 'Mono' },
+      light: { standard: 'Default', white: 'White', gold: 'Gold', cyan: 'Cyan', magenta: 'Magenta' },
+    },
+    lookReset: 'Reset',
+    lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
+    lookUnknown: (name, row, options) => `Agent Tree: ${name ? `"${name}" is not a choice. ` : ''}${row}: ${options}`,
+    commandDescription: "The session's agent tree as boxes (stop, clear, style, colors, light)",
+    commandHint: '[stop|clear|style <name>|colors <name>|light <name>]',
     opened: n => `Agent Tree opened · ${n} ${n === 1 ? 'agent' : 'agents'} so far · /agent-tree stop closes`,
     closedText: 'Agent Tree closed',
     cleared: 'Agent Tree cleared',
@@ -292,6 +323,33 @@ export const WORDS: Record<Lang, Words> = {
       correctionFailed: d => `Correction to ${d.type} not delivered`,
     },
   },
+}
+
+const LOOK_WORDS = new Map<string, LookRow>([
+  ['stil', 'style'],
+  ['style', 'style'],
+  ['farben', 'colors'],
+  ['farbe', 'colors'],
+  ['colors', 'colors'],
+  ['colours', 'colors'],
+  ['licht', 'light'],
+  ['light', 'light'],
+])
+
+const fold = (text: string) => text.toLowerCase().replaceAll('ß', 'ss')
+
+export function lookOptionLabel(w: Words, row: LookRow, id: string): string {
+  return (w.lookOption[row] as Record<string, string>)[id] ?? id
+}
+
+export function lookChoice(word: string, name: string): { row: LookRow; id?: string } | undefined {
+  const row = LOOK_WORDS.get(word.toLowerCase())
+  if (!row) return undefined
+  const wanted = fold(name)
+  const id = (LOOK_OPTIONS[row] as readonly string[]).find(option =>
+    [option, lookOptionLabel(WORDS.de, row, option), lookOptionLabel(WORDS.en, row, option)].some(label => fold(label) === wanted),
+  )
+  return id ? { row, id } : { row }
 }
 
 export function wordsFor(lang: string | undefined): Words {

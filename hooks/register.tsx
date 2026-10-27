@@ -2,7 +2,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { AgentTreeState } from '../types'
+import type { AgentTreeLook, AgentTreeState } from '../types'
+import { DEFAULT_LOOK, LOOK_OPTIONS, lookFrom } from './looks.ts'
 import {
   adopted,
   choicesOf,
@@ -18,6 +19,7 @@ import {
   detailLoaded,
   detailOpened,
   isStopping,
+  lookOpened,
   measured,
   pendingCorrection,
   phaseOf,
@@ -39,19 +41,22 @@ import {
 } from './model.ts'
 import { drawTree, inputKey, pressKey, statusText } from './view.tsx'
 import type { TreeActions } from './view.tsx'
-import { resolveLang, wordsFor } from './words.ts'
+import { lookChoice, lookOptionLabel, resolveLang, wordsFor } from './words.ts'
 import type { Lang } from './words.ts'
 
 const PANE = 'agent-tree'
 const COMMAND = 'agent-tree'
 const TITLE = 'Agent Tree'
 const SHAPE = 'agent-tree-1'
+const LOOK_SHAPE = 'agent-tree-look-1'
+const LOOK_KEY = 'look'
 const INLINE_ROWS = 40
 const FRAME_MS = 250
 const HANDBACK = 'SubagentHandback'
 
 const tree = atom({ plugin: 'agent-tree', key: 'tree' } as const, createTree(0), { shape: SHAPE })
 const frame = atom({ plugin: 'agent-tree', key: 'frame' } as const, 0)
+const appearance = atom({ plugin: 'agent-tree', key: 'look' } as const, DEFAULT_LOOK, { shape: LOOK_SHAPE })
 
 let ticker: Timer | undefined
 let animate = true
@@ -106,6 +111,12 @@ async function change($: EngineInterface, apply: (s: AgentTreeState) => AgentTre
   stopSentIds = new Set(next.stopSent ?? [])
   $.ui.status(statusText(next, lang))
   keepTicking($, next)
+  return next
+}
+
+async function restyle($: EngineInterface, apply: (look: AgentTreeLook) => AgentTreeLook): Promise<AgentTreeLook> {
+  const next = await update($, appearance, look => lookFrom(apply(look)))
+  await $.store.set(LOOK_KEY, next).catch(() => undefined)
   return next
 }
 
@@ -176,6 +187,9 @@ function actionsFor($: EngineInterface): TreeActions {
     detail: agentId => void openDetail($, agentId).catch(ignore),
     stop: agentId => void clock($).then(now => change($, t => stopRequested(t, agentId, now))).catch(ignore),
     say: (agentId, text) => void sayTo($, agentId, text).catch(ignore),
+    look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
+    restyle: (row, id) => void restyle($, look => ({ ...look, [row]: id })).catch(ignore),
+    restyleDefault: () => void restyle($, () => DEFAULT_LOOK).catch(ignore),
   }
 }
 
@@ -192,8 +206,10 @@ export const register: Register = (on, options) => {
       lang = resolveLang(options.language, await $.settings.read({ key: 'language' }).catch(() => undefined))
     }
     await $.command
-      .register({ name: COMMAND, description: wordsFor(lang).commandDescription, argumentHint: '[stop|clear]', immediate: true })
+      .register({ name: COMMAND, description: wordsFor(lang).commandDescription, argumentHint: wordsFor(lang).commandHint, immediate: true })
       .catch(() => undefined)
+    const saved = await $.store.get(LOOK_KEY).catch(() => undefined)
+    await update($, appearance, () => lookFrom(saved)).catch(() => undefined)
     const advisorModel = await $.settings.read({ key: 'advisorModel' }).catch(() => undefined)
     await change($, s => withAdvisorModel(s, typeof advisorModel === 'string' ? advisorModel : undefined)).catch(() => undefined)
     await catchUp($, await clock($), keep).catch(() => undefined)
@@ -207,6 +223,16 @@ export const register: Register = (on, options) => {
     if (arg === 'stop' || arg === 'close') {
       await $.ui.close({ id: PANE }).catch(() => undefined)
       return { text: w.closedText }
+    }
+    const [word = '', ...names] = arg.split(/\s+/)
+    const choice = lookChoice(word, names.join(' '))
+    if (choice) {
+      const row = choice.row
+      const id = choice.id
+      const options = (LOOK_OPTIONS[row] as readonly string[]).map(option => lookOptionLabel(w, row, option)).join(', ')
+      if (!id) return { text: w.lookUnknown(names.join(' '), w.lookRow[row], options) }
+      await restyle($, look => ({ ...look, [row]: id }))
+      return { text: w.lookSet(w.lookRow[row], lookOptionLabel(w, row, id)) }
     }
     const now = await clock($)
     if (arg === 'clear') {
@@ -381,6 +407,7 @@ export const register: Register = (on, options) => {
       now,
       lang,
       actions: actionsFor($),
+      appearance: await read($, appearance),
     })
   })
 
