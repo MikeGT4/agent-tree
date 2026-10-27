@@ -198,19 +198,21 @@ export type RowPlanInput = {
   pickerRows?: number
   detailRows?: number
   helpRows?: number
+  labelRows?: number
 }
 
 export type RowPlan = { shown: number; logRows: number }
 
 function treeRows(o: RowPlanInput, shown: number): number {
   const top = 7 + 1
+  const label = Math.max(1, o.labelRows ?? 1)
   const later = o.earlier ? 1 : 0
-  if (o.total === 0) return top + 1 + later
+  if (o.total === 0) return top + label + later
   const hidden = shown < o.total ? 1 : 0
   const back = 1 + 5 + hidden + later
-  if (o.asRows) return top + 1 + shown + back
+  if (o.asRows) return top + label + shown + back
   const boxRows = Math.ceil(shown / o.perRow)
-  return top + 4 + (10 * boxRows - 1) + 1 + back
+  return top + 3 + label + (10 * boxRows - 1) + 1 + back
 }
 
 function usedRows(o: RowPlanInput, shown: number, logRows: number): number {
@@ -387,11 +389,11 @@ export function lookLines(width: number, lang: Lang = 'de'): number {
   return 2 + rows.reduce((sum, n) => sum + n, 0) + wrappedLines([`[ ${w.lookReset} ]`, '[ × ]'], width)
 }
 
-function wrappedLines(parts: readonly string[], width: number): number {
+function wrappedLines(parts: readonly string[], width: number, gap = 1): number {
   let lines = 1
   let used = 0
   for (const part of parts) {
-    const need = used === 0 ? part.length : used + 1 + part.length
+    const need = used === 0 ? part.length : used + gap + part.length
     if (need > width && used > 0) {
       lines += 1
       used = part.length
@@ -442,6 +444,8 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const pickerNode = pickerTarget && pickerTarget !== NEW_AGENTS ? s.agents.find(n => n.id === pickerTarget) : undefined
   const pickerName = pickerTarget === NEW_AGENTS ? w.newAgents : pickerNode ? `${typeLabel(pickerNode.type)} · ${pickerNode.description}` : '?'
   const detailNode = detail ? s.agents.find(n => n.id === detail.agentId) : undefined
+  const agentEffort =
+    mostCommon(s.agents.filter(n => n.status === 'running').map(n => n.effort)) ?? mostCommon(s.agents.map(n => n.effort))
   const plan = planRows({
     height,
     wide,
@@ -454,6 +458,17 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     pickerRows: (pickerTarget && actions ? 1 + pickerLines(pickerName, width, lang) : 0) + (s.lookOpen && actions ? lookLines(width, lang) : 0),
     detailRows: detailNode && actions ? DETAIL_ROWS : 0,
     helpRows: tight ? 0 : 1,
+    labelRows: actions
+      ? wrappedLines(
+          [
+            current.length ? `${glyphs.node} ${w.toAgents}` : w.noAgents,
+            ` · m: ${w.subModel}: ${familyOr(choices.newAgents, w.standard)} ▾`,
+            ` · a: ${w.look} ▾`,
+          ],
+          treeWidth,
+          0,
+        )
+      : 1,
   })
   const detailAt = detail ? current.findIndex(g => g.kind === 'agent' && g.node.id === detail.agentId) : -1
   const shown =
@@ -464,8 +479,6 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const hiddenRunning = rest.filter(isRunning).length
   const mainModel = modelLabel(s.main.model)
   const advisorModel = modelLabel(s.advisor.model)
-  const agentEffort =
-    mostCommon(s.agents.filter(n => n.status === 'running').map(n => n.effort)) ?? mostCommon(s.agents.map(n => n.effort))
   const lastCall = s.advisor.calls.at(-1)
   const consulted = lastCall !== undefined && lastCall.at >= roundStart && roundStart > 0
   const legendEffort = width >= LEGEND_EFFORT_FROM
@@ -750,13 +763,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const lookButton = actions ? <Button key="look:open" plain hotkey="a" label={`${w.look} ▾`} onPress={() => actions.look()} /> : null
 
   const pickNew = actions ? (
-    <Button key="pick:new" plain hotkey="m" label={`${w.model}: ${familyOr(choices.newAgents, w.standard)} ▾`} onPress={() => actions.pick(NEW_AGENTS)} />
+    <Button key="pick:new" plain hotkey="m" label={`${w.subModel}: ${familyOr(choices.newAgents, w.standard)} ▾`} onPress={() => actions.pick(NEW_AGENTS)} />
   ) : null
 
   const delegationLabel = (
-    <Box key="label" flexDirection="row">
+    <Box key="label" flexDirection="row" flexWrap="wrap">
       <Text color={palette.agent} wrap="truncate-end">
-        {`${glyphs.node} ${w.toAgents}${agentEffort ? ` · Effort ${agentEffort}` : ''}`}
+        {`${glyphs.node} ${w.toAgents}`}
       </Text>
       {pickNew ? <Text color={palette.dim}>{' · '}</Text> : null}
       {pickNew}
@@ -790,7 +803,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const delegation =
     shown.length === 0 ? (
       <Box key="agents" flexDirection="column" alignItems="center">
-        <Box key="none" flexDirection="row">
+        <Box key="none" flexDirection="row" flexWrap="wrap">
           <Text size={SIZE.note} color={palette.dim}>{w.noAgents}</Text>
           {pickNew ? <Text color={palette.dim}>{' · '}</Text> : null}
           {pickNew}

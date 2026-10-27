@@ -302,6 +302,13 @@ describe('Datenmodell', () => {
     expect(planRows({ ...tight, height: 30, total: 0 })).toEqual({ shown: 0, logRows: 6 })
   })
 
+  test('eine umbrochene Zeile „an Unteragenten“ kostet das Protokoll eine Zeile', () => {
+    const wide = { wide: true, tight: false, asRows: false, perRow: 3, advisorRows: 15, earlier: false, height: 40, total: 3 }
+    const one = planRows(wide)
+    const two = planRows({ ...wide, labelRows: 2 })
+    expect([two.shown, two.logRows]).toEqual([one.shown, one.logRows - 1])
+  })
+
   test('die Auswahlzeile zählt ihre Umbrüche', () => {
     expect([pickerLines('neue Unteragenten', 120), pickerLines('neue Unteragenten', 59), pickerLines('neue Unteragenten', 30)]).toEqual([1, 2, 4])
   })

@@ -24,6 +24,11 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   const settings: Record<string, unknown> = {}
   const commands: { command: string; args: string }[] = []
   const fills: string[] = []
+  const focused: string[] = []
+  on('ui.focus', (_, e) => {
+    focused.push(JSON.stringify(e))
+    return {} as never
+  })
   on('settings.read', () => ({ value: { ...settings } }) as never)
   on('command.run', (_, e) => {
     if (refuse.command) throw new Error('refused')
@@ -88,7 +93,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
         : {}),
     }
   })
-  return { status, spawnModels, stepModels, appended, sent, storeSets, settings, commands, fills }
+  return { status, spawnModels, stepModels, appended, sent, storeSets, settings, commands, fills, focused }
 }
 
 async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[] } = {}) {
@@ -313,7 +318,7 @@ describe('Agent Tree', () => {
     for (let i = 1; i <= 3; i++) {
       await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: `sub-${i}`, reason: 'answer' })
     }
-    const ui = await $.ui.mount(pane(90, 40))
+    const ui = await $.ui.mount(pane(90, 41))
     expect(await screen(ui)).toMatch(/Prüfung 6/)
     expect(await screen(ui)).not.toMatch(/Prüfung 1/)
     expect(await screen(ui)).toMatch(/\+3 weitere beendet/)
@@ -389,7 +394,7 @@ describe('Agent Tree', () => {
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))
     const text = await screen(ui)
-    for (const word of [/Main session/, /Sub-agents/, /Session log/, /Calls 1/, /Model: Default ▾/, /to sub-agents/]) expect(text).toMatch(word)
+    for (const word of [/Main session/, /Sub-agents/, /Session log/, /Calls 1/, /Sub-agent model: Default ▾/, /to sub-agents/]) expect(text).toMatch(word)
     expect(text).not.toMatch(/Hauptsitzung|Unteragenten|Sitzungsprotokoll|Aufrufe/)
     expect(seen.status.at(-1)).toBe('Sub-agents [1/1] · advisor [1×]')
     await ui.unmount()
@@ -838,6 +843,24 @@ describe('Sichtbarkeit beim Korrigieren', () => {
     await ui.redraw()
     expect(await screen(ui)).toMatch(/weitere/)
     expect(await ui.find({ key: 'ag:sub-3' })).toBeDefined()
+    await ui.unmount()
+  })
+})
+
+describe('Modellwahl, Zeile und Fokus', () => {
+  test('die Modellwahl heißt Unteragenten-Modell', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'pick:new' }))?.props.label).toBe('Unteragenten-Modell: Standard ▾')
+    await ui.unmount()
+  })
+
+  test('die Zeile „an Unteragenten“ bricht bei schmaler Leiste um', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(62))
+    expect(await screen(ui)).toMatch(/"key":"label","flexDirection":"row","flexWrap":"wrap"/)
     await ui.unmount()
   })
 })

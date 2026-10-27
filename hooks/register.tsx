@@ -140,8 +140,17 @@ function summarize(rows: unknown): Found {
   return { task, answer }
 }
 
+function sayKey(s: AgentTreeState, agentId: string): string {
+  return `say:${agentId}:${s.corrections?.[agentId]?.count ?? 0}`
+}
+
+function focusField($: EngineInterface, s: AgentTreeState, agentId: string): void {
+  if (s.detail?.agentId === agentId) void $.ui.focus({ requestId: PANE, key: sayKey(s, agentId) }).catch(() => undefined)
+}
+
 async function openDetail($: EngineInterface, agentId: string): Promise<void> {
   const s = await change($, t => detailOpened(t, agentId))
+  focusField($, s, agentId)
   if (s.detail?.agentId !== agentId || s.detail.state !== 'loading') return
   const rows = await $.session.messages({ agentId }).catch(() => undefined)
   await change($, t => detailLoaded(t, agentId, summarize(rows)))
@@ -180,6 +189,7 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
       return
     }
   }
+  focusField($, await read($, tree), agentId)
   await appendRow($, w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text))
 }
 

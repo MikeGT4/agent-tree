@@ -76,6 +76,7 @@ export type Words = {
   correctionLabel: string
   correction: Record<AgentTreeCorrectionState, string>
   toolWords: Record<string, string>
+  subModel: string
   advisorOn: string
   advisorOff: string
   look: string
@@ -185,6 +186,7 @@ export const WORDS: Record<Lang, Words> = {
     correctionLabel: 'Korrektur',
     correction: { sent: 'geschickt', read: 'gelesen', failed: 'nicht zugestellt' },
     toolWords: { SubagentHandback: 'Antwort übergeben' },
+    subModel: 'Unteragenten-Modell',
     advisorOn: 'einschalten',
     advisorOff: 'ausschalten',
     look: 'Aussehen',
@@ -296,6 +298,7 @@ export const WORDS: Record<Lang, Words> = {
     correctionLabel: 'Correction',
     correction: { sent: 'sent', read: 'read', failed: 'not delivered' },
     toolWords: { SubagentHandback: 'answer handed back' },
+    subModel: 'Sub-agent model',
     advisorOn: 'turn on',
     advisorOff: 'turn off',
     look: 'Look',
