@@ -99,6 +99,7 @@ export type AgentTreeChoices = {
   newEffort?: string
   agents: Record<string, string>
   efforts?: Record<string, string>
+  restored?: boolean
   picker?: string
 }
 

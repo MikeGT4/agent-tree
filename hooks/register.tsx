@@ -10,6 +10,7 @@ import type { LookRow } from './looks.ts'
 import {
   NEW_AGENTS,
   adopted,
+  carriedChoices,
   choicesOf,
   chosen,
   closed,
@@ -26,6 +27,7 @@ import {
   detailOpened,
   effortChosen,
   effortFrom,
+  effortLabel,
   familyFrom,
   isStopping,
   lookOpened,
@@ -33,6 +35,7 @@ import {
   pendingCorrection,
   phaseOf,
   pickerOpened,
+  restoredChoices,
   spawned,
   stepEffortFor,
   stepModelFor,
@@ -48,12 +51,10 @@ import {
   typeLabel,
   wasStopSent,
   withAdvisorModel,
-  withNewAgents,
-  withNewEffort,
 } from './model.ts'
 import { drawTree, inputKey, pressKey, statusText } from './view.tsx'
 import type { TreeActions } from './view.tsx'
-import { lookChoice, lookOptionLabel, resolveLang, wordsFor } from './words.ts'
+import { familyOr, lookChoice, lookOptionLabel, resolveLang, wordsFor } from './words.ts'
 import type { Lang } from './words.ts'
 
 const PANE = 'agent-tree'
@@ -167,18 +168,13 @@ async function restoreLook($: EngineInterface): Promise<void> {
   if (look) await update($, appearance, () => lookFrom(look.value))
 }
 
-async function restoreChoices($: EngineInterface): Promise<void> {
+async function restoreChoices($: EngineInterface, interactive: boolean): Promise<boolean> {
   await restoreLook($)
-  const model = await $.store.get(MODEL_KEY).then(
-    value => ({ value }),
-    () => undefined,
-  )
-  if (model) await change($, s => withNewAgents(s, familyFrom(model.value)))
-  const effort = await $.store.get(EFFORT_KEY).then(
-    value => ({ value }),
-    () => undefined,
-  )
-  if (effort) await change($, s => withNewEffort(s, effortFrom(effort.value)))
+  if (!interactive || choicesOf(await read($, tree)).restored) return false
+  const model = await $.store.get(MODEL_KEY).catch(() => undefined)
+  const effort = await $.store.get(EFFORT_KEY).catch(() => undefined)
+  await change($, s => restoredChoices(s, familyFrom(model), effortFrom(effort)))
+  return true
 }
 
 async function chooseModel($: EngineInterface, target: string, family: string | undefined): Promise<void> {
@@ -389,7 +385,12 @@ export const register: Register = (on, options) => {
     await $.command
       .register({ name: COMMAND, description: wordsFor(lang).commandDescription, argumentHint: wordsFor(lang).commandHint, immediate: true })
       .catch(() => undefined)
-    await restoreChoices($).catch(() => undefined)
+    const restored = await restoreChoices($, e.isInteractive !== false).catch(() => false)
+    const saved = restored ? choicesOf(await read($, tree)) : undefined
+    if (saved && (saved.newAgents || saved.newEffort)) {
+      const w = wordsFor(lang)
+      $.ui.toast(w.savedChoice(`${familyOr(saved.newAgents, w.standard)}${saved.newEffort ? ` · ${effortLabel(saved.newEffort)}` : ''}`))
+    }
     const listed = await $.command.list().catch(() => undefined)
     advisorCommand = !listed || listed.some(c => c.name === 'advisor')
     await readAdvisor($).catch(() => undefined)
@@ -425,7 +426,7 @@ export const register: Register = (on, options) => {
     }
     const now = await clock($)
     if (arg === 'clear') {
-      await change($, s => withAdvisorModel(createTree(now), s.advisor.model))
+      await change($, s => carriedChoices(s, withAdvisorModel(createTree(now), s.advisor.model)))
       await update($, unreadTexts, () => ({}))
       return { text: w.cleared }
     }
@@ -587,7 +588,7 @@ export const register: Register = (on, options) => {
     const reset =
       e.reason === 'clear' || e.reason === 'resume'
         ? clock($)
-            .then(now => change($, s => withAdvisorModel(createTree(now), s.advisor.model)))
+            .then(now => change($, s => carriedChoices(s, withAdvisorModel(createTree(now), s.advisor.model))))
             .then(() => update($, unreadTexts, () => ({})))
             .catch(() => undefined)
         : Promise.resolve()

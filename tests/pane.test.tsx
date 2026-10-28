@@ -573,6 +573,73 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
+  test('nach /clear bleiben gespeichertes Modell und Denkstufe', de, async ($, on) => {
+    const seen = engine(on, [], {}, { model: 'sonnet', effort: 'low' })
+    await oneAgentWithAdvisor($)
+    await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'pick:new' }))?.props.label).toBe('Unteragenten-Modell: Sonnet · Low ▾')
+    await ui.unmount()
+    await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' } as never)
+    expect(seen.spawnModels.at(-1)).toBe('sonnet')
+  })
+
+  test('nach /agent-tree clear bleibt die Wahl der Sitzung', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'choose:new:opus' })
+    await ui.unmount()
+    await $.command.run({ command: 'agent-tree', args: 'clear', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+    await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' } as never)
+    expect(seen.spawnModels.at(-1)).toBe('opus')
+  })
+
+  test('ein erneuter Start des Moduls überschreibt die Wahl der Sitzung nicht', de, async ($, on) => {
+    const seen = engine(on, [], {}, { model: 'sonnet' })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'choose:new:opus' })
+    await ui.unmount()
+    seen.stored.model = 'haiku'
+    await startSession($)
+    await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' } as never)
+    expect(seen.spawnModels.at(-1)).toBe('opus')
+  })
+
+  test('Sitzungen ohne Bedienung übernehmen keine gespeicherte Wahl', de, async ($, on) => {
+    const seen = engine(on, [], {}, { model: 'sonnet', effort: 'low' })
+    await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
+    await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' } as never)
+    expect(seen.spawnModels.at(-1)).toBeUndefined()
+    expect(seen.toasts.join(' ')).not.toMatch(/Unteragenten laufen/)
+  })
+
+  test('eine gespeicherte Wahl abseits von Standard meldet sich beim Start', de, async ($, on) => {
+    const seen = engine(on, [], {}, { model: 'sonnet', effort: 'low' })
+    await startSession($)
+    expect(seen.toasts.join(' ')).toMatch(/Unteragenten laufen auf Sonnet · Low/)
+  })
+
+  test('mit Standard meldet sich beim Start nichts', de, async ($, on) => {
+    const seen = engine(on, [], {}, { model: null, effort: null })
+    await startSession($)
+    expect(seen.toasts.join(' ')).not.toMatch(/Unteragenten laufen/)
+  })
+
+  test('das Eingabefeld im Detailkasten ist beschriftet', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'detail:sub-1' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Nachricht:/)
+    expect(await screen(ui)).toMatch(/hier klicken und tippen/)
+    await ui.unmount()
+  })
+
   test('englische Beschriftung, wenn die Sprache Englisch ist', { options: { language: 'en' } }, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)

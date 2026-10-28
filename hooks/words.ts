@@ -70,6 +70,8 @@ export type Words = {
   stopping: string
   stopAnswer: (tools: number) => string
   sayPlaceholder: string
+  sayLabel: string
+  savedChoice: (label: string) => string
   send: string
   correctionFrame: (text: string, tool: string) => string
   mainNote: (agent: string, text: string) => string
@@ -187,7 +189,9 @@ export const WORDS: Record<Lang, Words> = {
     stop: 'stoppen',
     stopping: 'hält an …',
     stopAnswer: n => `Im Agent Tree vom Nutzer gestoppt, nach ${n} ${n === 1 ? 'Werkzeugaufruf' : 'Werkzeugaufrufen'}.`,
-    sayPlaceholder: 'Nachricht an diesen Agenten … · Esc: zurück',
+    sayPlaceholder: 'hier klicken und tippen, Enter sendet · Esc: zurück',
+    sayLabel: 'Nachricht:',
+    savedChoice: label => `Agent Tree: Unteragenten laufen auf ${label}, deine gespeicherte Wahl (m in der Leiste ändert sie)`,
     send: 'senden',
     correctionFrame: (text, tool) =>
       `Nachricht des Nutzers über Agent Tree: ${text}\n\nSie gilt ab jetzt für deinen Auftrag. Berücksichtige sie bei der weiteren Arbeit und in deinem Bericht über ${tool}.`,
@@ -311,7 +315,9 @@ export const WORDS: Record<Lang, Words> = {
     stop: 'stop',
     stopping: 'stopping …',
     stopAnswer: n => `Stopped by the user in Agent Tree after ${n} tool ${n === 1 ? 'call' : 'calls'}.`,
-    sayPlaceholder: 'Message to this agent … · Esc: back',
+    sayPlaceholder: 'click here and type, Enter sends · Esc: back',
+    sayLabel: 'Message:',
+    savedChoice: label => `Agent Tree: sub-agents run on ${label}, your saved choice (m in the pane changes it)`,
     send: 'send',
     correctionFrame: (text, tool) =>
       `Message from the user via Agent Tree: ${text}\n\nIt applies to your task from now on. Take it into account in your remaining work and in your report via ${tool}.`,

@@ -225,6 +225,15 @@ export function withNewEffort(s: AgentTreeState, effort: string | undefined): Ag
   return current.newEffort === effort ? s : { ...s, choices: { ...current, newEffort: effort } }
 }
 
+export function restoredChoices(s: AgentTreeState, family: string | undefined, effort: string | undefined): AgentTreeState {
+  return { ...s, choices: { ...choicesOf(s), newAgents: family, newEffort: effort, restored: true } }
+}
+
+export function carriedChoices(from: AgentTreeState, to: AgentTreeState): AgentTreeState {
+  const { newAgents, newEffort, restored } = choicesOf(from)
+  return { ...to, choices: { ...choicesOf(to), newAgents, newEffort, restored } }
+}
+
 export function effortChosen(s: AgentTreeState, target: string, effort: string | undefined, now: number): AgentTreeState {
   const current = choicesOf(s)
   const efforts = { ...(current.efforts ?? {}) }
