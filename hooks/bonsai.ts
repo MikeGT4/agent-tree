@@ -35,7 +35,7 @@ export type Plant = { dots: Dot[]; branches: number }
 type Point = { x: number; y: number }
 type Curve = (t: number) => Point
 
-const PART_RANK: Record<Part, number> = { pot: 1, leaf: 2, wood: 3 }
+const PART_RANK: Record<Part, number> = { leaf: 1, wood: 2, pot: 3 }
 const BAYER = [
   [0, 8, 2, 10],
   [12, 4, 14, 6],
@@ -97,8 +97,7 @@ function sketch(wide: number, high: number) {
     }
     const key = y * wide + x
     const old = cells.get(key)
-    if (!old) cells.set(key, { x, y, at, part })
-    else cells.set(key, { x, y, at: Math.min(old.at, at), part: PART_RANK[part] > PART_RANK[old.part] ? part : old.part })
+    if (!old || PART_RANK[part] > PART_RANK[old.part] || (part === old.part && at < old.at)) cells.set(key, { x, y, at, part })
   }
   const stroke = (curve: Curve, from: number, to: number, at: number, duration: number) => {
     const steps = Math.max(2, Math.ceil(curveLength(curve) * 2))
@@ -213,4 +212,24 @@ export function bonsaiPlant(seed: number, dotsWide: number, dotsHigh: number, fo
     dots: dots.map(d => (latest > 1 ? { ...d, at: d.at / latest } : d)).sort((a, b) => a.at - b.at || a.y - b.y || a.x - b.x),
     branches: grown.branches,
   }
+}
+
+export const INTRO_MS = 2000
+export const GROW_FROM = 50
+export const GROW_TO = 1050
+export const HOLD_TO = 1700
+export type IntroPhase = 'grow' | 'hold' | 'handoff' | 'done'
+
+export function introPhase(ms: number): IntroPhase {
+  return ms >= INTRO_MS ? 'done' : ms >= HOLD_TO ? 'handoff' : ms >= GROW_TO ? 'hold' : 'grow'
+}
+
+export function visibleDots(dots: readonly Dot[], ms: number): Dot[] {
+  const phase = introPhase(ms)
+  if (phase === 'done') return []
+  const limit =
+    phase === 'handoff'
+      ? 1 - ((ms - HOLD_TO) / (INTRO_MS - HOLD_TO)) ** 2
+      : Math.min(1, Math.max(0, (ms - GROW_FROM) / (GROW_TO - GROW_FROM)))
+  return dots.filter(d => d.at <= limit)
 }

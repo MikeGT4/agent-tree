@@ -1,7 +1,7 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import { describe, expect, test } from 'claude-code/testing'
 
-import { BONSAI_FORMS, bonsaiPlant, brailleRows } from '../hooks/bonsai.ts'
+import { BONSAI_FORMS, bonsaiPlant, brailleRows, introPhase, visibleDots } from '../hooks/bonsai.ts'
 
 describe('Bonsai', () => {
   test('Braille-Raster: Punkte auf Zeichen', () => {
@@ -64,5 +64,36 @@ describe('Bonsai', () => {
       expect(new Set(dots.map(d => `${d.x},${d.y}`)).size).toBe(dots.length)
       expect(dots.every(d => d.at >= 0 && d.at <= 1)).toBe(true)
     }
+  })
+  test('Phasen nach der Zeit', () => {
+    expect([0, 1100, 1700, 2000].map(introPhase)).toEqual(['grow', 'hold', 'handoff', 'done'])
+  })
+
+  test('der Topf steht ab dem ersten Bild, die erste Bewegung kommt vor 166 ms', () => {
+    const { dots } = bonsaiPlant(7, 162, 88)
+    const first = visibleDots(dots, 0)
+    expect(first.every(d => d.part === 'pot')).toBe(true)
+    expect(first.length).toBe(dots.filter(d => d.part === 'pot').length)
+    expect(visibleDots(dots, 150).length).toBeGreaterThan(first.length)
+  })
+
+  test('Wachstum nimmt nichts weg, bei 1100 ms steht die ganze Pflanze', () => {
+    const { dots } = bonsaiPlant(7, 162, 88)
+    let shown = new Set<string>()
+    for (let ms = 0; ms <= 1100; ms += 50) {
+      const next = new Set(visibleDots(dots, ms).map(d => `${d.x},${d.y}`))
+      expect([...shown].every(key => next.has(key))).toBe(true)
+      shown = next
+    }
+    expect(shown.size).toBe(dots.length)
+  })
+
+  test('die Übergabe leert das Bild, der Topf geht zuletzt', () => {
+    const { dots } = bonsaiPlant(7, 162, 88)
+    expect(visibleDots(dots, 1700).length).toBe(dots.length)
+    const late = visibleDots(dots, 1999)
+    expect(late.length).toBeLessThan(dots.length)
+    expect(late.every(d => d.part === 'pot')).toBe(true)
+    expect(visibleDots(dots, 2000)).toEqual([])
   })
 })
