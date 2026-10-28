@@ -7,7 +7,7 @@
     "name": "Mike Pollow, Digitalroots"
   },
   "homepage": "https://github.com/MikeGT4/agent-tree",
-  "icon": "./.claude-plugin/icon.png",
+  "icon": "./icon.png",
   "documentationUrl": "https://github.com/MikeGT4/agent-tree/blob/main/docs/GUIDE.md",
   "supportUrl": "https://github.com/MikeGT4/agent-tree/issues",
   "privacyPolicyUrl": "https://github.com/MikeGT4/agent-tree/blob/main/PRIVACY.md",
