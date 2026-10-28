@@ -2,7 +2,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { BONSAI_FORMS, bonsaiPlant, brailleRows, introPhase, visibleDots } from '../hooks/bonsai.ts'
-import { introLines, introRows } from '../hooks/intro.tsx'
+import { introLines, introRows } from '../hooks/intro-model.ts'
 import { WORDS } from '../hooks/words.ts'
 
 describe('Bonsai', () => {
