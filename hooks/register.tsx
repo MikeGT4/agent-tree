@@ -152,7 +152,7 @@ async function maybeStartIntro($: EngineInterface, interactive: boolean): Promis
   if (!introForm || !animate || !interactive) return
   if ((await $.settings.read({ key: 'prefersReducedMotion' }).catch(() => undefined)) === true) return
   if ((await read($, tree)).agents.length > 0) return
-  const model = await $.settings.read({ key: 'model' }).catch(() => undefined)
+  const model = await $.session.model().catch(() => undefined)
   introModelSetting = typeof model === 'string' && model ? model : undefined
   startIntro($, await clock($))
 }
