@@ -3,7 +3,10 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentTreeState } from '../types'
-import { DEFAULT_LOOK, LOOK_OPTIONS, lookFrom } from './looks.ts'
+import { BONSAI_FORMS, INTRO_MS } from './bonsai.ts'
+import type { BonsaiForm } from './bonsai.ts'
+import { drawIntro, introInfo } from './intro.tsx'
+import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES, lightColor, lookFrom } from './looks.ts'
 import { checkForUpdate, UPDATE_KEY } from './update.ts'
 import type { UpdateHost } from './update.ts'
 import type { LookRow } from './looks.ts'
@@ -74,10 +77,18 @@ const HANDBACK = 'SubagentHandback'
 
 const tree = atom({ plugin: 'agent-tree', key: 'tree' } as const, createTree(0), { shape: SHAPE })
 const frame = atom({ plugin: 'agent-tree', key: 'frame' } as const, 0)
+const introDone = atom({ plugin: 'agent-tree', key: 'intro' } as const, false)
+const INTRO_FRAME_MS = 40
+const INTRO_WAIT_MS = 5000
 const appearance = atom({ plugin: 'agent-tree', key: 'look' } as const, DEFAULT_LOOK, { shape: LOOK_SHAPE })
 const unreadTexts = atom({ plugin: 'agent-tree', key: 'unread' } as const, {} as Record<string, string[]>)
 
 let ticker: Timer | undefined
+let introForm: BonsaiForm | undefined
+let introTicker: Timer | undefined
+let introOpenedAt: number | undefined
+let introStartedAt: number | undefined
+let introSeed = 1
 let animate = true
 let lang: Lang = 'en'
 let stoppingIds = new Set<string>()
@@ -103,6 +114,33 @@ function keepTicking($: EngineInterface, s: AgentTreeState): void {
   }
   ticker?.cancel()
   ticker = undefined
+}
+
+function startIntro($: EngineInterface, now: number): void {
+  if (introTicker) return
+  introOpenedAt = now
+  introStartedAt = undefined
+  introSeed = Math.floor(now) % 2147483647 || 1
+  try {
+    introTicker = $.clock.every(INTRO_FRAME_MS, () => {
+      void introTick($).catch(() => undefined)
+    })
+  } catch {
+    introTicker = undefined
+  }
+}
+
+async function introTick($: EngineInterface): Promise<void> {
+  const now = await clock($)
+  const over = introStartedAt === undefined ? now - (introOpenedAt ?? now) >= INTRO_WAIT_MS : now - introStartedAt >= INTRO_MS
+  if (over) await endIntro($)
+  else await update($, frame, n => (n + 1) % 1_000_000)
+}
+
+async function endIntro($: EngineInterface): Promise<void> {
+  introTicker?.cancel()
+  introTicker = undefined
+  await update($, introDone, () => true)
 }
 
 function paneColumns(value: unknown): number {
@@ -377,6 +415,7 @@ export const register: Register = (on, options) => {
   const keep = agentLimit(options.maxAgents)
   const openOnStart = options.openOnStart === true
   animate = options.animate !== false
+  introForm = BONSAI_FORMS.find(form => form === options.intro)
   lang = resolveLang(options.language, undefined)
 
   on('session.start', async ($, e, next) => {
@@ -399,6 +438,11 @@ export const register: Register = (on, options) => {
     advisorCommand = !listed || listed.some(c => c.name === 'advisor')
     await readAdvisor($).catch(() => undefined)
     await catchUp($, await clock($), keep).catch(() => undefined)
+    if (introForm && animate && e.isInteractive !== false && !(await read($, introDone))) {
+      const reduced = (await $.settings.read({ key: 'prefersReducedMotion' }).catch(() => undefined)) === true
+      if (reduced || (await read($, tree)).agents.length > 0) await update($, introDone, () => true)
+      else startIntro($, await clock($))
+    }
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
     if (e.isInteractive !== false) {
       if (await starDue($)) $.ui.toast(wordsFor(lang).starHint)
@@ -615,6 +659,20 @@ export const register: Register = (on, options) => {
     const s = await read($, tree)
     const tick = animate ? await read($, frame) : 0
     const now = await clock($)
+    if (introTicker && introForm && !(await read($, introDone))) {
+      introStartedAt ??= now
+      const look = await read($, appearance)
+      const palette = PALETTES[look.colors]
+      const intro = drawIntro(
+        { Box, Text, Button } as never,
+        e.props.bodyColumns,
+        e.props.scroll?.bodyRows,
+        now - introStartedAt,
+        { palette, leaf: lightColor(look) ?? palette.agent, lang, info: introInfo(s, wordsFor(lang)), seed: introSeed, form: introForm },
+        () => void endIntro($).catch(() => undefined),
+      )
+      if (intro) return intro
+    }
     return drawTree({ Box, Text, Button, Input } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {
       frame: tick,
       animate,
@@ -626,9 +684,18 @@ export const register: Register = (on, options) => {
     })
   })
 
-  on('ui.press', { component: 'Pane', requestId: PANE }, async ($, e, next) =>
-    pressKey(actionsFor($), e.element) ? { element: e.element } : next(e),
-  )
+  on('ui.press', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    if (e.element.startsWith('intro:skip')) {
+      await endIntro($).catch(() => undefined)
+      return { element: e.element }
+    }
+    return pressKey(actionsFor($), e.element) ? { element: e.element } : next(e)
+  })
+
+  on('prompt.edit', async ($, e, next) => {
+    if (introTicker) await endIntro($).catch(() => undefined)
+    return next(e)
+  })
 
   on('ui.input', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
     let work: Promise<void> | undefined

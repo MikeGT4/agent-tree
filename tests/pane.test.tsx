@@ -1,9 +1,9 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
-import { describe, expect, test } from 'claude-code/testing'
+import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES } from '../hooks/looks.ts'
+import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES, lightColor } from '../hooks/looks.ts'
 
 const usage = { input_tokens: 2000, output_tokens: 40, cache_read_input_tokens: 30000, cache_creation_input_tokens: 0 }
 const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<string, string>)[model] ?? model
@@ -147,7 +147,7 @@ const pane = (bodyColumns: number, bodyRows = 60) =>
     },
   }) as const
 
-const de = { options: { language: 'de' } }
+const de = { options: { language: 'de', intro: 'off' } }
 
 async function screen(ui: { drawn: () => Promise<unknown> }): Promise<string> {
   return JSON.stringify(await ui.drawn())
@@ -691,7 +691,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('die Limits auf Englisch', { options: { language: 'en' } }, async ($, on) => {
+  test('die Limits auf Englisch', { options: { language: 'en', intro: 'off' } }, async ($, on) => {
     engine(on)
     await startSession($)
     await measureLimits($, limitWindows)
@@ -744,7 +744,146 @@ describe('Agent Tree', () => {
     expect(seen.toasts.filter(t => /gespeicherte Wahl/.test(t))).toHaveLength(1)
   })
 
-  test('englische Beschriftung, wenn die Sprache Englisch ist', { options: { language: 'en' } }, async ($, on) => {
+  const introOn = { options: { language: 'de', intro: 'upright' } }
+  const plantDots = /[⠁-⣿]/
+  const introStart = async ($: Engine, on: On, saved: Record<string, unknown> = {}) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const seen = engine(on, [], {}, saved)
+    return { clock, seen }
+  }
+
+  test('beim Start wächst ein Bonsai, nach 2 s steht die normale Leiste', introOn, async ($, on) => {
+    const { clock } = await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(1200)
+    await ui.redraw()
+    const growing = await screen(ui)
+    expect(growing).toMatch(plantDots)
+    expect(growing).toMatch(/AGENT TREE/)
+    expect(growing).not.toMatch(/Sitzungsprotokoll/)
+    await clock.advance(1000)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('ein Klick überspringt das Intro', introOn, async ($, on) => {
+    await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'intro:skip:0' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('ab Werk wächst der Bonsai', { options: { language: 'de' } }, async ($, on) => {
+    const { clock } = await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(1200)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/AGENT TREE/)
+    await ui.unmount()
+  })
+
+  test('mit ausgeschalteter Option kein Intro', de, async ($, on) => {
+    await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('mit reduzierter Bewegung kein Intro', introOn, async ($, on) => {
+    const { seen } = await introStart($, on)
+    seen.settings.prefersReducedMotion = true
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('ohne Bewegung kein Intro', { options: { language: 'de', intro: 'upright', animate: false } }, async ($, on) => {
+    await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('ohne Bedienung kein Intro', introOn, async ($, on) => {
+    await introStart($, on)
+    await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('nach /clear und erneutem Start kein zweites Intro', introOn, async ($, on) => {
+    const { clock } = await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(2100)
+    await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+    await startSession($)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('eine Sitzung mit laufenden Agenten zeigt kein Intro', introOn, async ($, on) => {
+    await introStart($, on)
+    await $.agent.spawn({ prompt: 'Lies den Code.', description: 'Code lesen', subagentType: 'Explore' } as never)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('ohne Zeichnen endet das Intro nach 5 s', introOn, async ($, on) => {
+    const { clock } = await introStart($, on)
+    await startSession($)
+    await clock.advance(5100)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('während des Intros gibt es nur Knöpfe zum Überspringen', introOn, async ($, on) => {
+    await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    const buttons = await ui.findAll({ type: 'Button' })
+    expect(buttons.length).toBeGreaterThan(0)
+    expect(buttons.every(b => String(b.key).startsWith('intro:skip'))).toBe(true)
+    await ui.unmount()
+  })
+
+  test('das Intro nimmt die Farben des gewählten Aussehens', introOn, async ($, on) => {
+    const look = { style: 'line', colors: 'light', light: 'standard' } as const
+    const { clock } = await introStart($, on, { look })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(1100)
+    await ui.redraw()
+    const colors = new Set((await ui.findAll({ type: 'Text' })).map(f => f.props.color).filter(Boolean))
+    const allowed = new Set([PALETTES.light.main, PALETTES.light.dim, lightColor(look) ?? PALETTES.light.agent])
+    expect(colors.size).toBeGreaterThan(1)
+    expect([...colors].every(c => allowed.has(c as string))).toBe(true)
+    await ui.unmount()
+  })
+
+  test('unter der Mindestbreite kein Intro', introOn, async ($, on) => {
+    await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(39))
+    expect(await screen(ui)).not.toMatch(plantDots)
+    await ui.unmount()
+  })
+
+  test('englische Beschriftung, wenn die Sprache Englisch ist', { options: { language: 'en', intro: 'off' } }, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))

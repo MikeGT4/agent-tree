@@ -52,6 +52,13 @@
       ],
       "default": "auto"
     },
+    "intro": {
+      "type": "string",
+      "title": "Start intro",
+      "description": "A bonsai grows in the pane when a session starts",
+      "options": ["upright", "cascade", "windswept", "off"],
+      "default": "upright"
+    },
     "autoUpdate": {
       "type": "boolean",
       "title": "Auto-update",

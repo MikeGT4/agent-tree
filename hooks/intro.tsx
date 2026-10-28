@@ -1,10 +1,12 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import type { Elements } from 'claude-code'
 
+import type { AgentTreeState } from '../types'
 import { GROW_TO, bonsaiPlant, brailleChar, dotBit, introPhase, visibleDots } from './bonsai.ts'
 import type { BonsaiForm, Dot, Part, Plant } from './bonsai.ts'
 import type { Palette } from './looks.ts'
-import { wordsFor } from './words.ts'
+import { choicesOf, effortLabel, modelLabel } from './model.ts'
+import { familyOr, wordsFor } from './words.ts'
 import type { Lang, Words } from './words.ts'
 
 type IntroUi = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
@@ -29,6 +31,24 @@ export function introLines(info: IntroInfo, w: Words): string[] {
     info.subAgents ? w.introSubAgents(info.subAgents) : undefined,
     info.limits ? w.introLimits(info.limits) : undefined,
   ].filter((line): line is string => line !== undefined)
+}
+
+export function introInfo(s: AgentTreeState, w: Words): IntroInfo {
+  const choices = choicesOf(s)
+  const subAgents =
+    choices.newAgents || choices.newEffort
+      ? `${familyOr(choices.newAgents, w.standard)}${choices.newEffort ? ` · ${effortLabel(choices.newEffort)}` : ''}`
+      : undefined
+  const limits = s.main.limits?.length
+    ? s.main.limits.map(l => `${w.limitKind(l.kind)} ${w.percent(Math.round(l.percent))}`).join(' · ')
+    : undefined
+  return {
+    ...(s.main.model ? { model: modelLabel(s.main.model) } : {}),
+    ...(s.main.effort ? { effort: s.main.effort } : {}),
+    ...(s.advisor.model ? { advisor: modelLabel(s.advisor.model) } : {}),
+    ...(subAgents ? { subAgents } : {}),
+    ...(limits ? { limits } : {}),
+  }
 }
 
 export function introRows(dots: readonly Dot[], cols: number, rows: number): IntroRun[][] {
