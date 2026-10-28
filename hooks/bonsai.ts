@@ -121,7 +121,7 @@ function sketch(wide: number, high: number) {
       ry: height * (0.4 + 0.15 * rand()),
     }))
     const inside = (x: number, y: number) => lobes.some(l => ((x - l.x) / l.rx) ** 2 + ((y - l.y) / l.ry) ** 2 <= 1)
-    const density = 0.3 + 0.2 * rand()
+    const density = 0.38 + 0.2 * rand()
     const duration = 0.2 + 0.1 * rand()
     const left = Math.floor(Math.min(...lobes.map(l => l.x - l.rx)))
     const right = Math.ceil(Math.max(...lobes.map(l => l.x + l.rx)))
@@ -161,7 +161,7 @@ function growPlant(seed: number, wide: number, high: number, form: BonsaiForm, s
   const side = rand() < 0.5 ? -1 : 1
   const potWidth = between(0.45, 0.6) * size
   const potHeight = Math.max(3, between(0.08, 0.12) * size)
-  const trunkBase = Math.min(12, Math.max(4, Math.round(size / 10)))
+  const trunkBase = form === 'upright' ? Math.min(12, Math.max(4, Math.round(size / 10))) : Math.min(9, Math.max(3, Math.round(size / 14)))
   const centerX = form === 'cascade' ? wide / 2 - side * 0.2 * size : form === 'windswept' ? wide / 2 - side * 0.15 * size : wide / 2
   const potTop = form === 'cascade' ? Math.round(high * 0.42) : Math.round(high - 2 - potHeight)
   canvas.pot(centerX, potTop, potWidth, potHeight)
@@ -172,7 +172,7 @@ function growPlant(seed: number, wide: number, high: number, form: BonsaiForm, s
     form === 'cascade'
       ? cubic(base, { x: centerX, y: potTop - 0.3 * size }, { x: centerX + side * 0.5 * size, y: potTop - 0.32 * size }, { x: centerX + side * 0.55 * size, y: potTop + 0.48 * size })
       : form === 'windswept'
-        ? cubic(base, { x: centerX + side * 0.12 * size, y: potTop - height * 0.3 }, { x: centerX + side * 0.32 * size, y: potTop - height * 0.65 }, { x: centerX + side * 0.5 * size, y: potTop - height * 0.85 })
+        ? cubic(base, { x: centerX + side * 0.04 * size, y: potTop - height * 0.4 }, { x: centerX + side * 0.34 * size, y: potTop - height * 0.55 }, { x: centerX + side * 0.55 * size, y: potTop - height * 0.82 })
         : cubic(base, { x: centerX + sway, y: potTop - height * 0.35 }, { x: centerX - sway * 0.8, y: potTop - height * 0.7 }, { x: centerX + sway * 0.3, y: potTop - height })
   const trunkAt = (t: number) => 0.08 + 0.37 * t
   const trunkWidth = (t: number) => trunkBase + (trunkBase / 3 - trunkBase) * t
@@ -180,7 +180,7 @@ function growPlant(seed: number, wide: number, high: number, form: BonsaiForm, s
   const count = size < 60 ? 3 : 3 + Math.floor(rand() * 3)
   const [from, to] = form === 'cascade' ? [0.4, 0.95] : [0.32, 0.9]
   let length = between(0.32, 0.45) * size * (form === 'cascade' ? 0.6 : 1)
-  const padWidth = (form === 'windswept' ? 0.2 : 0.16) * size
+  const padWidth = (form === 'upright' ? 0.19 : form === 'windswept' ? 0.17 : 0.15) * size
   for (let i = 0; i < count; i++) {
     const t = from + ((to - from) * (i + between(0.2, 0.8))) / count
     const anchor = trunk(t)
@@ -192,11 +192,11 @@ function growPlant(seed: number, wide: number, high: number, form: BonsaiForm, s
     const start = trunkAt(t) + 0.02
     const duration = between(0.15, 0.25)
     canvas.stroke(quadratic(anchor, bend, end), Math.max(2, trunkWidth(t) * 0.55), 1, start, duration)
-    canvas.pad(rand, { x: end.x + towards * padWidth * 0.15, y: end.y - padWidth * 0.2 }, padWidth * between(0.85, 1.15), start + duration - 0.03, form === 'windswept' ? 1.5 : 1)
+    canvas.pad(rand, { x: end.x + towards * padWidth * 0.15, y: end.y - padWidth * 0.2 }, padWidth * between(0.85, 1.15), start + duration - 0.03, form === 'windswept' ? 1.35 : 1)
     length *= between(0.75, 0.85)
   }
   const crown = form === 'cascade' ? trunk(0.3) : trunk(1)
-  canvas.pad(rand, { x: crown.x, y: crown.y - padWidth * 0.25 }, padWidth * 1.3, 0.42, form === 'windswept' ? 1.5 : 1)
+  canvas.pad(rand, { x: crown.x, y: crown.y - padWidth * 0.25 }, padWidth * 1.3, 0.42, form === 'windswept' ? 1.35 : 1)
   if (form === 'cascade') canvas.pad(rand, trunk(1), padWidth * 0.9, 0.42, 1)
   return { canvas, branches: count }
 }
