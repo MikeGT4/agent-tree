@@ -24,6 +24,8 @@ import {
   createTree,
   detailLoaded,
   detailOpened,
+  effortChosen,
+  effortFrom,
   familyFrom,
   isStopping,
   lookOpened,
@@ -32,6 +34,7 @@ import {
   phaseOf,
   pickerOpened,
   spawned,
+  stepEffortFor,
   stepModelFor,
   stepped,
   stopCancelled,
@@ -46,6 +49,7 @@ import {
   wasStopSent,
   withAdvisorModel,
   withNewAgents,
+  withNewEffort,
 } from './model.ts'
 import { drawTree, inputKey, pressKey, statusText } from './view.tsx'
 import type { TreeActions } from './view.tsx'
@@ -60,6 +64,7 @@ const LOOK_SHAPE = 'agent-tree-look-1'
 const LOOK_KEY = 'look'
 const STAR_KEY = 'star'
 const MODEL_KEY = 'model'
+const EFFORT_KEY = 'effort'
 const INLINE_ROWS = 40
 const FRAME_MS = 250
 const HANDBACK = 'SubagentHandback'
@@ -169,12 +174,23 @@ async function restoreChoices($: EngineInterface): Promise<void> {
     () => undefined,
   )
   if (model) await change($, s => withNewAgents(s, familyFrom(model.value)))
+  const effort = await $.store.get(EFFORT_KEY).then(
+    value => ({ value }),
+    () => undefined,
+  )
+  if (effort) await change($, s => withNewEffort(s, effortFrom(effort.value)))
 }
 
 async function chooseModel($: EngineInterface, target: string, family: string | undefined): Promise<void> {
   const now = await clock($)
   await change($, t => chosen(t, target, family, now))
   if (target === NEW_AGENTS) await $.store.set(MODEL_KEY, family ?? null).catch(() => undefined)
+}
+
+async function chooseEffort($: EngineInterface, target: string, effort: string | undefined): Promise<void> {
+  const now = await clock($)
+  await change($, t => effortChosen(t, target, effort, now))
+  if (target === NEW_AGENTS) await $.store.set(EFFORT_KEY, effort ?? null).catch(() => undefined)
 }
 
 async function catchUp($: EngineInterface, now: number, keep: number): Promise<void> {
@@ -293,6 +309,7 @@ function actionsFor($: EngineInterface): TreeActions {
   return {
     pick: target => void change($, t => pickerOpened(t, target)).catch(ignore),
     choose: (target, family) => void chooseModel($, target, family).catch(ignore),
+    effort: (target, effort) => void chooseEffort($, target, effort).catch(ignore),
     close: () => void change($, t => closed(t)).catch(ignore),
     detail: agentId => void openDetail($, agentId).catch(ignore),
     stop: agentId => {
@@ -462,7 +479,9 @@ export const register: Register = (on, options) => {
     }
     const family = before && e.agentId ? choicesOf(before).agents[e.agentId] : undefined
     const model = before && family ? stepModelFor(before, family) : undefined
-    const result = yield* next(model ? { ...e, model } : e)
+    const effort = before && agentId && e.effort !== undefined ? stepEffortFor(before, agentId) : undefined
+    const changed = model !== undefined || (effort !== undefined && effort !== e.effort)
+    const result = yield* next(changed ? { ...e, ...(model ? { model } : {}), ...(effort ? { effort } : {}) } : e)
     const usage = result.usage
     const contextTokens = usage
       ? usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens

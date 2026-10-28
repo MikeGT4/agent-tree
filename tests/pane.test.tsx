@@ -14,6 +14,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
+  const stepEfforts: unknown[] = []
   let storeBroken = false
   on('store.get', (_, e) => {
     if (refuse.storeGet || storeBroken) throw new Error('store')
@@ -94,6 +95,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   on('tool.call', async () => ({ result: 'ok', text: 'ok' }) as never)
   on('turn.step', async function* (_, e) {
     stepModels.push(e.model)
+    stepEfforts.push(e.effort)
     return {
       turnId: e.turnId,
       index: e.index,
@@ -109,15 +111,15 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   const storeGetFails = () => {
     storeBroken = true
   }
-  return { status, spawnModels, stepModels, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts, storeGetFails }
+  return { status, spawnModels, stepModels, stepEfforts, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts, storeGetFails }
 }
 
-async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[] } = {}) {
+async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[]; noEffort?: boolean } = {}) {
   const stream = $.turn.step({
     turnId: 't1',
     index: 0,
     model: options.agentId ? 'claude-haiku-4-5-20251001' : 'claude-opus-5-5',
-    effort: options.agentId ? 'medium' : 'high',
+    ...(options.noEffort ? {} : { effort: options.agentId ? ('medium' as const) : ('high' as const) }),
     messageCount: options.advisor ? 99 : 3,
     ...(options.agentId ? { agentId: options.agentId } : {}),
   })
@@ -305,6 +307,96 @@ describe('Agent Tree', () => {
     expect((await ui.find({ key: 'pick:new' }))?.props.label).toBe('Unteragenten-Modell: Sonnet ▾')
     expect(await screen(ui)).toContain(PALETTES.retro.agent)
     await ui.unmount()
+  })
+
+  test('die Denkstufe für Unteragenten steht in der Auswahl, wird gespeichert und steht am Knopf', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.redraw()
+    for (const key of ['effort:new:default', 'effort:new:low', 'effort:new:medium', 'effort:new:high', 'effort:new:xhigh', 'effort:new:max']) {
+      expect(await ui.find({ key })).toBeDefined()
+    }
+    await ui.press({ key: 'effort:new:max' })
+    expect(seen.storeSets.filter(s => s.key === 'effort').at(-1)).toEqual({ key: 'effort', value: 'max' })
+    await ui.redraw()
+    expect((await ui.find({ key: 'pick:new' }))?.props.label).toBe('Unteragenten-Modell: Standard · Max ▾')
+    await ui.unmount()
+  })
+
+  test('die Denkstufe für Unteragenten gilt für ihre Schritte, nicht für die Hauptsitzung', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'effort:new:low' })
+    await ui.unmount()
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('low')
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('high')
+  })
+
+  test('ein Modell ohne Denkstufe bekommt keine', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'effort:new:low' })
+    await ui.unmount()
+    await step($, { agentId: 'sub-1', noEffort: true })
+    expect(seen.stepEfforts.at(-1)).toBeUndefined()
+  })
+
+  test('die Denkstufe eines Agenten geht der für alle Unteragenten vor, mit Hinweis auf die nächste Nachricht', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'effort:new:low' })
+    await ui.press({ key: 'pick:sub-1' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/ab seiner nächsten Nachricht/)
+    await ui.press({ key: 'effort:sub-1:max' })
+    await ui.unmount()
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('max')
+    expect(seen.storeSets.filter(s => s.key === 'effort').at(-1)).toEqual({ key: 'effort', value: 'low' })
+  })
+
+  test('Standard bei der Denkstufe leert sie', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'effort:new:max' })
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'effort:new:default' })
+    expect(seen.storeSets.filter(s => s.key === 'effort').at(-1)).toEqual({ key: 'effort', value: null })
+    await ui.unmount()
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
+  })
+
+  test('eine gespeicherte Denkstufe gilt beim Start, eine unbekannte nicht', de, async ($, on) => {
+    const seen = engine(on, [], {}, { effort: 'xhigh', model: 'opus' })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'pick:new' }))?.props.label).toBe('Unteragenten-Modell: Opus · XHigh ▾')
+    await ui.unmount()
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('xhigh')
+  })
+
+  test('eine unbekannte gespeicherte Denkstufe gilt als Standard', de, async ($, on) => {
+    const seen = engine(on, [], {}, { effort: 'turbo' })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'pick:new' }))?.props.label).toBe('Unteragenten-Modell: Standard ▾')
+    await ui.unmount()
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
   })
 
   test('Modellwahl für einen laufenden Agenten setzt seine nächsten Schritte um', de, async ($, on) => {

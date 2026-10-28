@@ -12,12 +12,14 @@ import type {
   AgentTreeStatus,
 } from '../types'
 import {
+  EFFORT_LEVELS,
   MODEL_FAMILIES,
   NEW_AGENTS,
   choicesOf,
   clockTime,
   counts,
   effortBar,
+  effortLabel,
   familyLabel,
   fmtShortDuration,
   fmtTokens,
@@ -91,6 +93,7 @@ function sourceColor(palette: Palette, source: AgentTreeLogSource): string {
 export type TreeActions = {
   pick: (target: string) => void
   choose: (target: string, family: string | undefined) => void
+  effort: (target: string, effort: string | undefined) => void
   close: () => void
   detail: (agentId: string) => void
   stop: (agentId: string) => void
@@ -373,9 +376,11 @@ function callPlace(call: AgentTreeAdvisorCall, w: Words): string {
   return call.agentId === undefined ? w.fromMain : w.fromSub
 }
 
-export function pickerLines(name: string, width: number, lang: Lang = 'de'): number {
+export function pickerLines(name: string, width: number, lang: Lang = 'de', running = false): number {
   const w = wordsFor(lang)
-  return wrappedLines([w.pickerFor(name), `[ ${w.standard} ]`, ...MODEL_FAMILIES.map(family => `[ ${familyLabel(family)} ]`), '[ × ]'], width)
+  const models = wrappedLines([w.pickerFor(name), `[ ${w.standard} ]`, ...MODEL_FAMILIES.map(family => `[ ${familyLabel(family)} ]`), '[ × ]'], width)
+  const efforts = wrappedLines([w.effortFor, `[ ${w.standard} ]`, ...EFFORT_LEVELS.map(level => `[ ${effortLabel(level)} ]`)], width)
+  return models + efforts + (running ? wrappedLines([w.effortNextMessage], width) : 0)
 }
 
 function lookLabelWidth(w: Words): number {
@@ -478,14 +483,14 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     total: current.length,
     advisorRows: wide ? ADVISOR_BASE_ROWS + recentCalls.length : ADVISOR_COMPACT_ROWS,
     earlier: earlier > 0,
-    pickerRows: (pickerTarget && actions ? 1 + pickerLines(pickerName, width, lang) : 0) + (s.lookOpen && actions ? lookLines(width, lang) : 0),
+    pickerRows: (pickerTarget && actions ? 1 + pickerLines(pickerName, width, lang, pickerTarget !== NEW_AGENTS) : 0) + (s.lookOpen && actions ? lookLines(width, lang) : 0),
     detailRows: detailNode && actions ? DETAIL_ROWS : 0,
     helpRows: tight ? 0 : 1,
     labelRows: actions
       ? wrappedLines(
           [
             current.length ? `${glyphs.node} ${w.toAgents}` : w.noAgents,
-            ` · m: ${w.subModel}: ${familyOr(choices.newAgents, w.standard)} ▾`,
+            ` · m: ${w.subModel}: ${familyOr(choices.newAgents, w.standard)}${choices.newEffort ? ` · ${effortLabel(choices.newEffort)}` : ''} ▾`,
             ` · a: ${w.look} ▾`,
           ],
           treeWidth,
@@ -786,7 +791,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const lookButton = actions ? <Button key="look:open" plain hotkey="a" label={`${w.look} ▾`} onPress={() => actions.look()} /> : null
 
   const pickNew = actions ? (
-    <Button key="pick:new" plain hotkey="m" label={`${w.subModel}: ${familyOr(choices.newAgents, w.standard)} ▾`} onPress={() => actions.pick(NEW_AGENTS)} />
+    <Button key="pick:new" plain hotkey="m" label={`${w.subModel}: ${familyOr(choices.newAgents, w.standard)}${choices.newEffort ? ` · ${effortLabel(choices.newEffort)}` : ''} ▾`} onPress={() => actions.pick(NEW_AGENTS)} />
   ) : null
 
   const delegationLabel = (
@@ -957,23 +962,38 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   )
 
   const pickerCurrent = pickerTarget === NEW_AGENTS ? choices.newAgents : pickerTarget ? choices.agents[pickerTarget] : undefined
+  const effortCurrent = pickerTarget === NEW_AGENTS ? choices.newEffort : pickerTarget ? choices.efforts?.[pickerTarget] : undefined
   const pickerRow =
     pickerTarget && actions ? (
-      <Box key="picker" flexDirection="row" flexWrap="wrap" columnGap={1} width={width} marginTop={1}>
-        <Text color={palette.agent} wrap="truncate-end">
-          {w.pickerFor(pickerName)}
-        </Text>
-        <Button key={`choose:${pickerTarget}:default`} hotkey="0" label={w.standard} variant={pickerCurrent === undefined ? 'primary' : undefined} onPress={() => actions.choose(pickerTarget, undefined)} />
-        {MODEL_FAMILIES.map((family, i) => (
-          <Button
-            key={`choose:${pickerTarget}:${family}`}
-            hotkey={String(i + 1)}
-            label={familyLabel(family)}
-            variant={pickerCurrent === family ? 'primary' : undefined}
-            onPress={() => actions.choose(pickerTarget, family)}
-          />
-        ))}
-        <Button key="picker:close" hotkey="x" label="×" onPress={() => actions.close()} />
+      <Box key="picker" flexDirection="column" width={width} marginTop={1}>
+        <Box key="picker-models" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          <Text color={palette.agent} wrap="truncate-end">
+            {w.pickerFor(pickerName)}
+          </Text>
+          <Button key={`choose:${pickerTarget}:default`} hotkey="0" label={w.standard} variant={pickerCurrent === undefined ? 'primary' : undefined} onPress={() => actions.choose(pickerTarget, undefined)} />
+          {MODEL_FAMILIES.map((family, i) => (
+            <Button
+              key={`choose:${pickerTarget}:${family}`}
+              hotkey={String(i + 1)}
+              label={familyLabel(family)}
+              variant={pickerCurrent === family ? 'primary' : undefined}
+              onPress={() => actions.choose(pickerTarget, family)}
+            />
+          ))}
+          <Button key="picker:close" hotkey="x" label="×" onPress={() => actions.close()} />
+        </Box>
+        <Box key="picker-efforts" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          <Text color={palette.agent}>{w.effortFor}</Text>
+          <Button key={`effort:${pickerTarget}:default`} label={w.standard} variant={effortCurrent === undefined ? 'primary' : undefined} onPress={() => actions.effort(pickerTarget, undefined)} />
+          {EFFORT_LEVELS.map(level => (
+            <Button key={`effort:${pickerTarget}:${level}`} label={effortLabel(level)} variant={effortCurrent === level ? 'primary' : undefined} onPress={() => actions.effort(pickerTarget, level)} />
+          ))}
+        </Box>
+        {pickerTarget !== NEW_AGENTS ? (
+          <Text key="picker-hint" color={palette.dim} wrap="wrap">
+            {w.effortNextMessage}
+          </Text>
+        ) : null}
       </Box>
     ) : null
 

@@ -5,7 +5,11 @@ import type { AgentTreeLogEntry } from '../types'
 import {
   adopted,
   chosen,
+  effortChosen,
+  effortFrom,
   familyFrom,
+  stepEffortFor,
+  withNewEffort,
   withNewAgents,
   clockTime,
   closed,
@@ -282,6 +286,7 @@ describe('Datenmodell', () => {
     const actions = {
       pick: (target: string) => void calls.push(`pick ${target}`),
       choose: (target: string, family: string | undefined) => void calls.push(`choose ${target} ${family ?? '-'}`),
+      effort: (target: string, effort: string | undefined) => void calls.push(`effort ${target} ${effort ?? '-'}`),
       close: () => void calls.push('close'),
       detail: (agentId: string) => void calls.push(`detail ${agentId}`),
       stop: (agentId: string) => void calls.push(`stop ${agentId}`),
@@ -327,7 +332,8 @@ describe('Datenmodell', () => {
   })
 
   test('die Auswahlzeile zählt ihre Umbrüche', () => {
-    expect([pickerLines('neue Unteragenten', 120), pickerLines('neue Unteragenten', 59), pickerLines('neue Unteragenten', 30)]).toEqual([1, 2, 4])
+    expect([pickerLines('neue Unteragenten', 120), pickerLines('neue Unteragenten', 59), pickerLines('neue Unteragenten', 30)]).toEqual([2, 4, 7])
+    expect(pickerLines('Explore · Code lesen', 120, 'de', true)).toBe(3)
   })
 
   test('Laufzeichen drehen sich je Takt, ohne Bewegung steht es still', () => {
@@ -639,7 +645,7 @@ describe('Korrekturen', () => {
 describe('Textfeld', () => {
   test('inputKey schickt nur bei submit', () => {
     const said: [string, string][] = []
-    const actions = { pick: () => {}, choose: () => {}, close: () => {}, detail: () => {}, stop: () => {}, say: (id: string, value: string) => void said.push([id, value]), advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {} }
+    const actions = { pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: () => {}, say: (id: string, value: string) => void said.push([id, value]), advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {} }
     expect(inputKey(actions, 'say:sub-1:0', 'submit', 'x')).toBe(true)
     expect(said).toEqual([['sub-1', 'x']])
     expect(inputKey(actions, 'say:sub-1:0', 'change', 'y')).toBe(false)
@@ -651,7 +657,7 @@ describe('Textfeld', () => {
 describe('Stopp am Kasten', () => {
   test('pressKey kennt halt', () => {
     const stopped: string[] = []
-    const actions = { pick: () => {}, choose: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), say: () => {}, advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {} }
+    const actions = { pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), say: () => {}, advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {} }
     expect(pressKey(actions, 'halt:sub-1')).toBe(true)
     expect(stopped).toEqual(['sub-1'])
   })
@@ -771,7 +777,7 @@ describe('Aussehen', () => {
     const ui = { Box: 'Box', Text: 'Text', Button: 'Button' } as never
     const s = detailOpened(spawned(createTree(0), spawn('sub-1'), 1), 'sub-1')
     const noop = () => {}
-    const actions = { pick: noop, choose: noop, close: noop, detail: noop, stop: noop, say: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop }
+    const actions = { pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, say: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop }
     const text = JSON.stringify(drawTree(ui, s, 90, 60, { frame: 0, animate: false, now: 5000, actions }))
     expect(text).not.toMatch(/say:sub-1/)
   })
@@ -796,5 +802,24 @@ describe('Aussehen', () => {
     expect(restored.choices?.newAgents).toBe('opus')
     expect(restored.log).toEqual(s.log)
     expect(withNewAgents(restored, 'opus')).toBe(restored)
+  })
+
+  test('nur bekannte Denkstufen kommen aus dem Speicher', () => {
+    for (const level of ['low', 'medium', 'high', 'xhigh', 'max']) expect(effortFrom(level)).toBe(level)
+    expect(effortFrom('turbo')).toBeUndefined()
+    expect(effortFrom(null)).toBeUndefined()
+    expect(effortFrom(3)).toBeUndefined()
+  })
+
+  test('die Denkstufe eines Agenten geht der für alle Unteragenten vor', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    expect(stepEffortFor(s, 'a1')).toBeUndefined()
+    s = withNewEffort(s, 'low')
+    expect(stepEffortFor(s, 'a1')).toBe('low')
+    s = effortChosen(s, 'a1', 'max', 2)
+    expect(stepEffortFor(s, 'a1')).toBe('max')
+    s = effortChosen(s, 'a1', undefined, 3)
+    expect(stepEffortFor(s, 'a1')).toBe('low')
+    expect(s.log.at(-1)?.kind).toBe('effort')
   })
 })

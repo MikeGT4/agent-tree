@@ -53,8 +53,6 @@ export type CompleteInput = {
 
 type WorkflowGroup = Extract<AgentTreeGroup, { kind: 'workflow' }>
 
-const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
-
 const ENGINE_STATUS: Record<string, AgentTreeStatus> = {
   completed: 'done',
   failed: 'failed',
@@ -67,6 +65,18 @@ export const NEW_AGENTS = 'new'
 
 export function familyFrom(value: unknown): string | undefined {
   return typeof value === 'string' && (MODEL_FAMILIES as readonly string[]).includes(value) ? value : undefined
+}
+
+export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
+
+export type EffortLevel = (typeof EFFORT_LEVELS)[number]
+
+export function effortFrom(value: unknown): EffortLevel | undefined {
+  return typeof value === 'string' && (EFFORT_LEVELS as readonly string[]).includes(value) ? (value as EffortLevel) : undefined
+}
+
+export function effortLabel(effort: string): string {
+  return effort === 'xhigh' ? 'XHigh' : effort.charAt(0).toUpperCase() + effort.slice(1)
 }
 
 export function choicesOf(s: AgentTreeState): AgentTreeChoices {
@@ -208,6 +218,34 @@ function withoutStop(s: AgentTreeState, agentId: string): AgentTreeState {
 export function withNewAgents(s: AgentTreeState, family: string | undefined): AgentTreeState {
   const current = choicesOf(s)
   return current.newAgents === family ? s : { ...s, choices: { ...current, newAgents: family } }
+}
+
+export function withNewEffort(s: AgentTreeState, effort: string | undefined): AgentTreeState {
+  const current = choicesOf(s)
+  return current.newEffort === effort ? s : { ...s, choices: { ...current, newEffort: effort } }
+}
+
+export function effortChosen(s: AgentTreeState, target: string, effort: string | undefined, now: number): AgentTreeState {
+  const current = choicesOf(s)
+  const efforts = { ...(current.efforts ?? {}) }
+  let choices: AgentTreeChoices
+  let who = ''
+  if (target === NEW_AGENTS) {
+    choices = { ...current, newEffort: effort, efforts }
+  } else {
+    const node = findAgent(s, target)
+    if (!node) return s
+    if (effort === undefined) delete efforts[target]
+    else efforts[target] = effort
+    choices = { ...current, efforts }
+    who = node.type
+  }
+  return logged({ ...s, choices }, 'session', 'effort', { who, effort: effort ?? '' }, now)
+}
+
+export function stepEffortFor(s: AgentTreeState, agentId: string): EffortLevel | undefined {
+  const current = choicesOf(s)
+  return effortFrom(current.efforts?.[agentId] ?? current.newEffort)
 }
 
 export function chosen(s: AgentTreeState, target: string, family: string | undefined, now: number): AgentTreeState {
@@ -641,7 +679,7 @@ export function fmtDuration(ms: number): string {
 }
 
 export function effortBar(effort: string | number | undefined): string {
-  const level = EFFORT_LEVELS.indexOf(String(effort ?? '')) + 1
+  const level = (EFFORT_LEVELS as readonly string[]).indexOf(String(effort ?? '')) + 1
   if (level === 0) return ''
   return '▮'.repeat(level) + '▯'.repeat(EFFORT_LEVELS.length - level)
 }

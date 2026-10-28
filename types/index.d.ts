@@ -96,7 +96,9 @@ export type AgentTreeOrphanEnd = {
 
 export type AgentTreeChoices = {
   newAgents?: string
+  newEffort?: string
   agents: Record<string, string>
+  efforts?: Record<string, string>
   picker?: string
 }
 
