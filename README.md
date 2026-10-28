@@ -12,9 +12,9 @@ A terminal side pane for Claude Code that draws a session's agents as a tree of 
 /plugin install agent-tree --marketplace MikeGT4/agent-tree
 ```
 
-Tested with 2.1.309 to 2.1.312, needs the mod interface.
+Tested with 2.1.312, needs the mod interface.
 
-Updates: `/plugin` → Marketplaces → agent-tree → Enable auto-update.
+Updates install themselves once a day (0.4.1 and later).
 
 ## Use
 
@@ -30,7 +30,7 @@ Customizable: five styles (line, pixel, braille, HUD, ASCII), four color schemes
 
 The advisor box toggles the advisor.
 
-Privacy: local only, sends nothing ([PRIVACY.md](PRIVACY.md)).
+Privacy: one version check daily, nothing else ([PRIVACY.md](PRIVACY.md)).
 
 ## License
 

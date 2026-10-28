@@ -12,9 +12,9 @@ Seitenleiste für Claude Code im Terminal, die die Agenten einer Sitzung als Kä
 /plugin install agent-tree --marketplace MikeGT4/agent-tree
 ```
 
-Getestet mit 2.1.309 bis 2.1.312, braucht die Mod-Schnittstelle.
+Getestet mit 2.1.312, braucht die Mod-Schnittstelle.
 
-Updates: `/plugin` → Marketplaces → agent-tree → Enable auto-update.
+Updates installieren sich einmal am Tag selbst (ab 0.4.1).
 
 ## Bedienung
 
@@ -30,7 +30,7 @@ Personalisierbar: fünf Stile (Linie, Pixel, Braille, HUD, ASCII), vier Farbsche
 
 Der Berater-Kasten schaltet den Berater ein und aus.
 
-Datenschutz: nur lokal, sendet nichts ([PRIVACY.md](PRIVACY.md)).
+Datenschutz: täglich eine Versionsabfrage, sonst nichts ([PRIVACY.md](PRIVACY.md)).
 
 ## Lizenz
 
