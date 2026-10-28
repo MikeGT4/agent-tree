@@ -20,7 +20,7 @@ export type IntroLook = { palette: Palette; leaf: string; lang: Lang; info: Intr
 export type IntroRun = { text: string; part?: Part }
 export type IntroFrame = { rows: IntroRun[][]; title: string; lines: string[] }
 
-export function introInfo(s: AgentTreeState, w: Words): IntroInfo {
+export function introInfo(s: AgentTreeState, w: Words, modelSetting?: string): IntroInfo {
   const choices = choicesOf(s)
   const subAgents =
     choices.newAgents || choices.newEffort
@@ -29,9 +29,10 @@ export function introInfo(s: AgentTreeState, w: Words): IntroInfo {
   const limits = s.main.limits?.length
     ? s.main.limits.map(l => `${w.limitKind(l.kind)} ${w.percent(Math.round(l.percent))}`).join(' · ')
     : undefined
+  const model = s.main.model ?? modelSetting
   return {
-    ...(s.main.model ? { model: modelLabel(s.main.model) } : {}),
-    ...(s.main.effort ? { effort: s.main.effort } : {}),
+    ...(model ? { model: modelLabel(model) } : {}),
+    ...(s.main.effort ? { effort: effortLabel(s.main.effort) } : {}),
     ...(s.advisor.model ? { advisor: modelLabel(s.advisor.model) } : {}),
     ...(subAgents ? { subAgents } : {}),
     ...(limits ? { limits } : {}),
@@ -85,7 +86,8 @@ function plantFor(seed: number, wide: number, high: number, form: BonsaiForm): P
 }
 
 function centered(text: string, width: number): string {
-  return text ? ' '.repeat(Math.max(0, Math.floor((width - [...text].length) / 2))) + text : ''
+  const shown = [...text].slice(0, width).join('')
+  return shown ? ' '.repeat(Math.max(0, Math.floor((width - [...shown].length) / 2))) + shown : ''
 }
 
 export function introFrame(width: number, height: number | undefined, ms: number, look: IntroLook): IntroFrame | undefined {

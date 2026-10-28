@@ -7,6 +7,7 @@ import { BONSAI_FORMS, INTRO_MS } from './bonsai.ts'
 import type { BonsaiForm } from './bonsai.ts'
 import { drawIntro } from './intro.tsx'
 import { introInfo } from './intro-model.ts'
+import type { IntroInfo } from './intro-model.ts'
 import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES, lookFrom } from './looks.ts'
 import { checkForUpdate, UPDATE_KEY } from './update.ts'
 import type { UpdateHost } from './update.ts'
@@ -60,7 +61,7 @@ import {
 } from './model.ts'
 import { drawTree, inputKey, pressKey, statusText } from './view.tsx'
 import type { TreeActions } from './view.tsx'
-import { familyOr, lookChoice, lookOptionLabel, resolveLang, wordsFor } from './words.ts'
+import { familyOr, introFormFrom, lookChoice, lookOptionLabel, resolveLang, wordsFor } from './words.ts'
 import type { Lang } from './words.ts'
 
 const PANE = 'agent-tree'
@@ -81,6 +82,7 @@ const frame = atom({ plugin: 'agent-tree', key: 'frame' } as const, 0)
 const introDone = atom({ plugin: 'agent-tree', key: 'intro' } as const, false)
 const INTRO_FRAME_MS = 40
 const INTRO_WAIT_MS = 5000
+const INTRO_INLINE_ROWS = 22
 const appearance = atom({ plugin: 'agent-tree', key: 'look' } as const, DEFAULT_LOOK, { shape: LOOK_SHAPE })
 const unreadTexts = atom({ plugin: 'agent-tree', key: 'unread' } as const, {} as Record<string, string[]>)
 
@@ -90,6 +92,9 @@ let introTicker: Timer | undefined
 let introOpenedAt: number | undefined
 let introStartedAt: number | undefined
 let introSeed = 1
+let introRun = 0
+let introShown: IntroInfo | undefined
+let introModelSetting: string | undefined
 let animate = true
 let lang: Lang = 'en'
 let stoppingIds = new Set<string>()
@@ -119,37 +124,52 @@ function keepTicking($: EngineInterface, s: AgentTreeState): void {
 
 function startIntro($: EngineInterface, now: number): void {
   if (introTicker) return
+  const run = ++introRun
   introOpenedAt = now
   introStartedAt = undefined
+  introShown = undefined
   introSeed = Math.floor(now) % 2147483647 || 1
   try {
     introTicker = $.clock.every(INTRO_FRAME_MS, () => {
-      void introTick($).catch(() => undefined)
+      void introTick($, run).catch(() => undefined)
     })
   } catch {
     introTicker = undefined
   }
 }
 
-async function introTick($: EngineInterface): Promise<void> {
+async function introTick($: EngineInterface, run: number): Promise<void> {
   const now = await clock($)
+  if (run !== introRun) return
   const over = introStartedAt === undefined ? now - (introOpenedAt ?? now) >= INTRO_WAIT_MS : now - introStartedAt >= INTRO_MS
   if (over) await endIntro($)
   else await update($, frame, n => (n + 1) % 1_000_000)
+}
+
+async function maybeStartIntro($: EngineInterface, interactive: boolean): Promise<void> {
+  if (await read($, introDone)) return
+  await update($, introDone, () => true)
+  if (!introForm || !animate || !interactive) return
+  if ((await $.settings.read({ key: 'prefersReducedMotion' }).catch(() => undefined)) === true) return
+  if ((await read($, tree)).agents.length > 0) return
+  const model = await $.settings.read({ key: 'model' }).catch(() => undefined)
+  introModelSetting = typeof model === 'string' && model ? model : undefined
+  startIntro($, await clock($))
 }
 
 async function replayIntro($: EngineInterface, form: BonsaiForm): Promise<void> {
   introTicker?.cancel()
   introTicker = undefined
   introForm = form
-  await update($, introDone, () => false)
   startIntro($, await clock($))
 }
 
 async function endIntro($: EngineInterface): Promise<void> {
-  introTicker?.cancel()
+  if (!introTicker) return
+  introTicker.cancel()
   introTicker = undefined
-  await update($, introDone, () => true)
+  introRun++
+  await update($, frame, n => (n + 1) % 1_000_000)
 }
 
 function paneColumns(value: unknown): number {
@@ -447,11 +467,7 @@ export const register: Register = (on, options) => {
     advisorCommand = !listed || listed.some(c => c.name === 'advisor')
     await readAdvisor($).catch(() => undefined)
     await catchUp($, await clock($), keep).catch(() => undefined)
-    if (introForm && animate && e.isInteractive !== false && !(await read($, introDone))) {
-      const reduced = (await $.settings.read({ key: 'prefersReducedMotion' }).catch(() => undefined)) === true
-      if (reduced || (await read($, tree)).agents.length > 0) await update($, introDone, () => true)
-      else startIntro($, await clock($))
-    }
+    await maybeStartIntro($, e.isInteractive !== false).catch(() => undefined)
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
     if (e.isInteractive !== false) {
       if (await starDue($)) $.ui.toast(wordsFor(lang).starHint)
@@ -482,8 +498,9 @@ export const register: Register = (on, options) => {
       return { text: w.lookResetDone }
     }
     if (word === 'intro') {
-      const form = names[0] ? BONSAI_FORMS.find(f => f === names[0]) : (introForm ?? 'upright')
-      if (!form) return { text: w.introUnknown(names.join(' '), BONSAI_FORMS.join(', ')) }
+      const id = names.length ? introFormFrom(names.join(' ')) : (introForm ?? 'upright')
+      const form = BONSAI_FORMS.find(f => f === id)
+      if (!form) return { text: w.introUnknown(names.join(' '), BONSAI_FORMS.map(f => w.introForm[f] ?? f).join(', ')) }
       await replayIntro($, form)
       await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
       return { text: w.introPlaying(w.introForm[form] ?? form) }
@@ -567,6 +584,7 @@ export const register: Register = (on, options) => {
   })
 
   on('agent.spawn', async ($, e, next) => {
+    if (introTicker) await endIntro($).catch(() => undefined)
     const family = choicesOf(await read($, tree)).newAgents
     const input = family && !e.model && !e.fork && !e.resume ? { ...e, model: family } : e
     const result = await next(input)
@@ -675,16 +693,19 @@ export const register: Register = (on, options) => {
     const s = await read($, tree)
     const tick = animate ? await read($, frame) : 0
     const now = await clock($)
-    if (introTicker && introForm && !(await read($, introDone))) {
+    if (introTicker && introForm) {
+      await read($, frame)
       introStartedAt ??= now
+      introShown ??= introInfo(s, wordsFor(lang), introModelSetting)
       const look = await read($, appearance)
       const palette = PALETTES[look.colors]
+      const rows = e.props.scroll?.bodyRows
       const intro = drawIntro(
         { Box, Text, Button } as never,
         e.props.bodyColumns,
-        e.props.scroll?.bodyRows,
+        e.props.placement === 'inline' ? Math.min(rows ?? INTRO_INLINE_ROWS, INTRO_INLINE_ROWS) : rows,
         now - introStartedAt,
-        { palette, leaf: palette.done, lang, info: introInfo(s, wordsFor(lang)), seed: introSeed, form: introForm },
+        { palette, leaf: palette.done, lang, info: introShown, seed: introSeed, form: introForm },
         () => void endIntro($).catch(() => undefined),
       )
       if (intro) return intro
@@ -709,8 +730,9 @@ export const register: Register = (on, options) => {
   })
 
   on('prompt.edit', async ($, e, next) => {
-    if (introTicker) await endIntro($).catch(() => undefined)
-    return next(e)
+    const result = await next(e)
+    if (introTicker) void endIntro($).catch(() => undefined)
+    return result
   })
 
   on('ui.input', { component: 'Pane', requestId: PANE }, async ($, e, next) => {

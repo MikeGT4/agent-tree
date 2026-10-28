@@ -821,7 +821,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('nach /clear und erneutem Start kein zweites Intro', introOn, async ($, on) => {
+  test('ein erneuter Start durch Neuladen spielt kein zweites Intro', introOn, async ($, on) => {
     const { clock } = await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(90))
@@ -903,7 +903,134 @@ describe('Agent Tree', () => {
   test('/agent-tree intro mit unbekannter Form nennt die gültigen', de, async ($, on) => {
     await introStart($, on)
     await startSession($)
-    expect((await runCommand($, 'intro palme')).text).toMatch(/upright, cascade, windswept/)
+    expect((await runCommand($, 'intro palme')).text).toMatch(/aufrecht, Kaskade, windgepeitscht/)
+  })
+
+  test('/agent-tree intro versteht die deutschen Namen', de, async ($, on) => {
+    await introStart($, on)
+    await startSession($)
+    expect((await runCommand($, 'intro kaskade')).text).toMatch(/Kaskade/)
+  })
+
+  const brailleCount = (text: string) => [...text].filter(c => c >= '⠁' && c <= '⣿').length
+
+  test('das Intro zeichnet sich von selbst neu, auch ohne Bewegung', { options: { language: 'de', intro: 'off', animate: false } }, async ($, on) => {
+    const { clock } = await introStart($, on)
+    await startSession($)
+    await runCommand($, 'intro upright')
+    const ui = await $.ui.mount(pane(90))
+    const first = brailleCount(await screen(ui))
+    for (let i = 0; i < 15; i++) await clock.advance(40)
+    expect(brailleCount(await screen(ui))).toBeGreaterThan(first)
+    for (let i = 0; i < 45; i++) await clock.advance(40)
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('das Intro bleibt in der Höhe der Leiste und schneidet lange Zeilen', introOn, async ($, on) => {
+    const { clock } = await introStart($, on)
+    on('session.usage', () =>
+      ({ value: { startedAt: 0, context: { window: 200000 }, rateLimits: [{ kind: 'five_hour', percentUsed: 35 }, { kind: 'seven_day', percentUsed: 8 }, { kind: 'spend_limit', percentUsed: 12 }] } }) as never,
+    )
+    await startSession($)
+    for (const [cols, rows] of [[90, 14], [90, 20], [40, 20]] as const) {
+      await runCommand($, 'intro upright')
+      const ui = await $.ui.mount(pane(cols, rows))
+      await clock.advance(1500)
+      await ui.redraw()
+      const rowsDrawn = (await ui.findAll({ type: 'Button' })).filter(f => String(f.key).startsWith('intro:skip'))
+      expect(rowsDrawn.length).toBeGreaterThan(0)
+      expect(rowsDrawn.length).toBeLessThanOrEqual(rows - 3)
+      const shown = [...rowsDrawn, ...(await ui.findAll({ type: 'Text' }))]
+      expect(shown.every(f => [...f.text].length <= cols)).toBe(true)
+      await ui.unmount()
+    }
+  })
+
+  test('unter 14 Zeilen kein Intro', introOn, async ($, on) => {
+    await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90, 13))
+    expect(brailleCount(await screen(ui))).toBe(0)
+    await ui.unmount()
+  })
+
+  test('eingebettet bleibt das Intro niedrig', introOn, async ($, on) => {
+    const { clock } = await introStart($, on)
+    await startSession($)
+    const inline = pane(90, 38)
+    const ui = await $.ui.mount({ ...inline, props: { ...inline.props, placement: 'inline' } } as never)
+    await clock.advance(1200)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/AGENT TREE/)
+    const rowsDrawn = (await ui.findAll({ type: 'Button' })).filter(f => String(f.key).startsWith('intro:skip'))
+    expect(rowsDrawn.length).toBeGreaterThan(0)
+    expect(rowsDrawn.length).toBeLessThanOrEqual(20)
+    await ui.unmount()
+  })
+
+  test('ein neues Abspielen mitten im Intro beginnt von vorn', introOn, async ($, on) => {
+    const { clock } = await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(1200)
+    await runCommand($, 'intro windswept')
+    await clock.advance(40)
+    await ui.redraw()
+    expect(await screen(ui)).not.toMatch(/AGENT TREE/)
+    await clock.advance(1500)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/AGENT TREE/)
+    await clock.advance(700)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('die Startzeilen bleiben während des Intros gleich', introOn, async ($, on) => {
+    const { clock } = await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(200)
+    await $.turn.start({ text: 'Hallo', turnId: 't1' })
+    await step($)
+    await clock.advance(1300)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/AGENT TREE/)
+    expect(await screen(ui)).not.toMatch(/Modell Opus/)
+    await ui.unmount()
+  })
+
+  test('ein startender Agent beendet das Intro', introOn, async ($, on) => {
+    const { clock } = await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(300)
+    await $.agent.spawn({ prompt: 'Lies den Code.', description: 'Code lesen', subagentType: 'Explore' } as never)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Code lesen/)
+    await ui.unmount()
+  })
+
+  test('eine unterdrückte erste Runde holt das Intro beim Neuladen nicht nach', introOn, async ($, on) => {
+    await introStart($, on)
+    await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('ein Neuladen mitten im Intro beginnt es nicht neu', introOn, async ($, on) => {
+    const { clock } = await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(500)
+    await startSession($)
+    await clock.advance(1600)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
   })
 
   test('englische Beschriftung, wenn die Sprache Englisch ist', { options: { language: 'en', intro: 'off' } }, async ($, on) => {

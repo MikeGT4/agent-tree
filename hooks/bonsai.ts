@@ -30,7 +30,7 @@ export type Part = 'pot' | 'wood' | 'leaf'
 export type Dot = { x: number; y: number; at: number; part: Part }
 export type BonsaiForm = 'upright' | 'cascade' | 'windswept'
 export const BONSAI_FORMS: readonly BonsaiForm[] = ['upright', 'cascade', 'windswept']
-export type Plant = { dots: Dot[]; branches: number }
+export type Plant = { dots: Dot[]; branches: number; clipped: number }
 
 type Point = { x: number; y: number }
 type Curve = (t: number) => Point
@@ -207,16 +207,17 @@ export function bonsaiPlant(seed: number, dotsWide: number, dotsHigh: number, fo
   for (let attempt = 1; attempt < FIT_TRIES && grown.canvas.outside() > 0; attempt++)
     grown = growPlant(seed, dotsWide, dotsHigh, form, fullSize * FIT_SHRINK ** attempt)
   const dots = [...grown.canvas.cells.values()]
-  const latest = Math.max(1, ...dots.map(d => d.at))
+  const latest = dots.reduce((most, d) => Math.max(most, d.at), 0)
   return {
-    dots: dots.map(d => (latest > 1 ? { ...d, at: d.at / latest } : d)).sort((a, b) => a.at - b.at || a.y - b.y || a.x - b.x),
+    dots: dots.map(d => (latest > 0 ? { ...d, at: d.at / latest } : d)).sort((a, b) => a.at - b.at || a.y - b.y || a.x - b.x),
     branches: grown.branches,
+    clipped: grown.canvas.outside(),
   }
 }
 
 export const INTRO_MS = 2000
-export const GROW_FROM = 50
-export const GROW_TO = 1050
+export const GROW_FROM = 0
+export const GROW_TO = 1000
 export const HOLD_TO = 1700
 export type IntroPhase = 'grow' | 'hold' | 'handoff' | 'done'
 

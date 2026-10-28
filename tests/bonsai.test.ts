@@ -2,7 +2,9 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { BONSAI_FORMS, bonsaiPlant, brailleRows, introPhase, visibleDots } from '../hooks/bonsai.ts'
-import { introLines, introRows } from '../hooks/intro-model.ts'
+import { introFrame, introInfo, introLines, introRows } from '../hooks/intro-model.ts'
+import { PALETTES } from '../hooks/looks.ts'
+import { createTree } from '../hooks/model.ts'
 import { WORDS } from '../hooks/words.ts'
 
 describe('Bonsai', () => {
@@ -119,5 +121,27 @@ describe('Bonsai', () => {
     ])
     expect(introLines({ model: 'Haiku 5.5' }, WORDS.en)).toEqual(['model Haiku 5.5'])
     expect(introLines({}, WORDS.en)).toEqual([])
+  })
+  test('die Pflanze wird nie beschnitten und füllt die ganze Wachstumszeit', () => {
+    for (const form of BONSAI_FORMS)
+      for (const [wide, high] of [[162, 88], [80, 32], [280, 32], [80, 800], [400, 120]] as const)
+        for (let seed = 1; seed <= 12; seed++) {
+          const plant = bonsaiPlant(seed, wide, high, form)
+          expect(plant.clipped).toBe(0)
+          expect(Math.max(...plant.dots.map(d => d.at))).toBe(1)
+        }
+  })
+
+  test('Startzeilen und Titel passen in die Breite', () => {
+    const look = { palette: PALETTES.original, leaf: PALETTES.original.done, lang: 'de' as const, seed: 3, form: 'upright' as const, info: { limits: '5 h 35 % · Woche 8 % · Budget 12 %', subAgents: 'Sonnet · XHigh' } }
+    const frame = introFrame(40, 20, 1600, look)
+    expect(frame).toBeDefined()
+    expect([frame?.title ?? '', ...(frame?.lines ?? [])].every(line => [...line].length <= 40)).toBe(true)
+  })
+
+  test('Startzeilen: Denkstufe als Wort, Modell aus der Einstellung, wenn die Sitzung noch keins kennt', () => {
+    const tree = createTree(0)
+    expect(introInfo({ ...tree, main: { ...tree.main, model: 'claude-opus-5-5', effort: 'max' } }, WORDS.de)).toEqual({ model: 'Opus 5.5', effort: 'Max' })
+    expect(introInfo(tree, WORDS.de, 'opus[1m]')).toEqual({ model: 'Opus' })
   })
 })

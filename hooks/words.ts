@@ -243,8 +243,8 @@ export const WORDS: Record<Lang, Words> = {
     lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
     lookUnknown: (name, row, options) => `Agent Tree: ${name ? `„${name}“ gibt es nicht. ` : ''}${row}: ${options}`,
     commandDescription: 'Agentenbaum der Sitzung als Kästen (stop, clear, intro, stil, farben, licht)',
-    commandHint: '[stop|clear|intro <form>|stil <name>|farben <name>|licht <name>|aussehen zurück]',
-    commandUnknown: arg => `Agent Tree: „${arg}“ gibt es nicht. Möglich: stop, clear, stil <Name>, farben <Name>, licht <Name>, aussehen zurück`,
+    commandHint: '[stop|clear|intro [form]|stil <name>|farben <name>|licht <name>|aussehen zurück]',
+    commandUnknown: arg => `Agent Tree: „${arg}“ gibt es nicht. Möglich: stop, clear, intro [Form], stil <Name>, farben <Name>, licht <Name>, aussehen zurück`,
     lookResetDone: 'Agent Tree · Aussehen zurück auf Standard',
     opened: n => `Agent Tree geöffnet · ${n} ${n === 1 ? 'Agent' : 'Agenten'} bisher · /agent-tree stop schließt`,
     closedText: 'Agent Tree geschlossen',
@@ -378,8 +378,8 @@ export const WORDS: Record<Lang, Words> = {
     lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
     lookUnknown: (name, row, options) => `Agent Tree: ${name ? `"${name}" is not a choice. ` : ''}${row}: ${options}`,
     commandDescription: "The session's agent tree as boxes (stop, clear, intro, style, colors, glow)",
-    commandHint: '[stop|clear|intro <form>|style <name>|colors <name>|glow <name>|look reset]',
-    commandUnknown: arg => `Agent Tree: "${arg}" is not a command. Try: stop, clear, style <name>, colors <name>, glow <name>, look reset`,
+    commandHint: '[stop|clear|intro [form]|style <name>|colors <name>|glow <name>|look reset]',
+    commandUnknown: arg => `Agent Tree: "${arg}" is not a command. Try: stop, clear, intro [form], style <name>, colors <name>, glow <name>, look reset`,
     lookResetDone: 'Agent Tree · look back to default',
     opened: n => `Agent Tree opened · ${n} ${n === 1 ? 'agent' : 'agents'} so far · /agent-tree stop closes`,
     closedText: 'Agent Tree closed',
@@ -425,6 +425,13 @@ const fold = (text: string) => text.toLowerCase().replaceAll('ß', 'ss')
 
 export function lookOptionLabel(w: Words, row: LookRow, id: string): string {
   return (w.lookOption[row] as Record<string, string>)[id] ?? id
+}
+
+export function introFormFrom(name: string): string | undefined {
+  const wanted = fold(name)
+  return Object.keys(WORDS.en.introForm).find(id =>
+    [id, WORDS.de.introForm[id] ?? '', WORDS.en.introForm[id] ?? ''].some(label => fold(label) === wanted),
+  )
 }
 
 export function lookChoice(word: string, name: string): { row: LookRow; id?: string } | undefined {

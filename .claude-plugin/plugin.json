@@ -38,7 +38,7 @@
     "animate": {
       "type": "boolean",
       "title": "Motion",
-      "description": "Draw the spinner and the flow while agents work",
+      "description": "Draw the spinner, the flow while agents work and the start intro",
       "default": true
     },
     "language": {
@@ -55,7 +55,7 @@
     "intro": {
       "type": "string",
       "title": "Start intro",
-      "description": "A bonsai grows in the pane when a session starts",
+      "description": "A bonsai grows in the pane when a session starts; click or type to skip",
       "options": ["upright", "cascade", "windswept", "off"],
       "default": "upright"
     },
