@@ -4,7 +4,7 @@
 
 A side pane for Claude Code that shows a session's agents as a live tree.
 
-Stop a running sub-agent, send it new instructions while it works, switch its model, change the look.
+Stop a running sub-agent, send it new instructions while it works, switch its model and effort, change the look.
 
 ![Agent Tree](https://github.com/MikeGT4/agent-tree/releases/download/v0.4.1/agent-tree-opener.gif)
 
@@ -16,7 +16,7 @@ In your terminal (not inside Claude Code):
 claude plugin install agent-tree --marketplace MikeGT4/agent-tree
 ```
 
-Then start Claude Code; the pane opens by itself.
+Then start Claude Code; the pane opens.
 
 Inside a session: `/plugin install agent-tree --marketplace MikeGT4/agent-tree`
 
@@ -26,7 +26,7 @@ Needs Claude Code 2.1.292 or later, tested with 2.1.312.
 
 Once a day, in interactive sessions, it runs Claude Code's `plugin list --json`, reads its version number from raw.githubusercontent.com and, when a newer one exists, runs `plugin update agent-tree`. It sends nothing else ([PRIVACY.md](PRIVACY.md)).
 
-Its hooks act only after you act in the pane: a model choice, a stop, a new instruction, the advisor button (`/advisor`).
+Its hooks act only after you act in the pane: a model or effort choice, which later sessions keep, a stop, an instruction, the advisor button (`/advisor`).
 
 Guide: [docs/GUIDE.md](docs/GUIDE.md)
 

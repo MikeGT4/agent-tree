@@ -4,7 +4,7 @@
 
 Seitenleiste für Claude Code, die die Agenten einer Sitzung als lebenden Baum zeigt.
 
-Laufende Unteragenten stoppen, ihnen während der Arbeit neue Anweisungen geben, das Modell wechseln, das Aussehen ändern.
+Laufende Unteragenten stoppen, ihnen während der Arbeit neue Anweisungen geben, Modell und Denkstufe wechseln, das Aussehen ändern.
 
 ![Agent Tree](https://github.com/MikeGT4/agent-tree/releases/download/v0.4.1/agent-tree-opener.gif)
 
@@ -26,7 +26,7 @@ Braucht Claude Code 2.1.292 oder neuer, getestet mit 2.1.312.
 
 Einmal am Tag, in Sitzungen mit Bedienung, ruft es Claude Codes `plugin list --json` auf, liest seine Versionsnummer von raw.githubusercontent.com und startet bei einer neueren `plugin update agent-tree`. Sonst sendet es nichts ([PRIVACY.md](PRIVACY.md)).
 
-Seine Hooks greifen nur, wenn du in der Leiste handelst: Modellwahl, Stopp, neue Anweisung, Berater-Knopf (`/advisor`).
+Seine Hooks greifen nur, wenn du in der Leiste handelst: Wahl von Modell oder Denkstufe (gilt auch für spätere Sitzungen), Stopp, neue Anweisung, Berater-Knopf (`/advisor`).
 
 Anleitung (englisch): [docs/GUIDE.md](docs/GUIDE.md)
 
