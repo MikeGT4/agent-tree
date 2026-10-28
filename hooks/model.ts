@@ -5,6 +5,7 @@ import type {
   AgentTreeCounts,
   AgentTreeDetail,
   AgentTreeGroup,
+  AgentTreeLimit,
   AgentTreeLogSource,
   AgentTreeNode,
   AgentTreePhase,
@@ -536,7 +537,7 @@ export function completed(s: AgentTreeState, input: CompleteInput, now: number):
 
 export function measured(
   s: AgentTreeState,
-  input: { tokens?: number; window: number; percent?: number; costUsd?: number },
+  input: { tokens?: number; window: number; percent?: number; costUsd?: number; limits?: AgentTreeLimit[] },
 ): AgentTreeState {
   return {
     ...s,
@@ -546,7 +547,43 @@ export function measured(
       window: input.window,
       percent: input.percent ?? s.main.percent,
       costUsd: input.costUsd ?? s.main.costUsd,
+      limits: input.limits ?? s.main.limits,
     },
+  }
+}
+
+export const LIMIT_ORDER = ['five_hour', 'seven_day']
+
+export function limitsFrom(value: unknown): AgentTreeLimit[] {
+  if (!Array.isArray(value)) return []
+  const rank = (kind: string) => (LIMIT_ORDER.includes(kind) ? LIMIT_ORDER.indexOf(kind) : LIMIT_ORDER.length)
+  return value
+    .flatMap(entry => {
+      if (!entry || typeof entry !== 'object') return []
+      const { kind, percentUsed, resetsAt } = entry as Record<string, unknown>
+      if (typeof kind !== 'string' || typeof percentUsed !== 'number' || !Number.isFinite(percentUsed)) return []
+      return [{ kind, percent: percentUsed, ...(typeof resetsAt === 'string' ? { resetsAt } : {}) }]
+    })
+    .sort((a, b) => rank(a.kind) - rank(b.kind))
+}
+
+export function withLimits(s: AgentTreeState, limits: AgentTreeLimit[]): AgentTreeState {
+  return { ...s, main: { ...s.main, limits } }
+}
+
+export function freshTree(from: AgentTreeState, now: number): AgentTreeState {
+  const fresh = carriedChoices(from, withAdvisorModel(createTree(now), from.advisor.model))
+  return from.main.limits ? withLimits(fresh, from.main.limits) : fresh
+}
+
+export function resetTime(kind: string, iso: string | undefined, locale: string): string | undefined {
+  const at = iso === undefined ? Number.NaN : Date.parse(iso)
+  if (!Number.isFinite(at)) return undefined
+  try {
+    const time = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at)
+    return kind === 'five_hour' ? time : `${new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(at)} ${time}`
+  } catch {
+    return undefined
   }
 }
 
@@ -609,6 +646,7 @@ export function trimmed(s: AgentTreeState, maxAgents: number): AgentTreeState {
   const choices = s.choices && {
     ...s.choices,
     agents: Object.fromEntries(Object.entries(s.choices.agents).filter(([id]) => !dropped.has(id))),
+    ...(s.choices.efforts ? { efforts: Object.fromEntries(Object.entries(s.choices.efforts).filter(([id]) => !dropped.has(id))) } : {}),
     picker: s.choices.picker && dropped.has(s.choices.picker) ? undefined : s.choices.picker,
   }
   return {

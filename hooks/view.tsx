@@ -5,6 +5,7 @@ import type {
   AgentTreeAdvisorCall,
   AgentTreeCorrectionState,
   AgentTreeGroup,
+  AgentTreeLimit,
   AgentTreeLogSource,
   AgentTreeLook,
   AgentTreeNode,
@@ -26,6 +27,7 @@ import {
   groups,
   modelLabel,
   phaseOf,
+  resetTime,
   typeLabel,
 } from './model.ts'
 import { LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, lightColor, lookFrom, restyleLine } from './looks.ts'
@@ -204,9 +206,29 @@ export type RowPlanInput = {
   detailRows?: number
   helpRows?: number
   labelRows?: number
+  limitRows?: number
 }
 
 export type RowPlan = { shown: number; logRows: number }
+
+export const LIMIT_BAR = 8
+export const LIMIT_WARN = 80
+
+function limitBar(percent: number, cells: Glyphs['bar']): string {
+  const filled = Math.round((Math.min(100, Math.max(0, percent)) / 100) * LIMIT_BAR)
+  return cells.full.repeat(filled) + cells.empty.repeat(LIMIT_BAR - filled)
+}
+
+export function limitSegments(limits: readonly AgentTreeLimit[], w: Words, glyphs: Glyphs, width: number): string[] {
+  const build = (bars: boolean) =>
+    limits.map((l, i) => {
+      const reset = resetTime(l.kind, l.resetsAt, w.locale)
+      const parts = [w.limitKind(l.kind), ...(bars ? [limitBar(l.percent, glyphs.bar)] : []), w.percent(Math.round(l.percent)), ...(reset ? [w.limitReset(reset)] : [])]
+      return `${i ? ' · ' : ''}${parts.join(' ')}`
+    })
+  const full = build(true)
+  return [...full.join('')].length <= width ? full : build(false)
+}
 
 function treeRows(o: RowPlanInput, shown: number): number {
   const top = 7 + 1
@@ -224,7 +246,7 @@ function usedRows(o: RowPlanInput, shown: number, logRows: number): number {
   const header = (o.tight ? 1 : 3) + (o.pickerRows ?? 0)
   const tree = treeRows(o, shown)
   const body = o.wide ? Math.max(o.advisorRows, tree) : o.advisorRows + tree
-  return header + 1 + body + (o.detailRows ?? 0) + 4 + logRows + (o.helpRows ?? 0)
+  return header + 1 + body + (o.detailRows ?? 0) + 4 + logRows + (o.limitRows ?? 0) + (o.helpRows ?? 0)
 }
 
 export function planRows(o: RowPlanInput): RowPlan {
@@ -486,6 +508,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     pickerRows: (pickerTarget && actions ? 1 + pickerLines(pickerName, width, lang, pickerTarget !== NEW_AGENTS) : 0) + (s.lookOpen && actions ? lookLines(width, lang) : 0),
     detailRows: detailNode && actions ? DETAIL_ROWS : 0,
     helpRows: tight ? 0 : 1,
+    limitRows: s.main.limits?.length ? 1 : 0,
     labelRows: actions
       ? wrappedLines(
           [
@@ -990,7 +1013,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           ))}
         </Box>
         {pickerTarget !== NEW_AGENTS ? (
-          <Text key="picker-hint" color={palette.dim} wrap="wrap">
+          <Text key="picker-hint" color={palette.dim} wrap="truncate-end">
             {w.effortNextMessage}
           </Text>
         ) : null}
@@ -1074,6 +1097,18 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     </Box>
   )
 
+  const limits = s.main.limits ?? []
+  const limitTexts = limitSegments(limits, w, glyphs, width)
+  const limitRow = limits.length ? (
+    <Box key="limits" flexDirection="row" width={width}>
+      {limits.map((l, i) => (
+        <Text key={`limit:${l.kind}`} size={SIZE.note} color={l.percent >= LIMIT_WARN ? palette.failed : palette.dim} wrap="truncate-end">
+          {limitTexts[i]}
+        </Text>
+      ))}
+    </Box>
+  ) : null
+
   const labelWidth = lookLabelWidth(w)
   const lookRow =
     s.lookOpen && actions ? (
@@ -1122,6 +1157,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       )}
       {detailBox}
       {logBox}
+      {limitRow}
       {tight ? null : (
         <Text key="help" size={SIZE.note} color={palette.dim} wrap="truncate-end">
           {helpLine(w.help, width)}

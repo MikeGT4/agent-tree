@@ -10,7 +10,6 @@ import type { LookRow } from './looks.ts'
 import {
   NEW_AGENTS,
   adopted,
-  carriedChoices,
   choicesOf,
   chosen,
   closed,
@@ -28,9 +27,11 @@ import {
   effortChosen,
   effortFrom,
   effortLabel,
+  freshTree,
   familyFrom,
   isStopping,
   lookOpened,
+  limitsFrom,
   measured,
   pendingCorrection,
   phaseOf,
@@ -51,6 +52,7 @@ import {
   typeLabel,
   wasStopSent,
   withAdvisorModel,
+  withLimits,
 } from './model.ts'
 import { drawTree, inputKey, pressKey, statusText } from './view.tsx'
 import type { TreeActions } from './view.tsx'
@@ -391,6 +393,8 @@ export const register: Register = (on, options) => {
       const w = wordsFor(lang)
       $.ui.toast(w.savedChoice(`${familyOr(saved.newAgents, w.standard)}${saved.newEffort ? ` · ${effortLabel(saved.newEffort)}` : ''}`))
     }
+    const usage = await $.session.usage().catch(() => undefined)
+    if (usage) await change($, s => withLimits(s, limitsFrom(usage.rateLimits))).catch(() => undefined)
     const listed = await $.command.list().catch(() => undefined)
     advisorCommand = !listed || listed.some(c => c.name === 'advisor')
     await readAdvisor($).catch(() => undefined)
@@ -426,7 +430,7 @@ export const register: Register = (on, options) => {
     }
     const now = await clock($)
     if (arg === 'clear') {
-      await change($, s => carriedChoices(s, withAdvisorModel(createTree(now), s.advisor.model)))
+      await change($, s => freshTree(s, now))
       await update($, unreadTexts, () => ({}))
       return { text: w.cleared }
     }
@@ -480,7 +484,8 @@ export const register: Register = (on, options) => {
     }
     const family = before && e.agentId ? choicesOf(before).agents[e.agentId] : undefined
     const model = before && family ? stepModelFor(before, family) : undefined
-    const effort = before && agentId && e.effort !== undefined ? stepEffortFor(before, agentId) : undefined
+    const effort = before && agentId && (e.effort !== undefined || model !== undefined) ? stepEffortFor(before, agentId) : undefined
+    const shownEffort = e.index === 0 || effort === undefined ? (effort ?? e.effort) : undefined
     const changed = model !== undefined || (effort !== undefined && effort !== e.effort)
     const result = yield* next(changed ? { ...e, ...(model ? { model } : {}), ...(effort ? { effort } : {}) } : e)
     const usage = result.usage
@@ -494,7 +499,7 @@ export const register: Register = (on, options) => {
     await change($, s =>
       stepped(
         s,
-        { agentId: e.agentId, answer: result.answer, model: usage?.model ?? model ?? e.model, effort: e.effort, contextTokens, advisorUses },
+        { agentId: e.agentId, answer: result.answer, model: usage?.model ?? model ?? e.model, effort: shownEffort, contextTokens, advisorUses },
         now,
       ),
     ).catch(() => undefined)
@@ -576,9 +581,15 @@ export const register: Register = (on, options) => {
 
   on('session.measure', async ($, e, next) => {
     const result = await next(e)
-    if (e.changed.includes('context') || e.changed.includes('cost')) {
+    if (e.changed.includes('context') || e.changed.includes('cost') || e.changed.includes('rateLimits')) {
       await change($, s =>
-        measured(s, { tokens: e.context.tokens, window: e.context.window, percent: e.context.percent, costUsd: e.cost?.usd }),
+        measured(s, {
+          tokens: e.context.tokens,
+          window: e.context.window,
+          percent: e.context.percent,
+          costUsd: e.cost?.usd,
+          limits: limitsFrom(e.rateLimits),
+        }),
       ).catch(() => undefined)
     }
     return result
@@ -588,7 +599,7 @@ export const register: Register = (on, options) => {
     const reset =
       e.reason === 'clear' || e.reason === 'resume'
         ? clock($)
-            .then(now => change($, s => carriedChoices(s, withAdvisorModel(createTree(now), s.advisor.model))))
+            .then(now => change($, s => freshTree(s, now)))
             .then(() => update($, unreadTexts, () => ({})))
             .catch(() => undefined)
         : Promise.resolve()

@@ -8,6 +8,7 @@ import {
   effortChosen,
   effortFrom,
   familyFrom,
+  limitsFrom,
   stepEffortFor,
   withNewEffort,
   withNewAgents,
@@ -52,7 +53,7 @@ import {
   typeLabel,
   wasStopSent,
 } from '../hooks/model.ts'
-import { AGENT_WIDTH, connector, drawTree, helpLine, inputKey, litCells, lookLines, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
+import { AGENT_WIDTH, connector, drawTree, helpLine, inputKey, limitSegments, litCells, lookLines, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
 import { lookChoice, logLine, resolveLang, toolText, WORDS } from '../hooks/words.ts'
 import { contrast, DEFAULT_LOOK, frameEdges, isLookChoice, lightColor, lookFrom, LOOK_OPTIONS, PALETTES, restyleLine, STYLES } from '../hooks/looks.ts'
 
@@ -248,6 +249,54 @@ describe('Datenmodell', () => {
     s = completed(s, done('a1'), 4)
     s = trimmed(s, 1)
     expect(Object.keys(s.choices?.agents ?? {})).toEqual([])
+  })
+
+  test('beim Kürzen fallen auch die Denkstufen der entfernten Agenten weg', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = spawned(s, spawn('a2'), 2)
+    s = effortChosen(s, 'a1', 'low', 3)
+    s = completed(s, done('a1'), 4)
+    s = trimmed(s, 1)
+    expect(Object.keys(s.choices?.efforts ?? {})).toEqual([])
+  })
+
+  test('Limits: 5 h und Woche zuerst, Unbekanntes bleibt, Kaputtes fällt weg', () => {
+    expect(
+      limitsFrom([
+        { kind: 'seven_day', percentUsed: 84, resetsAt: 'x' },
+        { kind: 'spend_limit', percentUsed: 112.5 },
+        { kind: 'five_hour', percentUsed: 13 },
+        { kind: 3, percentUsed: 1 },
+        { kind: 'five_hour', percentUsed: Number.NaN },
+        null,
+      ]),
+    ).toEqual([
+      { kind: 'five_hour', percent: 13 },
+      { kind: 'seven_day', percent: 84, resetsAt: 'x' },
+      { kind: 'spend_limit', percent: 112.5 },
+    ])
+    expect(limitsFrom(undefined)).toEqual([])
+  })
+
+  test('Limits als Zeile: Balken im Stil, Prozent, Reset als Uhrzeit, ohne Balken bei Platzmangel', () => {
+    const at = (month: number, day: number, hour: number, minute: number) => new Date(2026, month, day, hour, minute).toISOString()
+    const limits = [
+      { kind: 'five_hour', percent: 13, resetsAt: at(9, 29, 1, 40) },
+      { kind: 'seven_day', percent: 84, resetsAt: at(10, 2, 9, 0) },
+      { kind: 'spend_limit', percent: 112.5 },
+    ]
+    const de = limitSegments(limits, WORDS.de, STYLES.braille, 120)
+    expect(de[0]).toBe('5 h ⣿⣀⣀⣀⣀⣀⣀⣀ 13 % bis 01:40')
+    expect(de[1]).toMatch(/^ · Woche ⣿⣿⣿⣿⣿⣿⣿⣀ 84 % bis Mo\.? 09:00$/)
+    expect(de[2]).toBe(' · Budget ⣿⣿⣿⣿⣿⣿⣿⣿ 113 %')
+    expect(limitSegments(limits.slice(0, 2), WORDS.de, STYLES.braille, 40).join('')).not.toMatch(/⣿/)
+    const en = limitSegments(limits.slice(0, 2), WORDS.en, STYLES.line, 120)
+    expect(en).toEqual(['5h █░░░░░░░ 13% resets 01:40', ' · week ███████░ 84% resets Mon 09:00'])
+  })
+
+  test('die Zeile mit den Limits kostet das Protokoll eine Zeile', () => {
+    const wide = { wide: true, tight: false, asRows: false, perRow: 3, advisorRows: 15, earlier: false, height: 40, total: 3 }
+    expect(planRows({ ...wide, limitRows: 1 }).logRows).toBe(planRows(wide).logRows - 1)
   })
 
   test('eine Modellwahl gilt nur ihrem Ziel: die offene Auswahl eines anderen bleibt, ein entfernter Agent bekommt keine', () => {

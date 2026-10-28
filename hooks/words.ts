@@ -72,6 +72,9 @@ export type Words = {
   sayPlaceholder: string
   sayLabel: string
   savedChoice: (label: string) => string
+  limitKind: (kind: string) => string
+  limitReset: (time: string) => string
+  locale: string
   send: string
   correctionFrame: (text: string, tool: string) => string
   mainNote: (agent: string, text: string) => string
@@ -171,7 +174,7 @@ export const WORDS: Record<Lang, Words> = {
     source: { session: 'sitzung', main: 'haupt', agent: 'agent', advisor: 'berater' },
     pickerFor: name => `Modell für ${name}:`,
     effortFor: 'Denkstufe:',
-    effortNextMessage: 'gilt ab seiner nächsten Nachricht, nur bei Modellen mit Denkstufe',
+    effortNextMessage: 'gilt, sobald es eine neue Nachricht bekommt (nur Modelle mit Denkstufe)',
     newAgents: 'neue Unteragenten',
     help: ['ctrl+x tab: Leiste', 'Typ: Details', '■: stoppen', 'm: Modell', 'a: Aussehen', 'Tab: wandern'],
     task: 'Auftrag',
@@ -191,7 +194,10 @@ export const WORDS: Record<Lang, Words> = {
     stopAnswer: n => `Im Agent Tree vom Nutzer gestoppt, nach ${n} ${n === 1 ? 'Werkzeugaufruf' : 'Werkzeugaufrufen'}.`,
     sayPlaceholder: 'hier klicken und tippen, Enter sendet · Esc: zurück',
     sayLabel: 'Nachricht:',
-    savedChoice: label => `Agent Tree: Unteragenten laufen auf ${label}, deine gespeicherte Wahl (m in der Leiste ändert sie)`,
+    savedChoice: label => `Agent Tree: gespeicherte Wahl für Unteragenten: ${label} (m in der Leiste ändert sie)`,
+    limitKind: kind => (kind === 'five_hour' ? '5 h' : kind === 'seven_day' ? 'Woche' : kind === 'spend_limit' ? 'Budget' : kind),
+    limitReset: time => `bis ${time}`,
+    locale: 'de-DE',
     send: 'senden',
     correctionFrame: (text, tool) =>
       `Nachricht des Nutzers über Agent Tree: ${text}\n\nSie gilt ab jetzt für deinen Auftrag. Berücksichtige sie bei der weiteren Arbeit und in deinem Bericht über ${tool}.`,
@@ -297,7 +303,7 @@ export const WORDS: Record<Lang, Words> = {
     source: { session: 'session', main: 'main', agent: 'agent', advisor: 'advisor' },
     pickerFor: name => `Model for ${name}:`,
     effortFor: 'Effort:',
-    effortNextMessage: 'applies from its next message, only on models with effort',
+    effortNextMessage: 'applies once it gets a new message (models with effort only)',
     newAgents: 'new sub-agents',
     help: ['ctrl+x tab: pane', 'type: details', '■: stop', 'm: model', 'a: look', 'Tab: move'],
     task: 'Task',
@@ -317,7 +323,10 @@ export const WORDS: Record<Lang, Words> = {
     stopAnswer: n => `Stopped by the user in Agent Tree after ${n} tool ${n === 1 ? 'call' : 'calls'}.`,
     sayPlaceholder: 'click here and type, Enter sends · Esc: back',
     sayLabel: 'Message:',
-    savedChoice: label => `Agent Tree: sub-agents run on ${label}, your saved choice (m in the pane changes it)`,
+    savedChoice: label => `Agent Tree: saved sub-agent choice: ${label} (m in the pane changes it)`,
+    limitKind: kind => (kind === 'five_hour' ? '5h' : kind === 'seven_day' ? 'week' : kind === 'spend_limit' ? 'spend' : kind),
+    limitReset: time => `resets ${time}`,
+    locale: 'en-US',
     send: 'send',
     correctionFrame: (text, tool) =>
       `Message from the user via Agent Tree: ${text}\n\nIt applies to your task from now on. Take it into account in your remaining work and in your report via ${tool}.`,

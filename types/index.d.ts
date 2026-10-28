@@ -84,6 +84,13 @@ export type AgentTreeMain = {
   returned: number
   returnedTokens: number
   costUsd?: number
+  limits?: AgentTreeLimit[]
+}
+
+export type AgentTreeLimit = {
+  kind: string
+  percent: number
+  resetsAt?: string
 }
 
 export type AgentTreeOrphanEnd = {

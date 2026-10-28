@@ -357,7 +357,7 @@ describe('Agent Tree', () => {
     await ui.press({ key: 'effort:new:low' })
     await ui.press({ key: 'pick:sub-1' })
     await ui.redraw()
-    expect(await screen(ui)).toMatch(/ab seiner nächsten Nachricht/)
+    expect(await screen(ui)).toMatch(/sobald es eine neue Nachricht bekommt/)
     await ui.press({ key: 'effort:sub-1:max' })
     await ui.unmount()
     await step($, { agentId: 'sub-1' })
@@ -614,19 +614,19 @@ describe('Agent Tree', () => {
     await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
     await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' } as never)
     expect(seen.spawnModels.at(-1)).toBeUndefined()
-    expect(seen.toasts.join(' ')).not.toMatch(/Unteragenten laufen/)
+    expect(seen.toasts.join(' ')).not.toMatch(/gespeicherte Wahl/)
   })
 
   test('eine gespeicherte Wahl abseits von Standard meldet sich beim Start', de, async ($, on) => {
     const seen = engine(on, [], {}, { model: 'sonnet', effort: 'low' })
     await startSession($)
-    expect(seen.toasts.join(' ')).toMatch(/Unteragenten laufen auf Sonnet · Low/)
+    expect(seen.toasts.join(' ')).toMatch(/gespeicherte Wahl für Unteragenten: Sonnet · Low/)
   })
 
   test('mit Standard meldet sich beim Start nichts', de, async ($, on) => {
     const seen = engine(on, [], {}, { model: null, effort: null })
     await startSession($)
-    expect(seen.toasts.join(' ')).not.toMatch(/Unteragenten laufen/)
+    expect(seen.toasts.join(' ')).not.toMatch(/gespeicherte Wahl/)
   })
 
   test('das Eingabefeld im Detailkasten ist beschriftet', de, async ($, on) => {
@@ -638,6 +638,110 @@ describe('Agent Tree', () => {
     expect(await screen(ui)).toMatch(/Nachricht:/)
     expect(await screen(ui)).toMatch(/hier klicken und tippen/)
     await ui.unmount()
+  })
+
+  const limitAt = (month: number, day: number, hour: number, minute: number) => new Date(2026, month, day, hour, minute).toISOString()
+  const limitWindows = [
+    { kind: 'five_hour', percentUsed: 13, resetsAt: limitAt(9, 29, 1, 40) },
+    { kind: 'seven_day', percentUsed: 84, resetsAt: limitAt(10, 2, 9, 0) },
+  ]
+  const measureLimits = ($: Engine, rateLimits: unknown[]) =>
+    $.session.measure({ context: { window: 200000, tokens: 50000, percent: 25 }, rateLimits, cost: { usd: 1.5 }, changed: ['context', 'rateLimits'] } as never)
+
+  test('unten in der Leiste stehen das 5-Stunden- und das Wochenlimit', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await measureLimits($, limitWindows)
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    expect(text).toMatch(/5 h \S+ 13 % bis 01:40/)
+    expect(text).toMatch(/Woche \S+ 84 % bis Mo\.? 09:00/)
+    const texts = await ui.findAll({ type: 'Text' })
+    const colorOf = (pattern: RegExp) => texts.find(f => pattern.test(f.text))?.props.color
+    expect(colorOf(/Woche/)).toBeDefined()
+    expect(colorOf(/Woche/)).not.toBe(colorOf(/^5 h /))
+    await ui.unmount()
+  })
+
+  test('ohne Abo gibt es keine Zeile mit Limits', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await measureLimits($, [])
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).not.toMatch(/Woche|bis \d\d:\d\d/)
+    await ui.unmount()
+  })
+
+  test('nach /clear bleiben die Limits stehen', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await measureLimits($, limitWindows)
+    await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/Woche \S+ 84 %/)
+    await ui.unmount()
+  })
+
+  test('beim Start liest die Leiste die Limits selbst', de, async ($, on) => {
+    engine(on)
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000 }, rateLimits: limitWindows } }) as never)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/5 h \S+ 13 %/)
+    await ui.unmount()
+  })
+
+  test('die Limits auf Englisch', { options: { language: 'en' } }, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await measureLimits($, limitWindows)
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    expect(text).toMatch(/5h \S+ 13% resets 01:40/)
+    expect(text).toMatch(/week \S+ 84% resets Mon 09:00/)
+    await ui.unmount()
+  })
+
+  test('der Kasten zeigt die Denkstufe, mit der der Unteragent läuft', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'effort:new:low' })
+    await ui.unmount()
+    await step($, { agentId: 'sub-1' })
+    const again = await $.ui.mount(pane(90))
+    expect(await screen(again)).toMatch(/▮▯▯▯▯ low/)
+    await again.unmount()
+  })
+
+  test('ein auf ein Modell mit Denkstufe umgestellter Agent bekommt die gewählte Stufe', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'effort:new:low' })
+    await ui.press({ key: 'pick:sub-1' })
+    await ui.press({ key: 'choose:sub-1:opus' })
+    await ui.unmount()
+    await step($, { agentId: 'sub-1', noEffort: true })
+    expect(seen.stepModels.at(-1)).toMatch(/opus/)
+    expect(seen.stepEfforts.at(-1)).toBe('low')
+  })
+
+  test('nach dem Fortsetzen bleibt die gespeicherte Wahl', de, async ($, on) => {
+    const seen = engine(on, [], {}, { model: 'sonnet', effort: 'low' })
+    await oneAgentWithAdvisor($)
+    await $.session.end({ reason: 'resume', sessionId: 's1', resume: { id: 's2' } } as never)
+    await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' } as never)
+    expect(seen.spawnModels.at(-1)).toBe('sonnet')
+  })
+
+  test('ein erneuter Start meldet die gespeicherte Wahl nicht noch einmal', de, async ($, on) => {
+    const seen = engine(on, [], {}, { model: 'sonnet', effort: 'low' })
+    await startSession($)
+    await startSession($)
+    expect(seen.toasts.filter(t => /gespeicherte Wahl/.test(t))).toHaveLength(1)
   })
 
   test('englische Beschriftung, wenn die Sprache Englisch ist', { options: { language: 'en' } }, async ($, on) => {
