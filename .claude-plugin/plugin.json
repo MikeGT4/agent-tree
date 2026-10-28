@@ -1,15 +1,18 @@
 {
   "name": "agent-tree",
   "displayName": "Agent Tree",
-  "version": "0.4.2",
-  "description": "Side pane that draws the session's agents as boxes: main session, sub-agents, the way back, advisor and session log.",
+  "version": "0.4.3",
+  "description": "Terminal side pane that shows a session's agents as a live tree: stop a sub-agent, send it new instructions mid-task, switch its model, change the look.",
   "author": {
     "name": "Mike Pollow, Digitalroots"
   },
   "homepage": "https://github.com/MikeGT4/agent-tree",
+  "documentationUrl": "https://github.com/MikeGT4/agent-tree/blob/main/docs/GUIDE.md",
+  "supportUrl": "https://github.com/MikeGT4/agent-tree/issues",
   "privacyPolicyUrl": "https://github.com/MikeGT4/agent-tree/blob/main/PRIVACY.md",
   "repository": "https://github.com/MikeGT4/agent-tree",
   "license": "MIT",
+  "keywords": ["agents", "ai-agents", "sub-agents", "multi-agent", "agent-monitoring", "observability", "visualization", "developer-tools", "agentic-coding", "coding-agents", "terminal", "tui"],
   "types": "./types/index.d.ts",
   "userConfig": {
     "columns": {
