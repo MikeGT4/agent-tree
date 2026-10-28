@@ -14,8 +14,9 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
+  let storeBroken = false
   on('store.get', (_, e) => {
-    if (refuse.storeGet) throw new Error('store')
+    if (refuse.storeGet || storeBroken) throw new Error('store')
     return { value: stored[(e as { key: string }).key] } as never
   })
   on('store.set', (_, e) => {
@@ -105,7 +106,10 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
         : {}),
     }
   })
-  return { status, spawnModels, stepModels, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts }
+  const storeGetFails = () => {
+    storeBroken = true
+  }
+  return { status, spawnModels, stepModels, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts, storeGetFails }
 }
 
 async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[] } = {}) {
@@ -225,6 +229,82 @@ describe('Agent Tree', () => {
     await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' } as never)
     await $.agent.spawn({ prompt: 'Q.', description: 'Eigen', subagentType: 'Plan', model: 'haiku' } as never)
     expect(seen.spawnModels.slice(-2)).toEqual(['opus', 'haiku'])
+  })
+
+  test('die Modellwahl für neue Unteragenten wird gespeichert, Standard leert sie', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'choose:new:haiku' })
+    expect(seen.storeSets.filter(s => s.key === 'model').at(-1)).toEqual({ key: 'model', value: 'haiku' })
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'choose:new:default' })
+    expect(seen.storeSets.filter(s => s.key === 'model').at(-1)).toEqual({ key: 'model', value: null })
+    await ui.unmount()
+  })
+
+  test('die Wahl für einen einzelnen Agenten wird nicht gespeichert', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:sub-1' })
+    await ui.press({ key: 'choose:sub-1:sonnet' })
+    expect(seen.storeSets.filter(s => s.key === 'model')).toEqual([])
+    await ui.unmount()
+  })
+
+  test('eine gespeicherte Modellwahl gilt beim Start und steht am Knopf', de, async ($, on) => {
+    const seen = engine(on, [], {}, { model: 'sonnet' })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'pick:new' }))?.props.label).toBe('Unteragenten-Modell: Sonnet ▾')
+    await ui.unmount()
+    await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' } as never)
+    expect(seen.spawnModels.at(-1)).toBe('sonnet')
+  })
+
+  test('ein unbekanntes gespeichertes Modell gilt als Standard', de, async ($, on) => {
+    const seen = engine(on, [], {}, { model: 'gpt-9' })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'pick:new' }))?.props.label).toBe('Unteragenten-Modell: Standard ▾')
+    await ui.unmount()
+    await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' } as never)
+    expect(seen.spawnModels.at(-1)).toBeUndefined()
+  })
+
+  test('ein Aussehen aus einem anderen Terminal gilt ab dem nächsten Zug', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    seen.stored.look = { style: 'ascii', colors: 'retro', light: 'gold' }
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toContain(PALETTES.retro.agent)
+    await ui.unmount()
+  })
+
+  test('eine laufende Sitzung behält ihre Modellwahl, auch wenn ein anderes Terminal eine andere speichert', de, async ($, on) => {
+    const seen = engine(on, [], {}, { model: 'sonnet' })
+    await oneAgentWithAdvisor($)
+    seen.stored.model = 'haiku'
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'pick:new' }))?.props.label).toBe('Unteragenten-Modell: Sonnet ▾')
+    await ui.unmount()
+    await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' } as never)
+    expect(seen.spawnModels.at(-1)).toBe('sonnet')
+  })
+
+  test('kann der Speicher nicht gelesen werden, bleibt die Wahl der Sitzung', de, async ($, on) => {
+    const seen = engine(on, [], {}, { model: 'sonnet', look: { style: 'ascii', colors: 'retro', light: 'gold' } })
+    await oneAgentWithAdvisor($)
+    seen.storeGetFails()
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'pick:new' }))?.props.label).toBe('Unteragenten-Modell: Sonnet ▾')
+    expect(await screen(ui)).toContain(PALETTES.retro.agent)
+    await ui.unmount()
   })
 
   test('Modellwahl für einen laufenden Agenten setzt seine nächsten Schritte um', de, async ($, on) => {

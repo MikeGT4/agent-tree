@@ -8,6 +8,7 @@ import { checkForUpdate, UPDATE_KEY } from './update.ts'
 import type { UpdateHost } from './update.ts'
 import type { LookRow } from './looks.ts'
 import {
+  NEW_AGENTS,
   adopted,
   choicesOf,
   chosen,
@@ -23,6 +24,7 @@ import {
   createTree,
   detailLoaded,
   detailOpened,
+  familyFrom,
   isStopping,
   lookOpened,
   measured,
@@ -43,6 +45,7 @@ import {
   typeLabel,
   wasStopSent,
   withAdvisorModel,
+  withNewAgents,
 } from './model.ts'
 import { drawTree, inputKey, pressKey, statusText } from './view.tsx'
 import type { TreeActions } from './view.tsx'
@@ -56,6 +59,7 @@ const SHAPE = 'agent-tree-1'
 const LOOK_SHAPE = 'agent-tree-look-1'
 const LOOK_KEY = 'look'
 const STAR_KEY = 'star'
+const MODEL_KEY = 'model'
 const INLINE_ROWS = 40
 const FRAME_MS = 250
 const HANDBACK = 'SubagentHandback'
@@ -148,6 +152,29 @@ async function restyle($: EngineInterface, row: LookRow, id: string): Promise<vo
 async function resetLook($: EngineInterface): Promise<void> {
   await $.store.set(LOOK_KEY, DEFAULT_LOOK).catch(() => undefined)
   await update($, appearance, () => DEFAULT_LOOK)
+}
+
+async function restoreLook($: EngineInterface): Promise<void> {
+  const look = await $.store.get(LOOK_KEY).then(
+    value => ({ value }),
+    () => undefined,
+  )
+  if (look) await update($, appearance, () => lookFrom(look.value))
+}
+
+async function restoreChoices($: EngineInterface): Promise<void> {
+  await restoreLook($)
+  const model = await $.store.get(MODEL_KEY).then(
+    value => ({ value }),
+    () => undefined,
+  )
+  if (model) await change($, s => withNewAgents(s, familyFrom(model.value)))
+}
+
+async function chooseModel($: EngineInterface, target: string, family: string | undefined): Promise<void> {
+  const now = await clock($)
+  await change($, t => chosen(t, target, family, now))
+  if (target === NEW_AGENTS) await $.store.set(MODEL_KEY, family ?? null).catch(() => undefined)
 }
 
 async function catchUp($: EngineInterface, now: number, keep: number): Promise<void> {
@@ -265,7 +292,7 @@ function actionsFor($: EngineInterface): TreeActions {
   const ignore = () => undefined
   return {
     pick: target => void change($, t => pickerOpened(t, target)).catch(ignore),
-    choose: (target, family) => void clock($).then(now => change($, t => chosen(t, target, family, now))).catch(ignore),
+    choose: (target, family) => void chooseModel($, target, family).catch(ignore),
     close: () => void change($, t => closed(t)).catch(ignore),
     detail: agentId => void openDetail($, agentId).catch(ignore),
     stop: agentId => {
@@ -345,8 +372,7 @@ export const register: Register = (on, options) => {
     await $.command
       .register({ name: COMMAND, description: wordsFor(lang).commandDescription, argumentHint: wordsFor(lang).commandHint, immediate: true })
       .catch(() => undefined)
-    const saved = await $.store.get(LOOK_KEY).catch(() => undefined)
-    await update($, appearance, () => lookFrom(saved)).catch(() => undefined)
+    await restoreChoices($).catch(() => undefined)
     const listed = await $.command.list().catch(() => undefined)
     advisorCommand = !listed || listed.some(c => c.name === 'advisor')
     await readAdvisor($).catch(() => undefined)
@@ -402,6 +428,7 @@ export const register: Register = (on, options) => {
     const now = await clock($)
     await change($, s => turnStarted(s, { text: e.text, agentId: e.agentId }, now)).catch(() => undefined)
     if (!e.agentId) await readAdvisor($).catch(() => undefined)
+    if (!e.agentId) await restoreLook($).catch(() => undefined)
     return result
   })
 

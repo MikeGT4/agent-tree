@@ -5,6 +5,8 @@ import type { AgentTreeLogEntry } from '../types'
 import {
   adopted,
   chosen,
+  familyFrom,
+  withNewAgents,
   clockTime,
   closed,
   completed,
@@ -778,5 +780,21 @@ describe('Aussehen', () => {
     expect(runningMark(1, true, STYLES.braille.spinner)).toBe('⠙')
     expect(runningMark(5, false, STYLES.braille.spinner)).toBe('⠋')
     expect(runningMark(2, true)).toBe('◑')
+  })
+
+  test('nur bekannte Modellfamilien kommen aus dem Speicher', () => {
+    expect(familyFrom('haiku')).toBe('haiku')
+    expect(familyFrom('fable')).toBe('fable')
+    expect(familyFrom('gpt-9')).toBeUndefined()
+    expect(familyFrom(null)).toBeUndefined()
+    expect(familyFrom(42)).toBeUndefined()
+  })
+
+  test('die gespeicherte Modellwahl setzt neue Unteragenten ohne Protokollzeile', () => {
+    const s = createTree(0)
+    const restored = withNewAgents(s, 'opus')
+    expect(restored.choices?.newAgents).toBe('opus')
+    expect(restored.log).toEqual(s.log)
+    expect(withNewAgents(restored, 'opus')).toBe(restored)
   })
 })

@@ -65,6 +65,10 @@ export const MODEL_FAMILIES = ['haiku', 'sonnet', 'opus', 'fable'] as const
 
 export const NEW_AGENTS = 'new'
 
+export function familyFrom(value: unknown): string | undefined {
+  return typeof value === 'string' && (MODEL_FAMILIES as readonly string[]).includes(value) ? value : undefined
+}
+
 export function choicesOf(s: AgentTreeState): AgentTreeChoices {
   return s.choices ?? { agents: {} }
 }
@@ -199,6 +203,11 @@ function withoutStop(s: AgentTreeState, agentId: string): AgentTreeState {
     stopping: (s.stopping ?? []).filter(id => id !== agentId),
     stopSent: (s.stopSent ?? []).filter(id => id !== agentId),
   }
+}
+
+export function withNewAgents(s: AgentTreeState, family: string | undefined): AgentTreeState {
+  const current = choicesOf(s)
+  return current.newAgents === family ? s : { ...s, choices: { ...current, newAgents: family } }
 }
 
 export function chosen(s: AgentTreeState, target: string, family: string | undefined, now: number): AgentTreeState {
