@@ -12,13 +12,23 @@ A terminal side pane for Claude Code that draws a session's agents as a tree of 
 /plugin install agent-tree --marketplace MikeGT4/agent-tree
 ```
 
-Tested with 2.1.309 to 2.1.312, needs the mod interface. Updates: `/plugin` → Marketplaces → agent-tree → Enable auto-update.
+Tested with 2.1.309 to 2.1.312, needs the mod interface.
+
+Updates: `/plugin` → Marketplaces → agent-tree → Enable auto-update.
 
 ## Use
 
-`/agent-tree` opens the pane, `/agent-tree stop` closes it, `/agent-tree clear` starts afresh. Click a type for task, tools and latest answer; type there to correct a running agent at its next step. ■ stops an agent, clicking its model switches it. Keys: ctrl+x tab focuses the pane, m model, a look, x close.
+`/agent-tree` opens the pane, `/agent-tree stop` closes it, `/agent-tree clear` starts afresh.
 
-Customizable: five styles (line, pixel, braille, HUD, ASCII), four color schemes, a glow color. The advisor box toggles the advisor.
+Click a type for task, tools and latest answer; type there to correct a running agent at its next step.
+
+■ stops an agent, clicking its model switches it.
+
+Keys: ctrl+x tab focuses the pane, m model, a look, x close.
+
+Customizable: five styles (line, pixel, braille, HUD, ASCII), four color schemes, a glow color.
+
+The advisor box toggles the advisor.
 
 Privacy: local only, sends nothing ([PRIVACY.md](PRIVACY.md)).
 
