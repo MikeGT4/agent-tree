@@ -12,6 +12,6 @@ Claude Code's plugin storage keeps your look, the sub-agent model and effort, th
 
 ## Hooks
 
-They act only after you act in the pane: a model or effort you pick, kept for later sessions, a stop, a message to an agent (noted in the transcript) and the advisor button (`/advisor`).
+They act only after you act in the pane: a model or effort you pick, a stop, a message to an agent (noted in the transcript) and the advisor button (`/advisor`).
 
 Questions: github.com/MikeGT4/agent-tree/issues
