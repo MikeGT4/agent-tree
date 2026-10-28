@@ -1146,7 +1146,7 @@ describe('Aussehen in der Leiste', () => {
     const text = (await command($, 'stil zickzack')).text ?? ''
     expect(text).toMatch(/Linie/)
     expect(text).toMatch(/ASCII/)
-    expect(seen.storeSets.length).toBe(0)
+    expect(seen.storeSets.filter(s => s.key === 'look')).toEqual([])
   })
 
   test('bei 38 Spalten sind alle Knöpfe der Auswahl da', de, async ($, on) => {
@@ -1277,5 +1277,24 @@ describe('Aussehen in der Leiste', () => {
     expect(text).toMatch(/┌╴/)
     expect(text).toMatch(/╶┐/)
     await ui.unmount()
+  })
+})
+
+describe('Stern-Hinweis', () => {
+  const star = (toasts: string[]) => toasts.filter(t => t.includes('github.com/MikeGT4/agent-tree'))
+
+  test('bittet beim zweiten Sitzungsstart genau einmal um einen Stern', de, async ($, on) => {
+    const e = engine(on)
+    await startSession($)
+    expect(star(e.toasts)).toEqual([])
+    await startSession($)
+    await startSession($)
+    expect(star(e.toasts).length).toBe(1)
+  })
+
+  test('in Sitzungen ohne Bedienung bittet er nicht', de, async ($, on) => {
+    const e = engine(on)
+    for (let i = 0; i < 3; i++) await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
+    expect(star(e.toasts)).toEqual([])
   })
 })

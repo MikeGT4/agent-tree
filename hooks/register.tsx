@@ -4,6 +4,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentTreeState } from '../types'
 import { DEFAULT_LOOK, LOOK_OPTIONS, lookFrom } from './looks.ts'
+import { checkForUpdate, hostOf } from './update.ts'
 import type { LookRow } from './looks.ts'
 import {
   adopted,
@@ -53,6 +54,7 @@ const TITLE = 'Agent Tree'
 const SHAPE = 'agent-tree-1'
 const LOOK_SHAPE = 'agent-tree-look-1'
 const LOOK_KEY = 'look'
+const STAR_KEY = 'star'
 const INLINE_ROWS = 40
 const FRAME_MS = 250
 const HANDBACK = 'SubagentHandback'
@@ -279,6 +281,20 @@ function actionsFor($: EngineInterface): TreeActions {
   }
 }
 
+async function starDue($: EngineInterface): Promise<boolean> {
+  const starts = Number((await $.store.get(STAR_KEY).catch(() => undefined)) ?? 0)
+  if (!Number.isFinite(starts) || starts >= 2) return false
+  await $.store.set(STAR_KEY, starts + 1).catch(() => undefined)
+  return starts + 1 === 2
+}
+
+async function announceUpdate($: EngineInterface, enabled: boolean): Promise<void> {
+  const outcome = await checkForUpdate(hostOf($), $.plugin.root, enabled, await clock($))
+  const w = wordsFor(lang)
+  if (outcome.kind === 'installed') $.ui.toast(w.updateInstalled(outcome.version))
+  if (outcome.kind === 'failed') $.ui.toast(w.updateFailed(outcome.version, outcome.command))
+}
+
 export const register: Register = (on, options) => {
   const columns = paneColumns(options.columns)
   const keep = agentLimit(options.maxAgents)
@@ -301,6 +317,10 @@ export const register: Register = (on, options) => {
     await readAdvisor($).catch(() => undefined)
     await catchUp($, await clock($), keep).catch(() => undefined)
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
+    if (e.isInteractive !== false) {
+      if (await starDue($)) $.ui.toast(wordsFor(lang).starHint)
+      void announceUpdate($, options.autoUpdate !== false).catch(() => undefined)
+    }
     return result
   })
 

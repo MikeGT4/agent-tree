@@ -82,6 +82,9 @@ export type Words = {
   advisorOn: string
   advisorOff: string
   advisorUnavailable: string
+  starHint: string
+  updateInstalled: (version: string) => string
+  updateFailed: (version: string, command: string) => string
   look: string
   lookRow: Record<LookRow, string>
   lookOption: { [R in LookRow]: Record<(typeof LOOK_OPTIONS)[R][number], string> }
@@ -197,6 +200,9 @@ export const WORDS: Record<Lang, Words> = {
     advisorOn: 'einschalten',
     advisorOff: 'ausschalten',
     advisorUnavailable: 'Agent Tree: /advisor ist in dieser Sitzung nicht verfügbar',
+    starHint: 'Gefällt dir Agent Tree? Ein Stern auf GitHub hilft: github.com/MikeGT4/agent-tree',
+    updateInstalled: version => `Agent Tree ${version} ist installiert und lädt beim nächsten Start`,
+    updateFailed: (version, command) => `Agent Tree ${version} ist da, aktualisieren mit: ${command}`,
     look: 'Aussehen',
     lookRow: { style: 'Stil', colors: 'Farben', light: 'Licht' },
     lookOption: {
@@ -314,6 +320,9 @@ export const WORDS: Record<Lang, Words> = {
     advisorOn: 'turn on',
     advisorOff: 'turn off',
     advisorUnavailable: 'Agent Tree: /advisor is not available in this session',
+    starHint: 'Like Agent Tree? A star on GitHub helps: github.com/MikeGT4/agent-tree',
+    updateInstalled: version => `Agent Tree ${version} is installed and loads at the next start`,
+    updateFailed: (version, command) => `Agent Tree ${version} is out, update with: ${command}`,
     look: 'Look',
     lookRow: { style: 'Style', colors: 'Colors', light: 'Glow' },
     lookOption: {

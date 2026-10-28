@@ -1,7 +1,7 @@
 {
   "name": "agent-tree",
   "displayName": "Agent Tree",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Side pane that draws the session's agents as boxes: main session, sub-agents, the way back, advisor and session log.",
   "author": {
     "name": "Mike Pollow, Digitalroots"
@@ -46,6 +46,12 @@
         "en"
       ],
       "default": "auto"
+    },
+    "autoUpdate": {
+      "type": "boolean",
+      "title": "Auto-update",
+      "description": "Once a day, install a newer Agent Tree from its marketplace",
+      "default": true
     }
   }
 }
