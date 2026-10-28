@@ -2,6 +2,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { BONSAI_FORMS, bonsaiPlant, brailleRows, introPhase, visibleDots } from '../hooks/bonsai.ts'
+import { introLines, introRows } from '../hooks/intro.tsx'
+import { WORDS } from '../hooks/words.ts'
 
 describe('Bonsai', () => {
   test('Braille-Raster: Punkte auf Zeichen', () => {
@@ -95,5 +97,27 @@ describe('Bonsai', () => {
     expect(late.length).toBeLessThan(dots.length)
     expect(late.every(d => d.part === 'pot')).toBe(true)
     expect(visibleDots(dots, 2000)).toEqual([])
+  })
+  test('Zeilen des Intros: Braille in voller Breite, Teile je Zelle, neu gerechnet für eine kleinere Leiste', () => {
+    const big = bonsaiPlant(7, 162, 88)
+    const rows = introRows(visibleDots(big.dots, 1100), 81, 22)
+    expect(rows).toHaveLength(22)
+    expect(rows.every(row => row.reduce((n, run) => n + [...run.text].length, 0) === 81)).toBe(true)
+    expect(rows.flat().some(run => /[⠁-⣿]/.test(run.text))).toBe(true)
+    expect(new Set(rows.flat().map(run => run.part ?? 'leer'))).toEqual(new Set(['leer', 'wood', 'leaf', 'pot']))
+    const small = bonsaiPlant(7, 120, 60)
+    const smaller = introRows(visibleDots(small.dots, 1100), 60, 15)
+    expect(smaller.every(row => row.reduce((n, run) => n + [...run.text].length, 0) === 60)).toBe(true)
+  })
+
+  test('Startzeilen nennen nur, was bekannt ist', () => {
+    expect(introLines({ advisor: 'Opus' }, WORDS.de)).toEqual(['Berater Opus'])
+    expect(introLines({ model: 'Opus 5.5', effort: 'max', subAgents: 'Sonnet · Low', limits: '5 h 27 % · Woche 6 %' }, WORDS.de)).toEqual([
+      'Modell Opus 5.5 · max',
+      'Unteragenten Sonnet · Low',
+      'Limits 5 h 27 % · Woche 6 %',
+    ])
+    expect(introLines({ model: 'Haiku 5.5' }, WORDS.en)).toEqual(['model Haiku 5.5'])
+    expect(introLines({}, WORDS.en)).toEqual([])
   })
 })

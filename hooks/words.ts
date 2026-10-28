@@ -75,6 +75,10 @@ export type Words = {
   limitKind: (kind: string) => string
   limitReset: (time: string) => string
   locale: string
+  introModel: (model: string) => string
+  introAdvisor: (advisor: string) => string
+  introSubAgents: (choice: string) => string
+  introLimits: (limits: string) => string
   send: string
   correctionFrame: (text: string, tool: string) => string
   mainNote: (agent: string, text: string) => string
@@ -198,6 +202,10 @@ export const WORDS: Record<Lang, Words> = {
     limitKind: kind => (kind === 'five_hour' ? '5 h' : kind === 'seven_day' ? 'Woche' : kind === 'spend_limit' ? 'Budget' : kind),
     limitReset: time => `bis ${time}`,
     locale: 'de-DE',
+    introModel: model => `Modell ${model}`,
+    introAdvisor: advisor => `Berater ${advisor}`,
+    introSubAgents: choice => `Unteragenten ${choice}`,
+    introLimits: limits => `Limits ${limits}`,
     send: 'senden',
     correctionFrame: (text, tool) =>
       `Nachricht des Nutzers über Agent Tree: ${text}\n\nSie gilt ab jetzt für deinen Auftrag. Berücksichtige sie bei der weiteren Arbeit und in deinem Bericht über ${tool}.`,
@@ -327,6 +335,10 @@ export const WORDS: Record<Lang, Words> = {
     limitKind: kind => (kind === 'five_hour' ? '5h' : kind === 'seven_day' ? 'week' : kind === 'spend_limit' ? 'spend' : kind),
     limitReset: time => `resets ${time}`,
     locale: 'en-US',
+    introModel: model => `model ${model}`,
+    introAdvisor: advisor => `advisor ${advisor}`,
+    introSubAgents: choice => `sub-agents ${choice}`,
+    introLimits: limits => `limits ${limits}`,
     send: 'send',
     correctionFrame: (text, tool) =>
       `Message from the user via Agent Tree: ${text}\n\nIt applies to your task from now on. Take it into account in your remaining work and in your report via ${tool}.`,
