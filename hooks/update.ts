@@ -1,63 +1,46 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
-import type { EngineInterface } from 'claude-code'
-
-export const LATEST_URL = 'https://raw.githubusercontent.com/MikeGT4/agent-tree/main/.claude-plugin/plugin.json'
 export const UPDATE_KEY = 'update'
+export const UPDATE_COMMAND = 'claude plugin update agent-tree'
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const UPDATE_TIMEOUT_MS = 120_000
 const ALREADY_LATEST = /already at the latest version/i
 const OFF_SWITCHES = ['DO_NOT_TRACK', 'DISABLE_AUTOUPDATER', 'DISABLE_UPDATES', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC']
+const NOT_FROM_A_MARKETPLACE = new Set(['skills-dir', 'inline', 'synced', 'builtin'])
 
-export type Install = { marketplace: string; version: string }
+export type Install = { id: string; version: string }
 
 export type UpdateOutcome =
   | { kind: 'off' | 'skipped' | 'current' }
   | { kind: 'installed'; version: string }
   | { kind: 'failed'; version: string; command: string }
 
-type UpdateState = { checkedAt?: number; tried?: string }
-
 export type UpdateHost = {
   env: (name: string) => Promise<string | undefined>
   load: () => Promise<unknown>
   save: (value: unknown) => Promise<void>
-  fetchText: (url: string) => Promise<{ ok: boolean; text: string } | undefined>
-  run: (argv: readonly string[]) => Promise<{ exitCode: number; stdout: string } | undefined>
+  listPlugins: () => Promise<string | undefined>
+  fetchLatest: () => Promise<{ ok: boolean; text: string } | undefined>
+  update: () => Promise<{ exitCode: number; stdout: string } | undefined>
 }
 
-async function offSwitch($: EngineInterface, name: string): Promise<string | undefined> {
-  switch (name) {
-    case 'DO_NOT_TRACK':
-      return $.env.get('DO_NOT_TRACK').catch(() => undefined)
-    case 'DISABLE_AUTOUPDATER':
-      return $.env.get('DISABLE_AUTOUPDATER').catch(() => undefined)
-    case 'DISABLE_UPDATES':
-      return $.env.get('DISABLE_UPDATES').catch(() => undefined)
-    case 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC':
-      return $.env.get('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC').catch(() => undefined)
-    default:
-      return undefined
+type UpdateState = { checkedAt?: number; tried?: string }
+
+export function installedFrom(listJson: string): Install | undefined {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(listJson)
+  } catch {
+    return undefined
   }
-}
-
-export function hostOf($: EngineInterface): UpdateHost {
-  return {
-    env: name => offSwitch($, name),
-    load: () => $.store.get(UPDATE_KEY).catch(() => undefined),
-    save: value => $.store.set(UPDATE_KEY, value).catch(() => undefined),
-    fetchText: url => $.http.fetch(url).catch(() => undefined),
-    run: argv =>
-      $.process
-        .run(argv, { timeoutMs: UPDATE_TIMEOUT_MS })
-        .then(result => ({ exitCode: result.exitCode, stdout: result.stdout }))
-        .catch(() => undefined),
+  const entries = Array.isArray(parsed) ? parsed : (parsed as { plugins?: unknown } | null)?.plugins
+  if (!Array.isArray(entries)) return undefined
+  for (const entry of entries) {
+    const { id, version, enabled } = (entry ?? {}) as { id?: unknown; version?: unknown; enabled?: unknown }
+    if (typeof id !== 'string' || typeof version !== 'string' || enabled === false) continue
+    const [name, origin] = id.split('@')
+    if (name === 'agent-tree' && origin && !NOT_FROM_A_MARKETPLACE.has(origin)) return { id, version }
   }
-}
-
-export function installFrom(root: string): Install | undefined {
-  const found = /[\\/]cache[\\/]([^\\/]+)[\\/]agent-tree[\\/]([^\\/]+)[\\/]?$/.exec(root)
-  return found ? { marketplace: found[1]!, version: found[2]! } : undefined
+  return undefined
 }
 
 export function isNewer(candidate: string, current: string): boolean {
@@ -92,27 +75,22 @@ async function updatesSwitchedOff(host: UpdateHost): Promise<boolean> {
   return false
 }
 
-export async function checkForUpdate(
-  host: UpdateHost,
-  root: string,
-  enabled: boolean,
-  now: number,
-): Promise<UpdateOutcome> {
+export async function checkForUpdate(host: UpdateHost, enabled: boolean, now: number): Promise<UpdateOutcome> {
   if (!enabled || (await updatesSwitchedOff(host))) return { kind: 'off' }
-  const install = installFrom(root)
-  if (!install) return { kind: 'skipped' }
   const state = ((await host.load()) ?? {}) as UpdateState
   if (typeof state.checkedAt === 'number' && now - state.checkedAt < DAY_MS) return { kind: 'skipped' }
   await host.save({ ...state, checkedAt: now })
-  const response = await host.fetchText(LATEST_URL)
+  const listed = await host.listPlugins()
+  const install = listed ? installedFrom(listed) : undefined
+  if (!install) return { kind: 'skipped' }
+  const response = await host.fetchLatest()
   const latest = response?.ok ? versionIn(response.text) : undefined
   if (!latest) return { kind: 'skipped' }
   if (!isNewer(latest, install.version)) return { kind: 'current' }
   if (latest === state.tried) return { kind: 'skipped' }
   await host.save({ checkedAt: now, tried: latest })
-  const plugin = `agent-tree@${install.marketplace}`
-  const result = await host.run(['claude', 'plugin', 'update', plugin])
+  const result = await host.update()
   if (result?.exitCode === 0 && ALREADY_LATEST.test(result.stdout)) return { kind: 'current' }
   if (result?.exitCode === 0) return { kind: 'installed', version: latest }
-  return { kind: 'failed', version: latest, command: `claude plugin update ${plugin}` }
+  return { kind: 'failed', version: latest, command: UPDATE_COMMAND }
 }

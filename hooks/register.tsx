@@ -4,7 +4,8 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentTreeState } from '../types'
 import { DEFAULT_LOOK, LOOK_OPTIONS, lookFrom } from './looks.ts'
-import { checkForUpdate, hostOf } from './update.ts'
+import { checkForUpdate, UPDATE_KEY } from './update.ts'
+import type { UpdateHost } from './update.ts'
 import type { LookRow } from './looks.ts'
 import {
   adopted,
@@ -288,8 +289,42 @@ async function starDue($: EngineInterface): Promise<boolean> {
   return starts + 1 === 2
 }
 
+async function offSwitch($: EngineInterface, name: string): Promise<string | undefined> {
+  switch (name) {
+    case 'DO_NOT_TRACK':
+      return $.env.get('DO_NOT_TRACK').catch(() => undefined)
+    case 'DISABLE_AUTOUPDATER':
+      return $.env.get('DISABLE_AUTOUPDATER').catch(() => undefined)
+    case 'DISABLE_UPDATES':
+      return $.env.get('DISABLE_UPDATES').catch(() => undefined)
+    case 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC':
+      return $.env.get('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC').catch(() => undefined)
+    default:
+      return undefined
+  }
+}
+
+function hostOf($: EngineInterface): UpdateHost {
+  return {
+    env: name => offSwitch($, name),
+    load: () => $.store.get(UPDATE_KEY).catch(() => undefined),
+    save: value => $.store.set(UPDATE_KEY, value).catch(() => undefined),
+    listPlugins: () =>
+      $.process.run(['claude', 'plugin', 'list', '--json'], { timeoutMs: 30_000 })
+        .then(result => (result.exitCode === 0 ? result.stdout : undefined))
+        .catch(() => undefined),
+    fetchLatest: () =>
+      $.http.fetch('https://raw.githubusercontent.com/MikeGT4/agent-tree/main/.claude-plugin/plugin.json', { method: 'GET' })
+        .catch(() => undefined),
+    update: () =>
+      $.process.run(['claude', 'plugin', 'update', 'agent-tree'], { timeoutMs: 120_000 })
+        .then(result => ({ exitCode: result.exitCode, stdout: result.stdout }))
+        .catch(() => undefined),
+  }
+}
+
 async function announceUpdate($: EngineInterface, enabled: boolean): Promise<void> {
-  const outcome = await checkForUpdate(hostOf($), $.plugin.root, enabled, await clock($))
+  const outcome = await checkForUpdate(hostOf($), enabled, await clock($))
   const w = wordsFor(lang)
   if (outcome.kind === 'installed') $.ui.toast(w.updateInstalled(outcome.version))
   if (outcome.kind === 'failed') $.ui.toast(w.updateFailed(outcome.version, outcome.command))

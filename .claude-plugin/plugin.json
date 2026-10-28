@@ -1,7 +1,7 @@
 {
   "name": "agent-tree",
   "displayName": "Agent Tree",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Side pane that draws the session's agents as boxes: main session, sub-agents, the way back, advisor and session log.",
   "author": {
     "name": "Mike Pollow, Digitalroots"
@@ -28,7 +28,7 @@
       "type": "boolean",
       "title": "Open on start",
       "description": "Open the pane when a session starts",
-      "default": false
+      "default": true
     },
     "animate": {
       "type": "boolean",

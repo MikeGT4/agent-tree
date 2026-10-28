@@ -2,9 +2,9 @@
 
 [Deutsch](README.de.md)
 
-A terminal side pane for Claude Code that shows a session's agents as a live tree.
+A side pane for Claude Code that shows a session's agents as a live tree.
 
-Stop a running sub-agent with one click, send it new instructions while it works, switch its model, and give the pane your own look.
+Stop a running sub-agent, send it new instructions while it works, switch its model, change the look.
 
 ![Agent Tree](https://github.com/MikeGT4/agent-tree/releases/download/v0.4.1/agent-tree-opener.gif)
 
@@ -16,22 +16,18 @@ In your terminal (not inside Claude Code):
 claude plugin install agent-tree --marketplace MikeGT4/agent-tree
 ```
 
-Then start Claude Code and type `/agent-tree`.
+Then start Claude Code; the pane opens by itself.
 
 Inside a session: `/plugin install agent-tree --marketplace MikeGT4/agent-tree`
 
-Needs Claude Code 2.1.292 or later, tested with 2.1.312. Updates install themselves once a day.
+Needs Claude Code 2.1.292 or later, tested with 2.1.312.
 
-## Use
+## What it runs
 
-Click an agent's type to see its task and send it new instructions; ■ stops it.
+Once a day, in interactive sessions, it runs Claude Code's `plugin list --json`, reads its version number from raw.githubusercontent.com and, when a newer one exists, runs `plugin update agent-tree`. It sends nothing else ([PRIVACY.md](PRIVACY.md)).
 
-Five styles, four color schemes, a glow color: press a in the pane.
+Its hooks act only after you act in the pane: a model choice, a stop, a new instruction, the advisor button (`/advisor`).
 
-Step by step: [docs/GUIDE.md](docs/GUIDE.md)
-
-Privacy: one version check a day, nothing else ([PRIVACY.md](PRIVACY.md)).
-
-## License
+Guide: [docs/GUIDE.md](docs/GUIDE.md)
 
 MIT, © 2026 Mike Pollow, Digitalroots
