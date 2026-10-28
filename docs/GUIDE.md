@@ -1,7 +1,7 @@
 # Agent Tree guide
 
-1. Install inside Claude Code:
-   `/plugin install agent-tree --marketplace MikeGT4/agent-tree`
+1. In your terminal, then start Claude Code:
+   `claude plugin install agent-tree --marketplace MikeGT4/agent-tree`
 2. `/agent-tree` opens the pane. ctrl+x tab moves the focus into it.
 3. The main box shows effort, context and cost; each sub-agent gets a box.
 4. Click a running agent's model, or Tab to it and press Enter, then pick 0 to 4. "Sub-agent model" (m) sets new ones.

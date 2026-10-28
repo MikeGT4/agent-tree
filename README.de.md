@@ -2,33 +2,33 @@
 
 [English](README.md)
 
-Seitenleiste für Claude Code im Terminal, die die Agenten einer Sitzung als Kästen zeichnet: Hauptsitzung, Unteragenten, Rückweg, Berater und Sitzungsprotokoll.
+Seitenleiste für Claude Code im Terminal, die die Agenten einer Sitzung als lebenden Baum zeigt.
 
-![Agent Tree](https://github.com/MikeGT4/agent-tree/releases/download/v0.3.0/agent-tree-opener.gif)
+Laufende Unteragenten mit einem Klick stoppen, ihnen während der Arbeit neue Anweisungen geben, das Modell wechseln und der Leiste ein eigenes Aussehen geben.
+
+![Agent Tree](https://github.com/MikeGT4/agent-tree/releases/download/v0.4.1/agent-tree-opener.gif)
 
 ## Installation
 
-```
-/plugin install agent-tree --marketplace MikeGT4/agent-tree
+Im Terminal (nicht in Claude Code):
+
+```bash
+claude plugin install agent-tree --marketplace MikeGT4/agent-tree
 ```
 
-Getestet mit 2.1.312, braucht die Mod-Schnittstelle.
+Danach Claude Code starten und `/agent-tree` eingeben.
 
-Updates installieren sich einmal am Tag selbst (ab 0.4.1).
+In einer laufenden Sitzung: `/plugin install agent-tree --marketplace MikeGT4/agent-tree`
+
+Braucht Claude Code 2.1.292 oder neuer, getestet mit 2.1.312. Updates installieren sich einmal am Tag selbst.
 
 ## Bedienung
 
-`/agent-tree` öffnet die Leiste, `/agent-tree stop` schließt sie, `/agent-tree clear` beginnt den Baum neu.
+Ein Klick auf den Typ eines Agenten zeigt seinen Auftrag, dort bekommt er neue Anweisungen; ■ stoppt ihn.
 
-Ein Klick auf den Typ zeigt Auftrag, Werkzeuge und letzte Antwort; dort lässt sich ein laufender Agent korrigieren, er liest die Nachricht beim nächsten Schritt.
+Fünf Stile, vier Farbschemata, eine Lichtfarbe: Taste a in der Leiste.
 
-■ stoppt einen Agenten, ein Klick aufs Modell stellt ihn um.
-
-Tasten: ctrl+x tab wählt die Leiste, m Modell, a Aussehen, x schließt.
-
-Personalisierbar: fünf Stile (Linie, Pixel, Braille, HUD, ASCII), vier Farbschemata, eine Lichtfarbe.
-
-Der Berater-Kasten schaltet den Berater ein und aus.
+Schritt für Schritt (englisch): [docs/GUIDE.md](docs/GUIDE.md)
 
 Datenschutz: täglich eine Versionsabfrage, sonst nichts ([PRIVACY.md](PRIVACY.md)).
 

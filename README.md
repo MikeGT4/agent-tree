@@ -2,35 +2,35 @@
 
 [Deutsch](README.de.md)
 
-A terminal side pane for Claude Code that draws a session's agents as a tree of boxes: main session, sub-agents, the way back, advisor and session log.
+A terminal side pane for Claude Code that shows a session's agents as a live tree.
 
-![Agent Tree](https://github.com/MikeGT4/agent-tree/releases/download/v0.3.0/agent-tree-opener.gif)
+Stop a running sub-agent with one click, send it new instructions while it works, switch its model, and give the pane your own look.
+
+![Agent Tree](https://github.com/MikeGT4/agent-tree/releases/download/v0.4.1/agent-tree-opener.gif)
 
 ## Install
 
-```
-/plugin install agent-tree --marketplace MikeGT4/agent-tree
+In your terminal (not inside Claude Code):
+
+```bash
+claude plugin install agent-tree --marketplace MikeGT4/agent-tree
 ```
 
-Tested with 2.1.312, needs the mod interface.
+Then start Claude Code and type `/agent-tree`.
 
-Updates install themselves once a day (0.4.1 and later).
+Inside a session: `/plugin install agent-tree --marketplace MikeGT4/agent-tree`
+
+Needs Claude Code 2.1.292 or later, tested with 2.1.312. Updates install themselves once a day.
 
 ## Use
 
-`/agent-tree` opens the pane, `/agent-tree stop` closes it, `/agent-tree clear` starts afresh.
+Click an agent's type to see its task and send it new instructions; ■ stops it.
 
-Click a type for task, tools and latest answer; type there to correct a running agent at its next step.
+Five styles, four color schemes, a glow color: press a in the pane.
 
-■ stops an agent, clicking its model switches it.
+Step by step: [docs/GUIDE.md](docs/GUIDE.md)
 
-Keys: ctrl+x tab focuses the pane, m model, a look, x close.
-
-Customizable: five styles (line, pixel, braille, HUD, ASCII), four color schemes, a glow color.
-
-The advisor box toggles the advisor.
-
-Privacy: one version check daily, nothing else ([PRIVACY.md](PRIVACY.md)).
+Privacy: one version check a day, nothing else ([PRIVACY.md](PRIVACY.md)).
 
 ## License
 
