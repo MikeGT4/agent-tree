@@ -1,13 +1,14 @@
 {
   "name": "agent-tree",
-  "description": "Side pane that draws a session's agent tree as boxes",
+  "description": "Terminal side pane that shows a session's agents as a live tree",
   "owner": {
     "name": "Mike Pollow, Digitalroots"
   },
   "plugins": [
     {
       "name": "agent-tree",
-      "source": "./"
+      "source": "./",
+      "category": "development"
     }
   ]
 }

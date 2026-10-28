@@ -12,7 +12,7 @@
   "privacyPolicyUrl": "https://github.com/MikeGT4/agent-tree/blob/main/PRIVACY.md",
   "repository": "https://github.com/MikeGT4/agent-tree",
   "license": "MIT",
-  "keywords": ["agents", "ai-agents", "sub-agents", "multi-agent", "agent-monitoring", "observability", "visualization", "developer-tools", "agentic-coding", "coding-agents", "terminal", "tui"],
+  "keywords": ["agents", "sub-agents", "multi-agent", "agent-monitoring", "observability", "visualization", "agentic-coding", "coding-agents", "developer-tools", "terminal", "tui", "sidebar", "themes"],
   "types": "./types/index.d.ts",
   "userConfig": {
     "columns": {
