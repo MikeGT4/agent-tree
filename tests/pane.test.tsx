@@ -883,6 +883,29 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
+  const runCommand = ($: Engine, args: string) =>
+    $.command.run({ command: 'agent-tree', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+
+  test('/agent-tree intro spielt das Intro in der gewählten Form', de, async ($, on) => {
+    const { clock } = await introStart($, on)
+    await startSession($)
+    expect((await runCommand($, 'intro cascade')).text).toMatch(/Kaskade/)
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(1200)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/AGENT TREE/)
+    await clock.advance(1000)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('/agent-tree intro mit unbekannter Form nennt die gültigen', de, async ($, on) => {
+    await introStart($, on)
+    await startSession($)
+    expect((await runCommand($, 'intro palme')).text).toMatch(/upright, cascade, windswept/)
+  })
+
   test('englische Beschriftung, wenn die Sprache Englisch ist', { options: { language: 'en', intro: 'off' } }, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)

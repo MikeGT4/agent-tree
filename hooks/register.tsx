@@ -137,6 +137,14 @@ async function introTick($: EngineInterface): Promise<void> {
   else await update($, frame, n => (n + 1) % 1_000_000)
 }
 
+async function replayIntro($: EngineInterface, form: BonsaiForm): Promise<void> {
+  introTicker?.cancel()
+  introTicker = undefined
+  introForm = form
+  await update($, introDone, () => false)
+  startIntro($, await clock($))
+}
+
 async function endIntro($: EngineInterface): Promise<void> {
   introTicker?.cancel()
   introTicker = undefined
@@ -471,6 +479,13 @@ export const register: Register = (on, options) => {
     if (word === 'aussehen' || word === 'look') {
       await resetLook($)
       return { text: w.lookResetDone }
+    }
+    if (word === 'intro') {
+      const form = names[0] ? BONSAI_FORMS.find(f => f === names[0]) : (introForm ?? 'upright')
+      if (!form) return { text: w.introUnknown(names.join(' '), BONSAI_FORMS.join(', ')) }
+      await replayIntro($, form)
+      await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
+      return { text: w.introPlaying(w.introForm[form] ?? form) }
     }
     const now = await clock($)
     if (arg === 'clear') {

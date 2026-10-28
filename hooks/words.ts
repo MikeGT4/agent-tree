@@ -79,6 +79,9 @@ export type Words = {
   introAdvisor: (advisor: string) => string
   introSubAgents: (choice: string) => string
   introLimits: (limits: string) => string
+  introForm: Record<string, string>
+  introPlaying: (form: string) => string
+  introUnknown: (name: string, choices: string) => string
   send: string
   correctionFrame: (text: string, tool: string) => string
   mainNote: (agent: string, text: string) => string
@@ -206,6 +209,9 @@ export const WORDS: Record<Lang, Words> = {
     introAdvisor: advisor => `Berater ${advisor}`,
     introSubAgents: choice => `Unteragenten ${choice}`,
     introLimits: limits => `Limits ${limits}`,
+    introForm: { upright: 'aufrecht', cascade: 'Kaskade', windswept: 'windgepeitscht' },
+    introPlaying: form => `Intro läuft: ${form}`,
+    introUnknown: (name, choices) => `Unbekannte Form „${name}“, möglich: ${choices}`,
     send: 'senden',
     correctionFrame: (text, tool) =>
       `Nachricht des Nutzers über Agent Tree: ${text}\n\nSie gilt ab jetzt für deinen Auftrag. Berücksichtige sie bei der weiteren Arbeit und in deinem Bericht über ${tool}.`,
@@ -236,8 +242,8 @@ export const WORDS: Record<Lang, Words> = {
     lookReset: 'zurück auf Standard',
     lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
     lookUnknown: (name, row, options) => `Agent Tree: ${name ? `„${name}“ gibt es nicht. ` : ''}${row}: ${options}`,
-    commandDescription: 'Agentenbaum der Sitzung als Kästen (stop, clear, stil, farben, licht)',
-    commandHint: '[stop|clear|stil <name>|farben <name>|licht <name>|aussehen zurück]',
+    commandDescription: 'Agentenbaum der Sitzung als Kästen (stop, clear, intro, stil, farben, licht)',
+    commandHint: '[stop|clear|intro <form>|stil <name>|farben <name>|licht <name>|aussehen zurück]',
     commandUnknown: arg => `Agent Tree: „${arg}“ gibt es nicht. Möglich: stop, clear, stil <Name>, farben <Name>, licht <Name>, aussehen zurück`,
     lookResetDone: 'Agent Tree · Aussehen zurück auf Standard',
     opened: n => `Agent Tree geöffnet · ${n} ${n === 1 ? 'Agent' : 'Agenten'} bisher · /agent-tree stop schließt`,
@@ -339,6 +345,9 @@ export const WORDS: Record<Lang, Words> = {
     introAdvisor: advisor => `advisor ${advisor}`,
     introSubAgents: choice => `sub-agents ${choice}`,
     introLimits: limits => `limits ${limits}`,
+    introForm: { upright: 'upright', cascade: 'cascade', windswept: 'windswept' },
+    introPlaying: form => `Intro playing: ${form}`,
+    introUnknown: (name, choices) => `Unknown form "${name}", choose ${choices}`,
     send: 'send',
     correctionFrame: (text, tool) =>
       `Message from the user via Agent Tree: ${text}\n\nIt applies to your task from now on. Take it into account in your remaining work and in your report via ${tool}.`,
@@ -368,8 +377,8 @@ export const WORDS: Record<Lang, Words> = {
     lookReset: 'Reset',
     lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
     lookUnknown: (name, row, options) => `Agent Tree: ${name ? `"${name}" is not a choice. ` : ''}${row}: ${options}`,
-    commandDescription: "The session's agent tree as boxes (stop, clear, style, colors, glow)",
-    commandHint: '[stop|clear|style <name>|colors <name>|glow <name>|look reset]',
+    commandDescription: "The session's agent tree as boxes (stop, clear, intro, style, colors, glow)",
+    commandHint: '[stop|clear|intro <form>|style <name>|colors <name>|glow <name>|look reset]',
     commandUnknown: arg => `Agent Tree: "${arg}" is not a command. Try: stop, clear, style <name>, colors <name>, glow <name>, look reset`,
     lookResetDone: 'Agent Tree · look back to default',
     opened: n => `Agent Tree opened · ${n} ${n === 1 ? 'agent' : 'agents'} so far · /agent-tree stop closes`,
