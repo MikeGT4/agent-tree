@@ -26,7 +26,7 @@ Braucht Claude Code 2.1.292 oder neuer, getestet mit 2.1.312.
 
 Einmal am Tag, in Sitzungen mit Bedienung, ruft es Claude Codes `plugin list --json` auf, liest seine Versionsnummer von raw.githubusercontent.com und startet bei einer neueren `plugin update agent-tree`. Sonst sendet es nichts ([PRIVACY.md](PRIVACY.md)).
 
-Seine Hooks greifen nur, wenn du in der Leiste handelst: Wahl von Modell oder Denkstufe, Stopp, neue Anweisung, Berater-Knopf (`/advisor`).
+Seine Hooks greifen nur, wenn du in der Leiste handelst; Tippen in der Eingabe beendet nur das Start-Intro.
 
 Anleitung (englisch): [docs/GUIDE.md](docs/GUIDE.md)
 

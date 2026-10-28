@@ -26,7 +26,7 @@ Needs Claude Code 2.1.292 or later, tested with 2.1.312.
 
 Once a day, in interactive sessions, it runs Claude Code's `plugin list --json`, reads its version number from raw.githubusercontent.com and, when a newer one exists, runs `plugin update agent-tree`. It sends nothing else ([PRIVACY.md](PRIVACY.md)).
 
-Its hooks act only after you act in the pane: a model or effort choice, a stop, an instruction, the advisor button (`/advisor`).
+Its hooks act only after you act in the pane; typing in the prompt only ends the start intro.
 
 Guide: [docs/GUIDE.md](docs/GUIDE.md)
 
