@@ -3,7 +3,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES, lightColor } from '../hooks/looks.ts'
+import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES } from '../hooks/looks.ts'
 
 const usage = { input_tokens: 2000, output_tokens: 40, cache_read_input_tokens: 30000, cache_creation_input_tokens: 0 }
 const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<string, string>)[model] ?? model
@@ -869,7 +869,7 @@ describe('Agent Tree', () => {
     await clock.advance(1100)
     await ui.redraw()
     const colors = new Set((await ui.findAll({ type: 'Text' })).map(f => f.props.color).filter(Boolean))
-    const allowed = new Set([PALETTES.light.main, PALETTES.light.dim, lightColor(look) ?? PALETTES.light.agent])
+    const allowed = new Set([PALETTES.light.main, PALETTES.light.dim, PALETTES.light.done])
     expect(colors.size).toBeGreaterThan(1)
     expect([...colors].every(c => allowed.has(c as string))).toBe(true)
     await ui.unmount()

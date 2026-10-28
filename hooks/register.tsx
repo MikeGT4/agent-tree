@@ -7,7 +7,7 @@ import { BONSAI_FORMS, INTRO_MS } from './bonsai.ts'
 import type { BonsaiForm } from './bonsai.ts'
 import { drawIntro } from './intro.tsx'
 import { introInfo } from './intro-model.ts'
-import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES, lightColor, lookFrom } from './looks.ts'
+import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES, lookFrom } from './looks.ts'
 import { checkForUpdate, UPDATE_KEY } from './update.ts'
 import type { UpdateHost } from './update.ts'
 import type { LookRow } from './looks.ts'
@@ -684,7 +684,7 @@ export const register: Register = (on, options) => {
         e.props.bodyColumns,
         e.props.scroll?.bodyRows,
         now - introStartedAt,
-        { palette, leaf: lightColor(look) ?? palette.agent, lang, info: introInfo(s, wordsFor(lang)), seed: introSeed, form: introForm },
+        { palette, leaf: palette.done, lang, info: introInfo(s, wordsFor(lang)), seed: introSeed, form: introForm },
         () => void endIntro($).catch(() => undefined),
       )
       if (intro) return intro
