@@ -173,7 +173,7 @@ export const WORDS: Record<Lang, Words> = {
     answers: n => `${n} ${n === 1 ? 'Antwort' : 'Antworten'}`,
     tools: 'Werkzeuge',
     under: 'unter',
-    more: (n, r) => (r > 0 ? `+${n} weitere, ${r} davon ${r === 1 ? 'läuft' : 'laufen'}` : `+${n} weitere beendet`),
+    more: (n, r) => `+${n} ${n === 1 ? 'weiterer' : 'weitere'}${r > 0 ? `, ${r} davon ${r === 1 ? 'läuft' : 'laufen'}` : ' beendet'}`,
     earlier: n => `aus früheren Runden: ${n} ${n === 1 ? 'Agent' : 'Agenten'}`,
     advisorTitle: 'BERATER',
     onCall: 'auf Abruf',
@@ -286,7 +286,7 @@ export const WORDS: Record<Lang, Words> = {
       advisor: d => `gefragt aus ${d.where ? d.where : 'Hauptsitzung'}`,
       choice: d => `Modell für ${d.who ? d.who : 'neue Unteragenten'}: ${familyOr(d.family, 'Standard')}`,
       effort: d =>
-        `${d.main ? 'Denkstufe der Hauptsitzung' : `Denkstufe für ${d.who ? d.who : 'Unteragenten'}`}: ${d.effort ? effortLabel(String(d.effort)) : 'Standard'}`,
+        `${d.main ? 'Denkstufe der Hauptsitzung' : `Denkstufe für ${d.who ? d.who : 'neue Unteragenten'}`}: ${d.effort ? effortLabel(String(d.effort)) : 'Standard'}`,
       stopRequested: d => `Stopp für ${d.type} angefordert`,
       correction: d => `Korrektur an ${d.type}: ${d.text}`,
       correctionFailed: d => `Korrektur an ${d.type} nicht zugestellt${d.text ? `: ${d.text}` : ''}`,
@@ -432,7 +432,7 @@ export const WORDS: Record<Lang, Words> = {
       advisor: d => `consulted from ${d.where ? d.where : 'main session'}`,
       choice: d => `Model for ${d.who ? d.who : 'new sub-agents'}: ${familyOr(d.family, 'Default')}`,
       effort: d =>
-        `${d.main ? 'Main session effort' : `Effort for ${d.who ? d.who : 'sub-agents'}`}: ${d.effort ? effortLabel(String(d.effort)) : 'Default'}`,
+        `${d.main ? 'Main session effort' : `Effort for ${d.who ? d.who : 'new sub-agents'}`}: ${d.effort ? effortLabel(String(d.effort)) : 'Default'}`,
       stopRequested: d => `Stop requested for ${d.type}`,
       correction: d => `Correction to ${d.type}: ${d.text}`,
       correctionFailed: d => `Correction to ${d.type} not delivered${d.text ? `: ${d.text}` : ''}`,

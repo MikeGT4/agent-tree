@@ -43,6 +43,8 @@ import {
   pendingCorrection,
   phaseOf,
   pickerOpened,
+  prunedChoices,
+  LISTED_STATUS,
   restoredChoices,
   shortId,
   spawned,
@@ -105,10 +107,14 @@ let stoppingIds = new Set<string>()
 let stopSentIds = new Set<string>()
 let lastAdvisor = 'opus'
 let advisorCommand = true
-type Carried = { tree: AgentTreeState; look: AgentTreeLook }
+type Carried = { tree: AgentTreeState; look: AgentTreeLook; sessionId?: string }
 let carried: Carried | undefined
 let handing: Promise<void> | undefined
+let generation = 0
 const delivered = new Set<string>()
+const seen = new Set<string>()
+const starting = new Map<string, string | undefined>()
+const INPUT_DOORS: ReadonlySet<string> = new Set(['prompt', 'command', 'delivery', 'note'])
 
 function takeOver($: EngineInterface): Promise<void> {
   if (handing) return handing
@@ -124,10 +130,14 @@ function takeOver($: EngineInterface): Promise<void> {
 }
 
 async function handOver($: EngineInterface, from: Carried): Promise<void> {
+  const round = generation
+  const id = await $.session.id().catch(() => undefined)
+  if (from.sessionId !== undefined && id === from.sessionId) return
   await update($, appearance, () => from.look).catch(() => undefined)
   await update($, introDone, () => true).catch(() => undefined)
   await update($, unreadTexts, () => ({})).catch(() => undefined)
   const now = await clock($)
+  if (round !== generation) return
   await write($, () => freshTree(from.tree, now))
   if (carried === from) carried = undefined
 }
@@ -311,7 +321,9 @@ async function chooseEffort($: EngineInterface, target: string, effort: string |
 
 async function catchUp($: EngineInterface, now: number, keep: number): Promise<void> {
   const list = await $.agent.list().catch(() => [])
-  await change($, s => trimmed(synced(adopted(s, list, now), list, now), keep))
+  for (const entry of list) seen.add(entry.id)
+  const running = new Set(list.filter(entry => LISTED_STATUS[entry.status] === 'running').map(entry => entry.id))
+  await change($, s => prunedChoices(trimmed(synced(adopted(s, list, now), list, now), keep), running))
 }
 
 type Found = { task?: string; answer?: string; denied?: boolean }
@@ -526,6 +538,12 @@ export const register: Register = (on, options) => {
   lang = resolveLang(options.language, undefined)
 
   on('session.start', async ($, e, next) => {
+    carried = undefined
+    handing = undefined
+    generation += 1
+    delivered.clear()
+    seen.clear()
+    starting.clear()
     const result = await next(e)
     if (options.language !== 'de' && options.language !== 'en') {
       lang = resolveLang(options.language, await $.settings.read({ key: 'language' }).catch(() => undefined))
@@ -651,15 +669,17 @@ export const register: Register = (on, options) => {
     }
     const family = before && e.agentId ? choicesOf(before).agents[e.agentId] : undefined
     const model = before && family ? stepModelFor(before, family) : undefined
+    const unrecorded = agentId !== undefined && before !== undefined && !before.agents.some(n => n.id === agentId)
+    const fallback = agentId === undefined ? undefined : starting.has(agentId) ? starting.get(agentId) : unrecorded && !seen.has(agentId) ? choicesOf(before as AgentTreeState).newEffort : undefined
     const effort =
       before && agentId && (e.effort !== undefined || model !== undefined)
-        ? stepEffortFor(before, agentId)
+        ? stepEffortFor(before, agentId, fallback)
         : before && !agentId && e.effort !== undefined
           ? mainStepEffort(before)
           : undefined
     const known = agentId ? before?.agents.find(n => n.id === agentId)?.effort : before?.main.effort
     const sent = effort ?? e.effort
-    const shownEffort = carriesInput || typeof sent === 'number' || (effort === undefined && known === undefined) ? sent : undefined
+    const shownEffort = carriesInput || typeof sent === 'number' ? sent : known === undefined ? e.effort : undefined
     const changed = model !== undefined || (effort !== undefined && effort !== e.effort)
     const result = yield* next(changed ? { ...e, ...(model ? { model } : {}), ...(effort ? { effort } : {}) } : e)
     const usage = result.usage
@@ -693,12 +713,16 @@ export const register: Register = (on, options) => {
     if (introTicker) await endIntro($).catch(() => undefined)
     const choices = choicesOf(await latest($))
     const family = choices.newAgents
+    if (e.resume) seen.add(e.resume.agentId)
     const input = family && !e.model && !e.fork && !e.resume ? { ...e, model: family } : e
     const result = await next(input)
     const agentId = result.agentId
     if (agentId) {
+      const pin = e.resume ? undefined : choices.newEffort
+      seen.add(agentId)
+      starting.set(agentId, pin)
       const now = await clock($)
-      await change($, s =>
+      const written = await change($, s =>
         trimmed(
           spawned(
             s,
@@ -712,13 +736,17 @@ export const register: Register = (on, options) => {
               background: e.background,
               fork: e.fork,
               workflowRunId: e.workflow?.runId || undefined,
-              effort: choices.newEffort,
+              effort: pin,
             },
             now,
           ),
           keep,
         ),
-      ).catch(() => undefined)
+      ).then(
+        () => true,
+        () => false,
+      )
+      if (written) starting.delete(agentId)
     }
     return result
   }).catch(($, e, next) => next(e))
@@ -787,29 +815,43 @@ export const register: Register = (on, options) => {
   on('session.end', async ($, e, next) => {
     if (e.reason !== 'clear' && e.reason !== 'resume') return next(e)
     const ending = carried ?? (await snapshot($))
-    const result = await next(e)
-    if (ending) {
-      carried = { ...ending }
-      handing = undefined
-      delivered.clear()
-      const fresh = freshTree(ending.tree, await clock($))
-      $.ui.status(statusText(fresh, lang))
-      keepTicking($, fresh)
+    try {
+      return await next(e)
+    } finally {
+      if (ending) {
+        carried = { ...ending, sessionId: e.sessionId }
+        handing = undefined
+        generation += 1
+        delivered.clear()
+        ticker?.cancel()
+        ticker = undefined
+        $.ui.status(undefined)
+        try {
+          $.ui.invalidate('ui.render')
+        } catch {}
+      }
     }
-    return result
   })
+
+  on('session.append', async ($, e, next) => {
+    const kept = await next(e)
+    if (INPUT_DOORS.has(e.door) && (kept as { deny?: string }).deny === undefined) delivered.add(e.agentId ?? MAIN)
+    return kept
+  }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
     const { Box, Text, Button } = elements
     const Input = 'Input' in elements ? elements.Input : undefined
-    const now = await clock($)
-    const stored = await read($, tree)
-    const storedLook = await read($, appearance)
-    await read($, introBeat)
+    const [now, stored, storedLook, , tick] = await Promise.all([
+      clock($),
+      read($, tree),
+      read($, appearance),
+      read($, introBeat),
+      animate ? read($, frame) : Promise.resolve(0),
+    ])
     const s = carried ? freshTree(carried.tree, now) : stored
     const look = carried ? carried.look : storedLook
-    const tick = animate ? await read($, frame) : 0
     if (introTicker) {
       introStartedAt ??= now
       introShown ??= introInfo(s, wordsFor(lang), introModelSetting)

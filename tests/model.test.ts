@@ -8,6 +8,8 @@ import {
   effortChosen,
   effortFrom,
   familyFrom,
+  freshTree,
+  prunedChoices,
   limitsFrom,
   stepEffortFor,
   withNewEffort,
@@ -866,7 +868,7 @@ describe('Aussehen', () => {
     expect(stepEffortFor(s, 'a1')).toBeUndefined()
     s = withNewEffort(s, 'low')
     expect(stepEffortFor(s, 'a1')).toBeUndefined()
-    expect(stepEffortFor(s, 'a2')).toBe('low')
+    expect(stepEffortFor(s, 'a2', 'low')).toBe('low')
     s = spawned(s, { ...spawn('a2'), effort: 'low' }, 2)
     s = withNewEffort(s, 'high')
     expect(stepEffortFor(s, 'a2')).toBe('low')
@@ -880,7 +882,7 @@ describe('Aussehen', () => {
 
 describe('Prüfschleife Runde 2, Modell', () => {
   test('sehr lange Texte ohne Leerzeichen werden schnell gekürzt', () => {
-    for (const text of ['a'.repeat(120_000), 'a.'.repeat(60_000), 'KEY'.repeat(40_000), 'token'.repeat(24_000), '0123456789abcdef'.repeat(7_500), 'sk-'.repeat(40_000)]) {
+    for (const text of ['a'.repeat(120_000), 'a.'.repeat(60_000), 'KEY'.repeat(40_000), 'token'.repeat(24_000), '0123456789abcdef'.repeat(7_500), 'sk-'.repeat(40_000), 'a='.repeat(60_000), 'A='.repeat(60_000), 'a-'.repeat(60_000), 'token="'.repeat(15_000), 'x://'.repeat(30_000)]) {
       const started = Date.now()
       const out = excerpt(text)
       expect(Date.now() - started).toBeLessThan(1500)
@@ -897,10 +899,58 @@ describe('Prüfschleife Runde 2, Modell', () => {
   })
 
   test('Einzahl in den Zählern', () => {
-    expect(WORDS.de.more(1, 1)).toBe('+1 weitere, 1 davon läuft')
+    expect(WORDS.de.more(1, 1)).toBe('+1 weiterer, 1 davon läuft')
+    expect(WORDS.de.more(1, 0)).toBe('+1 weiterer beendet')
     expect(WORDS.de.more(3, 2)).toBe('+3 weitere, 2 davon laufen')
     expect(WORDS.de.lines.workflowDone({ size: 1 })).toBe('Workflow fertig: 1 Agent')
     expect(WORDS.en.lines.workflowDone({ size: 1 })).toBe('Workflow done: 1 agent')
     expect(WORDS.en.lines.workflowDone({ size: 2 })).toBe('Workflow done: 2 agents')
+  })
+})
+
+describe('Prüfschleife Runde 3, Modell', () => {
+  test('Geheimnisse hinter langen Namen, in Kopfzeilen und hinter Zuweisungen bleiben maskiert', () => {
+    for (const secret of [
+      'export ' + 'A'.repeat(70) + '_KEY=hunter2',
+      'DB_PASSWORD_' + 'X'.repeat(70) + '=hunter2',
+      'x'.repeat(40) + 'http://user:hunter2@host',
+      'x-api-key: hunter2',
+      'foo=token=hunter2',
+      '--password=hunter2',
+    ]) {
+      expect(excerpt(secret, 500)).not.toMatch(/hunter2/)
+    }
+    expect(excerpt('Kompass: Norden, Seite=3, Weg: links')).toBe('Kompass: Norden, Seite=3, Weg: links')
+  })
+
+  test('Kürzen trennt keine Zeichenfolgen', () => {
+    const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}'
+    expect(excerpt('x' + family + 'y', 4)).toBe('x')
+    expect(excerpt('\u{1F1E9}\u{1F1EA}\u{1F1EB}\u{1F1F7}', 6)).toBe('\u{1F1E9}\u{1F1EA}')
+    expect(excerpt('e\u0301abc', 1)).toBe('')
+    expect(excerpt('abcdef', -1)).toBe('')
+  })
+
+  test('ein neuer Baum nimmt die Wahlen laufender Agenten mit, nicht die beendeter', () => {
+    let s = spawned(createTree(0), { ...spawn('a1'), effort: 'low' }, 1)
+    s = spawned(s, { ...spawn('a2'), effort: 'high' }, 2)
+    s = chosen(s, 'a1', 'opus', 3)
+    s = completed(s, { agentId: 'a2', answer: 'fertig', reason: 'done', isAborted: false, durationMs: 1 }, 4)
+    const fresh = freshTree(s, 5)
+    expect(fresh.agents).toEqual([])
+    expect(fresh.choices?.efforts).toEqual({ a1: 'low' })
+    expect(fresh.choices?.agents).toEqual({ a1: 'opus' })
+    expect(freshTree(fresh, 6).choices?.efforts).toEqual({ a1: 'low' })
+    expect(prunedChoices(fresh, new Set(['a1'])).choices?.efforts).toEqual({ a1: 'low' })
+    expect(prunedChoices(fresh, new Set()).choices?.efforts).toEqual({})
+  })
+
+  test('ein beim Fortsetzen schon bekannter Agent bekommt die Stufe nur ohne eigene', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = spawned(s, { ...spawn('a1'), effort: 'low' }, 2)
+    expect(stepEffortFor(s, 'a1')).toBe('low')
+    s = effortChosen(s, 'a1', 'max', 3)
+    s = spawned(s, { ...spawn('a1'), effort: 'low' }, 4)
+    expect(stepEffortFor(s, 'a1')).toBe('max')
   })
 })

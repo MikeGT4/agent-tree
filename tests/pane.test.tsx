@@ -89,7 +89,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   on('command.register', () => ({ value: { command: 'agent-tree' } }) as never)
   on('ui.open', () => ({ value: { isPlaced: true } }) as never)
   on('ui.close', () => ({ value: undefined }) as never)
-  on('ui.invalidate', () => ({ value: undefined }) as never)
+  on('ui.invalidate', (_, e, next) => next(e))
   on('ui.log', () => ({ value: undefined }) as never)
   on('ui.status', (_, e) => {
     status.push(e.text ?? '')
@@ -110,16 +110,20 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
     return next(e)
   })
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  let sessionNumber = 1
+  on('session.id', () => ({ value: `s${sessionNumber}` }) as never)
   const sessionReplaced = () => {
     newSession = true
     written.clear()
+    sessionNumber += 1
   }
   on('session.measure', (_, e) => ({ changed: e.changed }))
   on('agent.list', () => ({ value: listed }) as never)
   on('agent.spawn', async (_, e) => {
     spawnModels.push(e.model)
     spawnCount += 1
-    return { model: 'claude-haiku-4-5-20251001', agentId: `sub-${spawnCount}` }
+    const resumed = (e as { resume?: { agentId: string } }).resume?.agentId
+    return { model: 'claude-haiku-4-5-20251001', agentId: resumed ?? `sub-${spawnCount}` }
   })
   on('turn.start', async (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', async (_, e) => ({ text: e.answer }) as never)
@@ -374,11 +378,15 @@ describe('Agent Tree', () => {
 
   test('ein Modell ohne Denkstufe bekommt keine', de, async ($, on) => {
     const seen = engine(on)
-    await oneAgentWithAdvisor($)
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
     const ui = await $.ui.mount(pane(90))
     await ui.press({ key: 'pick:new' })
     await ui.press({ key: 'effort:new:low' })
     await ui.unmount()
+    await $.agent.spawn({ prompt: 'P', description: 'Neu', subagentType: 'Plan' } as never)
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('low')
     await step($, { agentId: 'sub-1', noEffort: true })
     expect(seen.stepEfforts.at(-1)).toBeUndefined()
   })
@@ -2474,5 +2482,167 @@ describe('Prüfschleife Runde 2', () => {
     expect((await sending).text).toMatch(/geschickt/)
     const handback = await $.tool.call({ tool: 'SubagentHandback', message: 'Bericht', agentId: 'sub-1' } as never)
     expect(JSON.stringify(handback)).toMatch(/deny/)
+  })
+})
+
+describe('Prüfschleife Runde 3', () => {
+  const run = ($: Engine, args: string) =>
+    $.command.run({ command: 'agent-tree', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } } as never)
+  const clearSession = async ($: Engine, seen: { sessionReplaced: () => void }, id = 's1') => {
+    await $.session.end({ reason: 'clear', sessionId: id, resume: { id } } as never)
+    seen.sessionReplaced()
+  }
+  const toolStep = async ($: Engine, agentId: string | undefined, effort: 'medium' | 'high') => {
+    const stream = $.turn.step({ turnId: 't1', index: 1, model: agentId ? 'claude-sonnet-5-5' : 'claude-opus-5-5', effort, messageCount: 5, ...(agentId ? { agentId } : {}) })
+    let read = await stream.next()
+    while (!read.done) read = await stream.next()
+  }
+  const newAgentsOn = async ($: Engine, level: string) => {
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: `effort:new:${level}` })
+    await ui.unmount()
+  }
+
+  test('ein laufender Agent behält seine Stufe über /agent-tree clear und /clear', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true })
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await newAgentsOn($, 'low')
+    await $.agent.spawn({ prompt: 'P', description: 'Mit Low', subagentType: 'Plan' } as never)
+    await newAgentsOn($, 'default')
+    await $.agent.spawn({ prompt: 'P', description: 'Ohne Wahl', subagentType: 'Plan' } as never)
+    await newAgentsOn($, 'high')
+    await run($, 'clear')
+    await step($, { agentId: 'sub-1' })
+    await step($, { agentId: 'sub-2' })
+    expect(seen.stepEfforts.slice(-2)).toEqual(['low', 'medium'])
+    await clearSession($, seen)
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    await step($, { agentId: 'sub-1' })
+    await step($, { agentId: 'sub-2' })
+    expect(seen.stepEfforts.slice(-2)).toEqual(['low', 'medium'])
+    await $.agent.spawn({ prompt: 'P', description: 'Neu', subagentType: 'Plan' } as never)
+    await step($, { agentId: 'sub-3' })
+    expect(seen.stepEfforts.at(-1)).toBe('high')
+  })
+
+  test('ein von der Liste aufgenommener Agent bekommt die Stufe für neue Agenten nicht', de, async ($, on) => {
+    const seen = engine(on, [{ id: 'bg-1', status: 'running', type: 'Explore', description: 'Hintergrund' }])
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await newAgentsOn($, 'low')
+    await $.turn.complete({ turnId: 't1', answer: 'ok', reason: 'end_turn', isAborted: false, durationMs: 10 } as never)
+    await step($, { agentId: 'bg-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
+  })
+
+  test('eine Fortsetzung bekommt die Stufe für neue Agenten nicht, auch ohne Knoten', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await newAgentsOn($, 'low')
+    await $.agent.spawn({ prompt: 'Weiter', description: 'Alt', subagentType: 'Plan', resume: { agentId: 'old-7' } } as never)
+    await step($, { agentId: 'old-7' })
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
+  })
+
+  test('ein Ereignis der endenden Sitzung verbraucht die Übergabe nicht', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:low' })
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'choose:new:sonnet' })
+    await ui.unmount()
+    await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+    await step($, { agentId: 'sub-1' })
+    seen.sessionReplaced()
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('low')
+    await $.agent.spawn({ prompt: 'P', description: 'Neu', subagentType: 'Plan' } as never)
+    expect(seen.spawnModels.at(-1)).toBe('sonnet')
+  })
+
+  test('nach /clear zeichnet eine offene Leiste ohne laufende Agenten neu', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/Code lesen/)
+    await clearSession($, seen)
+    expect(await screen(ui)).not.toMatch(/Code lesen/)
+    await ui.unmount()
+  })
+
+  test('ein aufgenommener Agent mit gewählter Stufe zeigt die ausstehende Änderung', de, async ($, on) => {
+    engine(on, [{ id: 'bg-1', status: 'running', type: 'Explore', description: 'Hintergrund' }])
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await $.turn.complete({ turnId: 't1', answer: 'ok', reason: 'end_turn', isAborted: false, durationMs: 10 } as never)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:bg-1' })
+    await ui.press({ key: 'effort:bg-1:high' })
+    await ui.press({ key: 'picker:close' })
+    await toolStep($, 'bg-1', 'medium')
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/medium → high/)
+    await ui.unmount()
+  })
+
+  test('eine Zeile von außen an die Hauptsitzung zählt als Eingabe für ihre Stufe', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:low' })
+    await ui.unmount()
+    await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: 'Hinweis' }] }, door: 'delivery' } as never)
+    await toolStep($, undefined, 'high')
+    const after = await $.ui.mount(pane(90))
+    expect((await after.find({ key: 'pick:main' }))?.props.label).toBe('Effort low ▾')
+    await after.unmount()
+  })
+
+  test('ein verschachtelter Agent zeigt die ausstehende Stufe', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await $.agent.spawn({ prompt: 'P', description: 'Eltern', subagentType: 'Plan' } as never)
+    await $.agent.spawn({ prompt: 'K', description: 'Kind', subagentType: 'Explore', parentAgentId: 'sub-1' } as never)
+    await step($, { agentId: 'sub-2' })
+    const ui = await $.ui.mount(pane(120))
+    await ui.press({ key: 'pick:sub-2' })
+    await ui.press({ key: 'effort:sub-2:high' })
+    await ui.press({ key: 'picker:close' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/medium → high/)
+    await ui.unmount()
+  })
+
+  test('Standard für einen Agenten nimmt seine festgehaltene Stufe zurück', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await newAgentsOn($, 'low')
+    await $.agent.spawn({ prompt: 'P', description: 'Neu', subagentType: 'Plan' } as never)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:sub-1' })
+    await ui.press({ key: 'effort:sub-1:default' })
+    await ui.unmount()
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
+  })
+
+  test('das Protokoll nennt die Stufe für neue Unteragenten', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await newAgentsOn($, 'low')
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/Denkstufe für neue Unteragenten: Low/)
+    await ui.unmount()
   })
 })

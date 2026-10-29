@@ -132,7 +132,16 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   else if (kind === 'detail') actions.detail(rest)
   else if (kind === 'write') actions.write(rest)
   else if (kind === 'stop' || kind === 'halt') actions.stop(rest)
+  else if (kind === 'effort') return effortKey(actions, rest)
   else return false
+  return true
+}
+
+function effortKey(actions: TreeActions, rest: string): boolean {
+  const cut = rest.lastIndexOf(':')
+  if (cut < 1 || cut + 1 >= rest.length) return false
+  const level = rest.slice(cut + 1)
+  actions.effort(rest.slice(0, cut), level === 'default' ? undefined : level)
   return true
 }
 
@@ -678,10 +687,10 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           </Text>
         )}
         <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
-          {nested
-            ? `↳ ${w.under} ${nested}`
-            : running && n.effort !== undefined && choices.efforts?.[n.id] && choices.efforts[n.id] !== n.effort
-              ? `${n.effort} → ${choices.efforts[n.id]}`
+          {running && n.effort !== undefined && choices.efforts?.[n.id] && choices.efforts[n.id] !== n.effort
+            ? `${n.effort} → ${choices.efforts[n.id]}`
+            : nested
+              ? `↳ ${w.under} ${nested}`
               : effortLine(n.effort, glyphs)}
         </Text>
         <Text size={SIZE.detail} color={running ? undefined : palette.dim} wrap="truncate-end">

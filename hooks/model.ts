@@ -285,10 +285,30 @@ export function mainStepEffort(s: AgentTreeState): EffortLevel | undefined {
   return effortFrom(choicesOf(s).mainEffort)
 }
 
-export function stepEffortFor(s: AgentTreeState, agentId: string): EffortLevel | undefined {
+export function stepEffortFor(s: AgentTreeState, agentId: string, fallback?: string): EffortLevel | undefined {
   const current = choicesOf(s)
   if (current.efforts && agentId in current.efforts) return effortFrom(current.efforts[agentId])
-  return findAgent(s, agentId) ? undefined : effortFrom(current.newEffort)
+  return effortFrom(fallback)
+}
+
+function pinned(s: AgentTreeState, agentId: string, effort: string | undefined): AgentTreeState {
+  const current = choicesOf(s)
+  if (!effort || (current.efforts && agentId in current.efforts)) return s
+  return { ...s, choices: { ...current, efforts: { ...(current.efforts ?? {}), [agentId]: effort } } }
+}
+
+function without<T>(map: Record<string, T>, drop: (id: string) => boolean): Record<string, T> {
+  return Object.fromEntries(Object.entries(map).filter(([id]) => !drop(id)))
+}
+
+export function prunedChoices(s: AgentTreeState, running: ReadonlySet<string>): AgentTreeState {
+  const current = choicesOf(s)
+  const shown = new Set(s.agents.map(n => n.id))
+  const gone = (id: string) => !shown.has(id) && !running.has(id)
+  const agents = without(current.agents, gone)
+  const efforts = current.efforts && without(current.efforts, gone)
+  if (Object.keys(agents).length === Object.keys(current.agents).length && Object.keys(efforts ?? {}).length === Object.keys(current.efforts ?? {}).length) return s
+  return { ...s, choices: { ...current, agents, ...(efforts ? { efforts } : {}) } }
 }
 
 export function chosen(s: AgentTreeState, target: string, family: string | undefined, now: number): AgentTreeState {
@@ -356,26 +376,66 @@ const CONTROL = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g
 const TOKEN =
   /\b(?:ghp_|gho_|ghu_|ghs_|github_pat_|sk-|xox[abprs]-|AKIA|AIza|eyJ)[A-Za-z0-9_\-.]{6,}|\bBasic\s+(?=[A-Za-z0-9+\/]*[0-9+\/=])[A-Za-z0-9+\/]{8,}={0,2}/g
 
-const SECRET =
-  /\bBearer\s+\S+|\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s\/:@]+:[^\s\/@]+@|[A-Za-z0-9_]{0,64}(?:password|passwort|passwd|token|secret|api[_-]?key|access[_-]?key)[A-Za-z0-9_]{0,64}["']?\s*[=:]\s*(?:"[^"]*"|'[^']*'|["']?[^\s"',;]+)/gi
+const BEARER = /\bBearer\s+\S+/gi
 
-const ENV_SECRET = /\b[A-Z][A-Z0-9_]{0,64}(?:PASS|PWD|KEY|CREDENTIALS?)[A-Z0-9_]{0,64}=\S+/g
+const URL_CREDENTIALS = /:\/\/[^\s\/:@]+:[^\s\/@]+@/g
+
+const ASSIGNMENT = /(?<![\w-])([\w-]+)(["']?\s*[=:]\s*)/g
+
+const ASSIGNED_VALUE = /"[^"]*"|'[^']*'|["']?[^\s"',;]+/y
+
+const SECRET_NAME = /password|passwort|passwd|token|secret|api[_-]?key|access[_-]?key/i
+
+const ENV_ASSIGNMENT = /\b([A-Z][A-Z0-9_]*)(=)/g
+
+const ENV_VALUE = /\S+/y
+
+const ENV_SECRET_NAME = /PASS|PWD|KEY|CREDENTIALS?/
+
+function masked(text: string, scan: RegExp, value: RegExp, secret: RegExp): string {
+  let out = ''
+  let from = 0
+  scan.lastIndex = 0
+  for (let found = scan.exec(text); found; found = scan.exec(text)) {
+    if (!secret.test(found[1] ?? '')) continue
+    const end = found.index + found[0].length
+    value.lastIndex = end
+    const tail = value.exec(text)
+    if (!tail) continue
+    out += `${text.slice(from, found.index)}•••`
+    from = end + tail[0].length
+    scan.lastIndex = from
+  }
+  return out + text.slice(from)
+}
 
 function oneLine(text: string): string {
-  return text
+  const plain = text
     .replace(ANSI, ' ')
     .replace(CONTROL, ' ')
     .replace(TOKEN, '•••')
-    .replace(SECRET, '•••')
-    .replace(ENV_SECRET, '•••')
+    .replace(BEARER, '•••')
+    .replace(URL_CREDENTIALS, '://•••@')
+  return masked(masked(plain, ASSIGNMENT, ASSIGNED_VALUE, SECRET_NAME), ENV_ASSIGNMENT, ENV_VALUE, ENV_SECRET_NAME)
     .replace(/\s+/g, ' ')
     .trim()
 }
 
+const GRAPHEMES = 'Segmenter' in Intl ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : undefined
+
 export function cut(text: string, limit: number): string {
+  if (limit <= 0) return ''
   if (text.length <= limit) return text
-  const end = limit > 0 && /[\uD800-\uDBFF]/.test(text.charAt(limit - 1)) ? limit - 1 : limit
-  return text.slice(0, end)
+  if (GRAPHEMES) {
+    let end = 0
+    for (const part of GRAPHEMES.segment(text.slice(0, limit + 32))) {
+      const next = part.index + part.segment.length
+      if (next > limit) break
+      end = next
+    }
+    return text.slice(0, end)
+  }
+  return text.slice(0, /[\uD800-\uDBFF]/.test(text.charAt(limit - 1)) ? limit - 1 : limit)
 }
 
 export function excerpt(text: string | undefined, limit = DETAIL_LIMIT): string {
@@ -486,7 +546,7 @@ export function spawned(s: AgentTreeState, input: SpawnInput, now: number): Agen
       startedAt: now,
       endedAt: undefined,
     }))
-    return logged(resumed, 'agent', 'resumed', { type: existing.type, description: existing.description }, now)
+    return logged(pinned(resumed, existing.id, input.effort), 'agent', 'resumed', { type: existing.type, description: existing.description }, now)
   }
   const orphan = s.orphans?.[input.agentId]
   const node: AgentTreeNode = {
@@ -515,10 +575,7 @@ export function spawned(s: AgentTreeState, input: SpawnInput, now: number): Agen
     orphans,
     agents: [...s.agents, node],
   }
-  if (input.effort) {
-    const current = choicesOf(next)
-    next = { ...next, choices: { ...current, efforts: { ...(current.efforts ?? {}), [node.id]: input.effort } } }
-  }
+  next = pinned(next, node.id, input.effort)
   if (orphan) next = returnedTo(next, node, orphan.answerTokens)
   if (runSeen) return next
   if (node.workflowRunId !== undefined) return logged(next, 'agent', 'workflowStarted', { description: node.description }, node.startedAt)
@@ -616,7 +673,10 @@ export function withLimits(s: AgentTreeState, limits: AgentTreeLimit[]): AgentTr
 }
 
 export function freshTree(from: AgentTreeState, now: number): AgentTreeState {
-  const fresh = carriedChoices(from, withAdvisorModel(createTree(now), from.advisor.model))
+  const base = carriedChoices(from, withAdvisorModel(createTree(now), from.advisor.model))
+  const ended = new Set(from.agents.filter(n => n.status !== 'running').map(n => n.id))
+  const old = choicesOf(from)
+  const fresh = { ...base, choices: { ...choicesOf(base), agents: without(old.agents, id => ended.has(id)), efforts: without(old.efforts ?? {}, id => ended.has(id)) } }
   return from.main.limits ? withLimits(fresh, from.main.limits) : fresh
 }
 
@@ -645,7 +705,7 @@ export function synced(s: AgentTreeState, list: readonly { id: string; status: s
 
 export type ListedAgent = { id: string; description: string; type: string; status: string; parentId?: string }
 
-const LISTED_STATUS: Record<string, AgentTreeStatus> = {
+export const LISTED_STATUS: Record<string, AgentTreeStatus> = {
   pending: 'running',
   running: 'running',
   waiting: 'running',
