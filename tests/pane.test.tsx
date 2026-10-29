@@ -4,13 +4,14 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES } from '../hooks/looks.ts'
+import { createTree } from '../hooks/model.ts'
 
 const usage = { input_tokens: 2000, output_tokens: 40, cache_read_input_tokens: 30000, cache_creation_input_tokens: 0 }
 const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<string, string>)[model] ?? model
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown> } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -42,13 +43,24 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
     focused.push(JSON.stringify(e))
     return {} as never
   })
-  on('settings.read', () => ({ value: { ...settings } }) as never)
+  let deferred: (() => void) | undefined
+  on('settings.read', () => {
+    const value = { ...settings }
+    const later = deferred
+    deferred = undefined
+    later?.()
+    return { value } as never
+  })
   on('command.run', (_, e) => {
     if (refuse.command) throw new Error('refused')
     commands.push({ command: e.command, args: e.args })
-    if (refuse.lag) return { text: 'ok' } as never
-    if (e.command === 'advisor' && e.args === 'off') delete settings.advisorModel
-    else if (e.command === 'advisor') settings.advisorModel = e.args
+    if (e.command === 'advisor' && refuse.advisorFails) return {} as never
+    const apply = () => {
+      if (e.command === 'advisor' && e.args === 'off') delete settings.advisorModel
+      else if (e.command === 'advisor') settings.advisorModel = e.args
+    }
+    if (refuse.lag) deferred = apply
+    else apply()
     return { text: 'ok' } as never
   })
   on('prompt.fill', (_, e) => {
@@ -82,7 +94,17 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
     return { value: undefined } as never
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  let newSession = false
+  const isTree = (e: unknown) => (e as { plugin?: string; key?: string }).plugin === 'agent-tree' && (e as { key?: string }).key === 'tree'
+  on('state.get', async (_, e, next) => (refuse.clearResets && newSession && isTree(e) ? ({ value: createTree(0), version: 0 } as never) : next(e)))
+  on('state.set', async (_, e, next) => {
+    if (isTree(e)) newSession = false
+    return next(e)
+  })
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  const sessionReplaced = () => {
+    newSession = true
+  }
   on('session.measure', (_, e) => ({ changed: e.changed }))
   on('agent.list', () => ({ value: listed }) as never)
   on('agent.spawn', async (_, e) => {
@@ -111,7 +133,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   const storeGetFails = () => {
     storeBroken = true
   }
-  return { status, spawnModels, stepModels, stepEfforts, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts, storeGetFails }
+  return { status, spawnModels, stepModels, stepEfforts, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts, storeGetFails, sessionReplaced }
 }
 
 async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[]; noEffort?: boolean } = {}) {
@@ -635,7 +657,7 @@ describe('Agent Tree', () => {
     const ui = await $.ui.mount(pane(90))
     await ui.press({ key: 'detail:sub-1' })
     await ui.redraw()
-    expect(await screen(ui)).toMatch(/Nachricht:/)
+    expect(await screen(ui)).toMatch(/"label":"Nachricht"/)
     expect(await screen(ui)).toMatch(/hier klicken und tippen/)
     await ui.unmount()
   })
@@ -1695,6 +1717,29 @@ describe('Modellwahl, Zeile und Fokus', () => {
 })
 
 describe('Berater per Knopf', () => {
+  test('lehnt Claude Code das Modell ab, zeigt die Leiste weiter aus und nennt den Grund', de, async ($, on) => {
+    const seen = engine(on, [], { advisorFails: 'Invalid advisor model: API error: 400 · model not changed' })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'advisor:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.commands.at(-1)).toEqual({ command: 'advisor', args: 'opus' })
+    expect((await ui.find({ key: 'advisor:toggle' }))?.props.label).toBe('einschalten')
+    expect(seen.toasts.join(' ')).toMatch(/Claude Code hat den Berater nicht umgestellt/)
+    await ui.unmount()
+  })
+
+  test('ohne Rang für das Hauptmodell bleibt der Berater aus', de, async ($, on) => {
+    const seen = engine(on, [], { advisorFails: "Advisor disabled \u2014 base model 'claude-haiku' has no advisor rank in the model catalog." })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'advisor:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect((await ui.find({ key: 'advisor:toggle' }))?.props.label).toBe('einschalten')
+    expect(seen.toasts.join(' ')).toMatch(/Claude Code hat den Berater nicht umgestellt/)
+    await ui.unmount()
+  })
+
   test('der Knopf schaltet den Berater über /advisor ein und wieder aus', de, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
@@ -1712,7 +1757,7 @@ describe('Berater per Knopf', () => {
     await ui.unmount()
   })
 
-  test('nach dem Befehl zeigt die Leiste den neuen Stand sofort, auch wenn die Einstellung noch nicht gelesen werden kann', de, async ($, on) => {
+  test('kommt die Einstellung verzögert an, wartet die Leiste darauf und zeigt dann den neuen Stand', de, async ($, on) => {
     engine(on, [], { lag: true })
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))
@@ -1994,5 +2039,209 @@ describe('Stern-Hinweis', () => {
     const e = engine(on)
     for (let i = 0; i < 3; i++) await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
     expect(star(e.toasts)).toEqual([])
+  })
+})
+
+describe('Denkstufe der Hauptsitzung', () => {
+  test('die Hauptsitzung hat einen Knopf für ihre Denkstufe, die Auswahl zeigt nur Stufen', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    const ui = await $.ui.mount(pane(90))
+    const button = await ui.find({ key: 'pick:main' })
+    expect(button?.props.hotkey).toBe('e')
+    expect(button?.props.label).toMatch(/Effort .*high ▾/)
+    await ui.press({ key: 'pick:main' })
+    expect(await screen(ui)).toMatch(/Denkstufe der Hauptsitzung:/)
+    for (const key of ['effort:main:default', 'effort:main:low', 'effort:main:medium', 'effort:main:high', 'effort:main:xhigh', 'effort:main:max', 'picker:close']) {
+      expect(await ui.find({ key })).toBeDefined()
+    }
+    expect(await ui.find({ key: 'choose:main:opus' })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('die gewählte Stufe geht ab der nächsten Anfrage der Hauptsitzung hinaus und wird gespeichert', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:medium' })
+    expect(await ui.find({ key: 'effort:main:low' })).toBeUndefined()
+    expect(seen.storeSets.filter(s => s.key === 'mainEffort').at(-1)).toEqual({ key: 'mainEffort', value: 'medium' })
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
+    await ui.redraw()
+    expect((await ui.find({ key: 'pick:main' }))?.props.label).toMatch(/Effort .*medium ▾/)
+    await ui.unmount()
+  })
+
+  test('Unteragenten behalten ihre eigene Stufe', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:low' })
+    await ui.unmount()
+    await $.agent.spawn({ prompt: 'P.', description: 'Lesen', subagentType: 'Explore' } as never)
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
+  })
+
+  test('Standard gibt die Stufe an Claude Code zurück', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:max' })
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:default' })
+    await ui.unmount()
+    expect(seen.storeSets.filter(s => s.key === 'mainEffort').at(-1)).toEqual({ key: 'mainEffort', value: null })
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('high')
+  })
+
+  test('ein Modell ohne Denkstufe bekommt keine', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:low' })
+    await ui.unmount()
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($, { noEffort: true })
+    expect(seen.stepEfforts.at(-1)).toBeUndefined()
+  })
+
+  test('eine gespeicherte Stufe gilt nach dem Start und meldet sich', de, async ($, on) => {
+    const seen = engine(on, [], {}, { mainEffort: 'low' })
+    await startSession($)
+    expect(seen.toasts.join(' ')).toMatch(/Denkstufe der Hauptsitzung: Low/)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('low')
+  })
+
+  test('Sitzungen ohne Bedienung übernehmen keine gespeicherte Stufe', de, async ($, on) => {
+    const seen = engine(on, [], {}, { mainEffort: 'low' })
+    await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('high')
+  })
+
+  test('auf Englisch', { options: { language: 'en', intro: false } }, async ($, on) => {
+    engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    expect(await screen(ui)).toMatch(/Main session effort:/)
+    await ui.unmount()
+  })
+})
+
+describe('Nach /clear in einer neuen Sitzung', () => {
+  test('Berater, Limits und alle Wahlen bleiben, obwohl die neue Sitzung leer beginnt', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true })
+    seen.settings.advisorModel = 'opus'
+    await oneAgentWithAdvisor($)
+    await $.session.measure({
+      context: { window: 200000, tokens: 50000, percent: 25 },
+      rateLimits: [{ kind: 'seven_day', percentUsed: 84, resetsAt: new Date(2026, 10, 2, 9, 0).toISOString() }],
+      cost: { usd: 1.5 },
+      changed: ['context', 'rateLimits'],
+    } as never)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'choose:new:sonnet' })
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:medium' })
+    await ui.unmount()
+    await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+    seen.sessionReplaced()
+    await $.turn.start({ text: 'Neu', turnId: 't9' })
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
+    const after = await $.ui.mount(pane(90))
+    const text = await screen(after)
+    expect(text).toMatch(/Woche \S+ 84 %/)
+    expect(text).toMatch(/Opus/)
+    expect(text).not.toMatch(/Code lesen/)
+    expect((await after.find({ key: 'pick:new' }))?.props.label).toMatch(/Sonnet/)
+    await after.unmount()
+  })
+})
+
+describe('Schreiben an Unteragenten', () => {
+  const run = ($: Engine, args: string) =>
+    $.command.run({ command: 'agent-tree', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } } as never)
+
+  test('✎ am Kasten legt den Befehl in die Eingabe, ein Entwurf bleibt dahinter', de, async ($, on) => {
+    const seen = engine(on)
+    on('prompt.read', () => ({ value: { text: 'Bitte kürzer', cursor: 12 } }) as never)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await ui.find({ key: 'write:sub-1' })).toBeDefined()
+    await ui.press({ key: 'write:sub-1' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.fills.at(-1)).toBe('/agent-tree an sub-1 Bitte kürzer')
+    expect(seen.toasts.join(' ')).toMatch(/Nachricht an Explore · Code lesen eintippen, Enter schickt sie/)
+    await ui.unmount()
+  })
+
+  test('ein früheres Ziel in der Eingabe wird ersetzt, nicht doppelt vorangestellt', de, async ($, on) => {
+    const seen = engine(on)
+    on('prompt.read', () => ({ value: { text: '/agent-tree an sub-9 Hallo', cursor: 26 } }) as never)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'write:sub-1' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.fills.at(-1)).toBe('/agent-tree an sub-1 Hallo')
+    await ui.unmount()
+  })
+
+  test('auch ein fertiger Agent hat den Knopf', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    const ui = await $.ui.mount(pane(90))
+    expect(await ui.find({ key: 'write:sub-1' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('/agent-tree an <Kennung> <Text> schickt die Nachricht an den laufenden Agenten', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const result = await run($, 'an sub-1 Bitte nur die Datei auth.ts lesen')
+    expect(result.text).toMatch(/Nachricht an Explore · Code lesen geschickt/)
+    expect(seen.appended.some(a => a.agentId === 'sub-1' && JSON.stringify(a.message).includes('Bitte nur die Datei auth.ts lesen'))).toBe(true)
+  })
+
+  test('unbekannte Kennung und fehlender Text werden genannt', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    expect((await run($, 'an zzz Hallo')).text).toMatch(/Kein Agent mit der Kennung zzz/)
+    expect((await run($, 'an sub-1')).text).toMatch(/Text fehlt/)
+  })
+
+  test('lehnt Claude Code die Zustellung ab, sagt der Befehl das', de, async ($, on) => {
+    engine(on, [], { append: true, send: true })
+    await oneAgentWithAdvisor($)
+    expect((await run($, 'an sub-1 Hallo')).text).toMatch(/nicht zugestellt/)
+  })
+
+  test('auf Englisch mit to', { options: { language: 'en', intro: false } }, async ($, on) => {
+    const seen = engine(on)
+    on('prompt.read', () => ({ value: { text: '', cursor: 0 } }) as never)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'write:sub-1' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.fills.at(-1)).toBe('/agent-tree to sub-1 ')
+    await ui.unmount()
+    expect((await run($, 'to sub-1 Shorter please')).text).toMatch(/Message sent to Explore · Code lesen/)
   })
 })

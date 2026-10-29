@@ -14,6 +14,7 @@ import type { LookRow } from './looks.ts'
 import {
   NEW_AGENTS,
   adopted,
+  agentByPrefix,
   choicesOf,
   chosen,
   closed,
@@ -36,11 +37,14 @@ import {
   isStopping,
   lookOpened,
   limitsFrom,
+  MAIN,
+  mainStepEffort,
   measured,
   pendingCorrection,
   phaseOf,
   pickerOpened,
   restoredChoices,
+  shortId,
   spawned,
   stepEffortFor,
   stepModelFor,
@@ -72,6 +76,7 @@ const LOOK_KEY = 'look'
 const STAR_KEY = 'star'
 const MODEL_KEY = 'model'
 const EFFORT_KEY = 'effort'
+const MAIN_EFFORT_KEY = 'mainEffort'
 const INLINE_ROWS = 40
 const FRAME_MS = 250
 const HANDBACK = 'SubagentHandback'
@@ -101,6 +106,16 @@ let stoppingIds = new Set<string>()
 let stopSentIds = new Set<string>()
 let lastAdvisor = 'opus'
 let advisorCommand = true
+let carried: AgentTreeState | undefined
+
+async function takeOver($: EngineInterface): Promise<void> {
+  const from = carried
+  if (!from) return
+  carried = undefined
+  const now = await clock($)
+  await change($, () => freshTree(from, now))
+  await update($, unreadTexts, () => ({}))
+}
 
 function busy(s: AgentTreeState): boolean {
   return counts(s).running > 0 || phaseOf(s) === 'reviewing'
@@ -246,7 +261,8 @@ async function restoreChoices($: EngineInterface, interactive: boolean): Promise
   if (!interactive || choicesOf(await read($, tree)).restored) return false
   const model = await $.store.get(MODEL_KEY).catch(() => undefined)
   const effort = await $.store.get(EFFORT_KEY).catch(() => undefined)
-  await change($, s => restoredChoices(s, familyFrom(model), effortFrom(effort)))
+  const mainEffort = await $.store.get(MAIN_EFFORT_KEY).catch(() => undefined)
+  await change($, s => restoredChoices(s, familyFrom(model), effortFrom(effort), effortFrom(mainEffort)))
   return true
 }
 
@@ -260,6 +276,7 @@ async function chooseEffort($: EngineInterface, target: string, effort: string |
   const now = await clock($)
   await change($, t => effortChosen(t, target, effort, now))
   if (target === NEW_AGENTS) await $.store.set(EFFORT_KEY, effort ?? null).catch(() => undefined)
+  if (target === MAIN) await $.store.set(MAIN_EFFORT_KEY, effort ?? null).catch(() => undefined)
 }
 
 async function catchUp($: EngineInterface, now: number, keep: number): Promise<void> {
@@ -303,14 +320,14 @@ async function appendRow($: EngineInterface, text: string, agentId?: string): Pr
   )
 }
 
-async function sayTo($: EngineInterface, agentId: string, text: string): Promise<void> {
-  if (!text.trim()) return
+async function sayTo($: EngineInterface, agentId: string, text: string): Promise<boolean> {
+  if (!text.trim()) return false
   const w = wordsFor(lang)
   const current = await read($, tree)
   const node = current.agents.find(n => n.id === agentId)
   if (!node) {
     $.ui.status(w.correctionFailedStatus)
-    return
+    return false
   }
   const before = current.corrections?.[agentId]
   const now = await clock($)
@@ -325,7 +342,7 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
     if (!sent?.isDelivered) {
       await change($, t => correctionFailed(t, { agentId, text, before }, now))
       $.ui.status(w.correctionFailedStatus)
-      return
+      return false
     }
     await change($, t => correctionCounted(t, agentId))
   }
@@ -334,6 +351,20 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
   await appendRow($, note)
   const parent = node.parentId ? current.agents.find(n => n.id === node.parentId) : undefined
   if (parent?.status === 'running') await appendRow($, note, parent.id)
+  return true
+}
+
+const WRITE_PREFIX = /^\/agent-tree\s+(?:an|to|say)\s+\S+\s?/i
+
+async function startWrite($: EngineInterface, agentId: string): Promise<void> {
+  const s = await read($, tree)
+  const node = s.agents.find(n => n.id === agentId)
+  if (!node) return
+  const w = wordsFor(lang)
+  const box = await $.prompt.read().catch(() => ({ text: '', cursor: 0 }))
+  const text = `/${COMMAND} ${w.writeWord} ${shortId(s, agentId)} ${box.text.replace(WRITE_PREFIX, '')}`
+  const filled = await $.prompt.fill({ text }).catch(() => undefined)
+  $.ui.toast(filled?.isFilled === false ? w.writeNoPrompt : w.writeHint(`${typeLabel(node.type)} · ${node.description}`))
 }
 
 async function readAdvisor($: EngineInterface): Promise<void> {
@@ -341,6 +372,15 @@ async function readAdvisor($: EngineInterface): Promise<void> {
   const name = typeof model === 'string' && model ? model : undefined
   if (name) lastAdvisor = name
   await change($, s => withAdvisorModel(s, name))
+}
+
+async function advisorSettled($: EngineInterface, wanted: boolean): Promise<boolean> {
+  for (let i = 0; i < 8; i++) {
+    const model = await $.settings.read({ key: 'advisorModel' }).catch(() => undefined)
+    if ((typeof model === 'string' && model !== '') === wanted) return true
+    await $.clock.sleep(250).catch(() => undefined)
+  }
+  return false
 }
 
 async function toggleAdvisor($: EngineInterface): Promise<void> {
@@ -353,7 +393,8 @@ async function toggleAdvisor($: EngineInterface): Promise<void> {
     $.ui.toast(wordsFor(lang).advisorUnavailable)
     return
   }
-  await change($, s => withAdvisorModel(s, args === 'off' ? undefined : args))
+  if (!(await advisorSettled($, args !== 'off'))) $.ui.toast(wordsFor(lang).advisorUnchanged)
+  await readAdvisor($)
 }
 
 async function settleUnread($: EngineInterface, s: AgentTreeState, agentId: string, now: number): Promise<void> {
@@ -388,6 +429,7 @@ function actionsFor($: EngineInterface): TreeActions {
         .catch(ignore)
     },
     say: (agentId, text) => void sayTo($, agentId, text).catch(ignore),
+    write: agentId => void startWrite($, agentId).catch(ignore),
     advisor: () => void toggleAdvisor($).catch(ignore),
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
     restyle: (row, id) => void restyle($, row, id).catch(ignore),
@@ -465,6 +507,7 @@ export const register: Register = (on, options) => {
       const w = wordsFor(lang)
       $.ui.toast(w.savedChoice(`${familyOr(saved.newAgents, w.standard)}${saved.newEffort ? ` · ${effortLabel(saved.newEffort)}` : ''}`))
     }
+    if (saved?.mainEffort) $.ui.toast(wordsFor(lang).savedMainEffort(effortLabel(saved.mainEffort)))
     const usage = await $.session.usage().catch(() => undefined)
     if (usage) await change($, s => withLimits(s, limitsFrom(usage.rateLimits))).catch(() => undefined)
     const listed = await $.command.list().catch(() => undefined)
@@ -481,7 +524,17 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: COMMAND }, async ($, e) => {
+    await takeOver($).catch(() => undefined)
     const w = wordsFor(lang)
+    const said = /^(?:an|to|say)\s+(\S+)(?:\s+([\s\S]*))?$/i.exec(e.args.trim())
+    if (said) {
+      const node = agentByPrefix(await read($, tree), said[1] ?? '')
+      if (!node) return { text: w.writeUnknown(said[1] ?? '') }
+      const label = `${typeLabel(node.type)} · ${node.description}`
+      const message = (said[2] ?? '').trim()
+      if (!message) return { text: w.writeEmpty(label) }
+      return { text: (await sayTo($, node.id, message)) ? w.writeSent(label) : w.writeFailed(label) }
+    }
     const arg = e.args.trim().toLowerCase()
     if (arg === 'stop' || arg === 'close') {
       await $.ui.close({ id: PANE }).catch(() => undefined)
@@ -524,6 +577,7 @@ export const register: Register = (on, options) => {
   }).catch(() => ({ text: wordsFor(lang).commandFailed }))
 
   on('turn.start', async ($, e, next) => {
+    await takeOver($).catch(() => undefined)
     const result = await next(e)
     const now = await clock($)
     await change($, s => turnStarted(s, { text: e.text, agentId: e.agentId }, now)).catch(() => undefined)
@@ -533,8 +587,9 @@ export const register: Register = (on, options) => {
   })
 
   on('turn.step', async function* ($, e, next) {
+    await takeOver($).catch(() => undefined)
     const agentId = e.agentId
-    const before = agentId ? await read($, tree) : undefined
+    const before = await read($, tree).catch(() => undefined)
     if (agentId && before && isStopping(before, agentId)) {
       const report = wordsFor(lang).stopAnswer(before.agents.find(n => n.id === agentId)?.toolCount ?? 0)
       const first = !wasStopSent(before, agentId)
@@ -562,7 +617,12 @@ export const register: Register = (on, options) => {
     }
     const family = before && e.agentId ? choicesOf(before).agents[e.agentId] : undefined
     const model = before && family ? stepModelFor(before, family) : undefined
-    const effort = before && agentId && (e.effort !== undefined || model !== undefined) ? stepEffortFor(before, agentId) : undefined
+    const effort =
+      before && agentId && (e.effort !== undefined || model !== undefined)
+        ? stepEffortFor(before, agentId)
+        : before && !agentId && e.effort !== undefined
+          ? mainStepEffort(before)
+          : undefined
     const shownEffort = e.index === 0 || effort === undefined ? (effort ?? e.effort) : undefined
     const changed = model !== undefined || (effort !== undefined && effort !== e.effort)
     const result = yield* next(changed ? { ...e, ...(model ? { model } : {}), ...(effort ? { effort } : {}) } : e)
@@ -577,7 +637,15 @@ export const register: Register = (on, options) => {
     await change($, s =>
       stepped(
         s,
-        { agentId: e.agentId, answer: result.answer, model: usage?.model ?? model ?? e.model, effort: shownEffort, contextTokens, advisorUses },
+        {
+          agentId: e.agentId,
+          answer: result.answer,
+          model: usage?.model ?? model ?? e.model,
+          effort: shownEffort,
+          effortless: e.index === 0 && effort === undefined && e.effort === undefined,
+          contextTokens,
+          advisorUses,
+        },
         now,
       ),
     ).catch(() => undefined)
@@ -659,6 +727,7 @@ export const register: Register = (on, options) => {
   })
 
   on('session.measure', async ($, e, next) => {
+    await takeOver($).catch(() => undefined)
     const result = await next(e)
     if (e.changed.includes('context') || e.changed.includes('cost') || e.changed.includes('rateLimits')) {
       await change($, s =>
@@ -675,15 +744,10 @@ export const register: Register = (on, options) => {
   })
 
   on('session.end', async ($, e, next) => {
-    const reset =
-      e.reason === 'clear' || e.reason === 'resume'
-        ? clock($)
-            .then(now => change($, s => freshTree(s, now)))
-            .then(() => update($, unreadTexts, () => ({})))
-            .catch(() => undefined)
-        : Promise.resolve()
+    if (e.reason !== 'clear' && e.reason !== 'resume') return next(e)
+    const ending = await read($, tree).catch(() => undefined)
     const result = await next(e)
-    await reset
+    if (ending) carried = ending
     return result
   })
 
@@ -691,9 +755,9 @@ export const register: Register = (on, options) => {
     const elements = $.ui.resolve(e)
     const { Box, Text, Button } = elements
     const Input = 'Input' in elements ? elements.Input : undefined
-    const s = await read($, tree)
-    const tick = animate ? await read($, frame) : 0
     const now = await clock($)
+    const s = carried ? freshTree(carried, now) : await read($, tree)
+    const tick = animate ? await read($, frame) : 0
     if (introTicker) {
       await read($, introBeat)
       introStartedAt ??= now
@@ -723,6 +787,10 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.press', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    await takeOver($).catch(() => undefined)
+    return pressKey(actionsFor($), e.element) ? { element: e.element } : next(e)
+  })
+  on('ui.press', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
     if (e.element.startsWith('intro:skip')) {
       await endIntro($).catch(() => undefined)
       return { element: e.element }
@@ -737,7 +805,8 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.input', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
-    let work: Promise<void> | undefined
+    await takeOver($).catch(() => undefined)
+    let work: Promise<unknown> | undefined
     const actions = { ...actionsFor($), say: (agentId: string, text: string) => void (work = sayTo($, agentId, text)) }
     if (!inputKey(actions, e.element, e.kind, e.value)) return next(e)
     await work?.catch(() => undefined)

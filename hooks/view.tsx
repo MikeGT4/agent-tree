@@ -14,6 +14,7 @@ import type {
 } from '../types'
 import {
   EFFORT_LEVELS,
+  MAIN,
   MODEL_FAMILIES,
   NEW_AGENTS,
   choicesOf,
@@ -100,6 +101,7 @@ export type TreeActions = {
   detail: (agentId: string) => void
   stop: (agentId: string) => void
   say: (agentId: string, text: string) => void
+  write: (agentId: string) => void
   advisor: () => void
   look: () => void
   restyle: (row: LookRow, id: string) => void
@@ -127,6 +129,7 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   else if (kind === 'pick') actions.pick(rest)
   else if (kind === 'choose') return chooseKey(actions, rest)
   else if (kind === 'detail') actions.detail(rest)
+  else if (kind === 'write') actions.write(rest)
   else if (kind === 'stop' || kind === 'halt') actions.stop(rest)
   else return false
   return true
@@ -405,6 +408,12 @@ export function pickerLines(name: string, width: number, lang: Lang = 'de', runn
   return models + efforts + (running ? wrappedLines([w.effortNextMessage], width) : 0)
 }
 
+export function mainPickerLines(width: number, lang: Lang = 'de'): number {
+  const w = wordsFor(lang)
+  const efforts = wrappedLines([w.mainEffortFor, `[ ${w.standard} ]`, ...EFFORT_LEVELS.map(level => `[ ${effortLabel(level)} ]`), '[ × ]'], width)
+  return efforts + wrappedLines(w.mainEffortHint, width)
+}
+
 function lookLabelWidth(w: Words): number {
   return Math.max(...LOOK_ROWS.map(row => w.lookRow[row].length))
 }
@@ -505,7 +514,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     total: current.length,
     advisorRows: wide ? ADVISOR_BASE_ROWS + recentCalls.length : ADVISOR_COMPACT_ROWS,
     earlier: earlier > 0,
-    pickerRows: (pickerTarget && actions ? 1 + pickerLines(pickerName, width, lang, pickerTarget !== NEW_AGENTS) : 0) + (s.lookOpen && actions ? lookLines(width, lang) : 0),
+    pickerRows: (pickerTarget && actions ? 1 + (pickerTarget === MAIN ? mainPickerLines(width, lang) : pickerLines(pickerName, width, lang, pickerTarget !== NEW_AGENTS)) : 0) + (s.lookOpen && actions ? lookLines(width, lang) : 0),
     detailRows: detailNode && actions ? DETAIL_ROWS : 0,
     helpRows: tight ? 0 : 1,
     limitRows: s.main.limits?.length ? 1 : 0,
@@ -649,10 +658,18 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             <Button
               key={`pick:${n.id}`}
               plain
-              label={clip(`${choices.agents[n.id] ? `→ ${familyLabel(choices.agents[n.id])}` : modelLabel(n.model) || w.model} ▾`, AGENT_WIDTH - 5)}
+              label={clip(`${choices.agents[n.id] ? `→ ${familyLabel(choices.agents[n.id])}` : modelLabel(n.model) || w.model} ▾`, AGENT_WIDTH - 7)}
               onPress={() => actions.pick(n.id)}
             />
+            <Button key={`write:${n.id}`} plain label="✎" onPress={() => actions.write(n.id)} />
             {stopping ? null : <Button key={`halt:${n.id}`} plain label="■" onPress={() => actions.stop(n.id)} />}
+          </Box>
+        ) : actions ? (
+          <Box key={`write-row:${n.id}`} width={AGENT_WIDTH - 2} flexDirection="row" justifyContent="center" columnGap={1}>
+            <Text color={palette.dim} wrap="truncate-end">
+              {clip(modelLabel(n.model) || ' ', AGENT_WIDTH - 5)}
+            </Text>
+            <Button key={`write:${n.id}`} plain label="✎" onPress={() => actions.write(n.id)} />
           </Box>
         ) : (
           <Text color={running ? undefined : palette.dim} wrap="truncate-end">
@@ -705,12 +722,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     return (
       <Box key={`ag:${n.id}`} width={treeWidth} flexDirection="row" columnGap={1}>
         {actions ? (
-          <Button key={`detail:${n.id}`} plain label={clip(text, halt ? treeWidth - 2 : treeWidth)} onPress={() => actions.detail(n.id)} />
+          <Button key={`detail:${n.id}`} plain label={clip(text, treeWidth - (halt ? 4 : 2))} onPress={() => actions.detail(n.id)} />
         ) : (
           <Text color={statusColor(palette, n.status)} wrap="truncate-end">
             {text}
           </Text>
         )}
+        {actions ? <Button key={`write:${n.id}`} plain label="✎" onPress={() => actions.write(n.id)} /> : null}
         {halt ? <Button key={`halt:${n.id}`} plain label="■" onPress={() => actions.stop(n.id)} /> : null}
       </Box>
     )
@@ -756,6 +774,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     </Box>
   )
 
+  const mainSent = s.main.effortless ? undefined : s.main.effort
+  const mainChosen = choices.mainEffort
+  const mainEffortPending = mainChosen !== undefined && !s.main.effortless && mainChosen !== mainSent
+  const mainEffortLabel = mainEffortPending
+    ? `Effort ${mainSent ? `${mainSent} ` : ''}→ ${mainChosen} ▾`
+    : `${mainSent ? `Effort ${mainSent}` : s.main.effortless ? w.effortNone : 'Effort'} ▾`
+
   const roundLine = s.main.turn ? `${w.round} ${s.main.turn}${s.main.costUsd !== undefined ? ` · ${w.cost(s.main.costUsd)}` : ''}` : w.noRound
 
   const mainBox = (
@@ -764,7 +789,29 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         {[mainModel, w.main].filter(Boolean).join(' · ')}
       </Text>
       <Text wrap="truncate-end">{w.phase[phase]}</Text>
-      {s.main.effort && effortCells(s.main.effort, glyphs) ? (
+      {actions ? (
+        <Box key="main-effort" justifyContent="center" width={Math.max(1, mainWidth - 2)}>
+        <Button key="pick:main" plain hotkey="e" label={mainEffortLabel} onPress={() => actions.pick(MAIN)}>
+          {mainEffortPending ? (
+            <Text wrap="truncate-end">
+              <Text color={palette.dim}>{`Effort ${mainSent ? `${mainSent} ` : ''}`}</Text>
+              <Text color={palette.main}>{`→ ${mainChosen}`}</Text>
+              {' ▾'}
+            </Text>
+          ) : mainSent && effortCells(mainSent, glyphs) ? (
+            <Text wrap="truncate-end">
+              <Text color={palette.dim}>{'Effort '}</Text>
+              <Text color={palette.main}>{effortCells(mainSent, glyphs)}</Text>
+              {` ${mainSent} ▾`}
+            </Text>
+          ) : (
+            <Text color={palette.dim} wrap="truncate-end">
+              {mainEffortLabel}
+            </Text>
+          )}
+        </Button>
+        </Box>
+      ) : s.main.effort && effortCells(s.main.effort, glyphs) ? (
         <Text size={SIZE.detail} wrap="truncate-end">
           <Text color={palette.dim}>{'Effort '}</Text>
           <Text color={palette.main}>{effortCells(s.main.effort, glyphs)}</Text>
@@ -986,8 +1033,29 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const pickerCurrent = pickerTarget === NEW_AGENTS ? choices.newAgents : pickerTarget ? choices.agents[pickerTarget] : undefined
   const effortCurrent = pickerTarget === NEW_AGENTS ? choices.newEffort : pickerTarget ? choices.efforts?.[pickerTarget] : undefined
+  const mainPicker =
+    pickerTarget === MAIN && actions ? (
+      <Box key="picker" flexDirection="column" width={width} marginTop={1}>
+        <Box key="picker-main" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          <Text color={palette.main}>{w.mainEffortFor}</Text>
+          <Button key="effort:main:default" hotkey="0" label={w.standard} variant={mainChosen === undefined ? 'primary' : undefined} onPress={() => actions.effort(MAIN, undefined)} />
+          {EFFORT_LEVELS.map((level, i) => (
+            <Button key={`effort:main:${level}`} hotkey={String(i + 1)} label={effortLabel(level)} variant={mainChosen === level ? 'primary' : undefined} onPress={() => actions.effort(MAIN, level)} />
+          ))}
+          <Button key="picker:close" hotkey="x" label="×" onPress={() => actions.close()} />
+        </Box>
+        <Box key="picker-main-hint" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          {w.mainEffortHint.map((part, i) => (
+            <Text key={`main-hint:${i}`} color={palette.dim}>
+              {part}
+            </Text>
+          ))}
+        </Box>
+      </Box>
+    ) : null
+
   const pickerRow =
-    pickerTarget && actions ? (
+    pickerTarget === MAIN ? mainPicker : pickerTarget && actions ? (
       <Box key="picker" flexDirection="column" width={width} marginTop={1}>
         <Box key="picker-models" flexDirection="row" flexWrap="wrap" columnGap={1}>
           <Text color={palette.agent} wrap="truncate-end">
