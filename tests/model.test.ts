@@ -937,12 +937,12 @@ describe('Maskierung, Kürzen nach Zeichenfolgen und neuer Baum', () => {
     s = chosen(s, 'a1', 'opus', 3)
     s = completed(s, { agentId: 'a2', answer: 'fertig', reason: 'done', isAborted: false, durationMs: 1 }, 4)
     const fresh = freshTree(s, 5)
-    expect(fresh.agents).toEqual([])
+    expect(fresh.agents.map(n => n.id)).toEqual(['a1'])
     expect(fresh.choices?.efforts).toEqual({ a1: 'low' })
     expect(fresh.choices?.agents).toEqual({ a1: 'opus' })
     expect(freshTree(fresh, 6).choices?.efforts).toEqual({ a1: 'low' })
-    const gone = completed(fresh, { agentId: 'a1', answer: 'fertig', reason: 'done', isAborted: false, durationMs: 1 }, 7)
-    expect([gone.choices?.efforts, gone.choices?.agents]).toEqual([{}, {}])
+    const ended = freshTree(completed(fresh, { agentId: 'a1', answer: 'fertig', reason: 'done', isAborted: false, durationMs: 1 }, 7), 8)
+    expect([ended.agents, ended.choices?.efforts, ended.choices?.agents]).toEqual([[], {}, {}])
   })
 
   test('ein neuer Baum nimmt angeforderte Stopps und Korrekturen laufender Agenten mit', () => {
@@ -977,3 +977,18 @@ describe('Eingaben für die Denkstufe', () => {
     expect(isNewInput('attachment', { role: 'user', name: 'nested_memory' })).toBe(false)
   })
 })
+
+describe('Namen mit Bindestrich und Pfade', () => {
+  test('harmlose Namen mit Bindestrich bleiben lesbar, Schlüssel am Ende werden maskiert', () => {
+    expect(excerpt('fix secret-detection: false positives')).toBe('fix secret-detection: false positives')
+    expect(excerpt('Add token-count: field to schema')).toBe('Add token-count: field to schema')
+    expect(excerpt('password-reset: on')).toBe('password-reset: on')
+    expect(excerpt('my-token=hunter2 x')).not.toMatch(/hunter2/)
+    expect(excerpt('x-api-key: hunter2')).not.toMatch(/hunter2/)
+  })
+
+  test('Windows-Pfade werden im Werkzeugtext auf den Dateinamen gekürzt', () => {
+    expect(toolLabel('Read', { file_path: 'C:\\Users\\name\\projects\\agent-tree\\hooks\\register.tsx' })).toBe('Read register.tsx')
+  })
+})
+

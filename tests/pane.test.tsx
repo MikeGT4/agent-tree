@@ -12,7 +12,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; holdAppend?: Promise<void> } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; holdAppend?: Promise<void>; fillFails?: boolean } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -65,6 +65,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
     return { text: 'ok' } as never
   })
   on('prompt.fill', (_, e) => {
+    if (refuse.fillFails) throw new Error('kein Feld')
     fills.push((e as { text: string }).text)
     return { isFilled: true } as never
   })
@@ -596,13 +597,17 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('/clear beginnt den Baum neu', de, async ($, on) => {
+  test('/clear beginnt den Baum neu, laufende Agenten bleiben stehen', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
+    await $.agent.spawn({ prompt: 'P', description: 'Schon fertig', subagentType: 'Plan' } as never)
+    await $.turn.complete({ turnId: 't1', agentId: 'sub-2', answer: 'ok', reason: 'answer', isAborted: false, durationMs: 5 } as never)
     await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
     const ui = await $.ui.mount(pane(90))
-    expect(await screen(ui)).not.toMatch(/Code lesen/)
-    expect(await screen(ui)).toMatch(/noch keine Unteragenten/)
+    const text = await screen(ui)
+    expect(text).toMatch(/Code lesen/)
+    expect(text).not.toMatch(/Schon fertig/)
+    expect(text).not.toMatch(/Prüf das Auth-Modul/)
     await ui.unmount()
   })
 
@@ -1581,7 +1586,7 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     expect(seen.sent[0]?.text).toMatch(/Erstens A[\s\S]*Zweitens B/)
   })
 
-  test('nach /agent-tree clear wird keine alte Korrektur nachgeschickt', de, async ($, on) => {
+  test('nach /agent-tree clear geht eine ungelesene Korrektur an einen laufenden Agenten nicht verloren', de, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
     const ui = await openDetail($)
@@ -1589,7 +1594,7 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await ui.unmount()
     await $.command.run({ command: 'agent-tree', args: 'clear', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
     await $.turn.complete(finished)
-    expect(seen.sent.length).toBe(0)
+    expect(seen.sent.length).toBe(1)
   })
 
   test('in der Zeilenansicht steht beim Stoppen „hält an“', de, async ($, on) => {
@@ -2201,7 +2206,7 @@ describe('Nach /clear in einer neuen Sitzung', () => {
     const text = await screen(after)
     expect(text).toMatch(/Woche \S+ 84 %/)
     expect(text).toMatch(/Opus/)
-    expect(text).not.toMatch(/Code lesen/)
+    expect(text).toMatch(/Code lesen/)
     expect((await after.find({ key: 'pick:new' }))?.props.label).toMatch(/Sonnet/)
     await after.unmount()
   })
@@ -2571,6 +2576,7 @@ describe('Wahlen und Stopps laufender Agenten über /clear', () => {
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))
     expect(await screen(ui)).toMatch(/Code lesen/)
+    await $.turn.complete({ turnId: 't1', agentId: 'sub-1', answer: 'ok', reason: 'answer', isAborted: false, durationMs: 5 } as never)
     await clearSession($, seen)
     expect(await screen(ui)).not.toMatch(/Code lesen/)
     await ui.unmount()
@@ -2694,6 +2700,69 @@ describe('Wahlen und Stopps laufender Agenten über /clear', () => {
     await $.turn.complete({ turnId: 't1', answer: 'ok', reason: 'end_turn', isAborted: false, durationMs: 10 } as never)
     await step($, { agentId: 'sub-1' })
     expect(seen.stepEfforts.at(-1)).toBe('low')
+  })
+
+  test('nach /clear bleibt ein laufender Agent ansprechbar und meldet seine echten Werkzeugaufrufe beim Stopp', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true })
+    await oneAgentWithAdvisor($)
+    await $.tool.call({ tool: 'Read', input: { file_path: '/a.ts' }, agentId: 'sub-1' } as never)
+    await $.tool.call({ tool: 'Read', input: { file_path: '/b.ts' }, agentId: 'sub-1' } as never)
+    await clearSession($, seen)
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    expect((await run($, 'an sub-1 Bitte kürzer')).text).toMatch(/geschickt/)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'detail:sub-1' })
+    await ui.redraw()
+    await ui.press({ key: 'stop:sub-1' })
+    await ui.unmount()
+    const chunks: unknown[] = []
+    await step($, { agentId: 'sub-1', chunks })
+    expect(JSON.stringify(chunks)).toMatch(/nach 3 Werkzeugaufrufen/)
+  })
+
+  test('eine Zeile an einen laufenden Agenten zählt auch nach /clear als Eingabe', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true })
+    await oneAgentWithAdvisor($)
+    await step($, { agentId: 'sub-1' })
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:sub-1' })
+    await ui.press({ key: 'effort:sub-1:high' })
+    await ui.press({ key: 'picker:close' })
+    await ui.unmount()
+    await $.session.append({ message: { type: 'user', role: 'user', content: [{ type: 'text', text: 'Hinweis' }] }, door: 'delivery', agentId: 'sub-1' } as never)
+    await clearSession($, seen)
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    await toolStep($, 'sub-1', 'medium')
+    const after = await $.ui.mount(pane(90))
+    expect(await screen(after)).not.toMatch(/medium → high/)
+    await after.unmount()
+  })
+
+  test('ein Schritt einer Schleife, die nie gestartet wurde, bekommt die Stufe für neue Agenten nicht', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await newAgentsOn($, 'low')
+    await step($, { agentId: 'fork-compaction-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
+  })
+
+  test('ein später Schritt der endenden Sitzung stellt die alte Statuszeile nicht wieder her', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true })
+    await oneAgentWithAdvisor($)
+    await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+    expect(seen.status.at(-1)).toBe('')
+    await $.session.measure({ context: { window: 200000, tokens: 4000, percent: 2 }, rateLimits: [], cost: { usd: 0.1 }, changed: ['context', 'cost'] } as never)
+    expect(seen.status.at(-1)).toBe('')
+  })
+
+  test('ohne Eingabefeld meldet der Schreib-Knopf das, auch wenn Claude Code das Füllen ablehnt', de, async ($, on) => {
+    const seen = engine(on, [], { fillFails: true })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'write:sub-1' })
+    await ui.unmount()
+    expect(seen.toasts.at(-1) ?? '').not.toMatch(/Enter schickt/)
   })
 })
 

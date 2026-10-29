@@ -305,15 +305,8 @@ export function isNewInput(door: string, message: { role?: string; name?: string
   return door === 'attachment' ? message.name === 'queued_command' : message.role === 'user'
 }
 
-export function endedIds(s: AgentTreeState): Set<string> {
-  return new Set(s.agents.filter(n => n.status !== 'running').map(n => n.id))
-}
-
-function forgotten(s: AgentTreeState, agentId: string): AgentTreeState {
-  const gone = (id: string) => id === agentId
-  const current = choicesOf(s)
-  const choices = s.choices && { ...current, agents: without(current.agents, gone), ...(current.efforts ? { efforts: without(current.efforts, gone) } : {}) }
-  return withoutStop({ ...s, ...(choices ? { choices } : {}), ...(s.corrections ? { corrections: without(s.corrections, gone) } : {}) }, agentId)
+export function runningIds(s: AgentTreeState): Set<string> {
+  return new Set(s.agents.filter(n => n.status === 'running').map(n => n.id))
 }
 
 export function chosen(s: AgentTreeState, target: string, family: string | undefined, now: number): AgentTreeState {
@@ -397,12 +390,16 @@ const ENV_VALUE = /\S+/y
 
 const ENV_SECRET_NAME = /PASS|PWD|KEY|CREDENTIALS?/
 
-function masked(text: string, scan: RegExp, value: RegExp, secret: RegExp): string {
+function secretName(name: string): boolean {
+  return SECRET_NAME.test(name.slice(name.lastIndexOf('-') + 1)) || /(?:api|access)-key$/i.test(name)
+}
+
+function masked(text: string, scan: RegExp, value: RegExp, secret: (name: string) => boolean): string {
   let out = ''
   let from = 0
   scan.lastIndex = 0
   for (let found = scan.exec(text); found; found = scan.exec(text)) {
-    if (!secret.test(found[1] ?? '')) continue
+    if (!secret(found[1] ?? '')) continue
     const end = found.index + found[0].length
     value.lastIndex = end
     const tail = value.exec(text)
@@ -421,7 +418,7 @@ function oneLine(text: string): string {
     .replace(TOKEN, '•••')
     .replace(BEARER, '•••')
     .replace(URL_CREDENTIALS, '://•••@')
-  return masked(masked(plain, ASSIGNMENT, ASSIGNED_VALUE, SECRET_NAME), ENV_ASSIGNMENT, ENV_VALUE, ENV_SECRET_NAME)
+  return masked(masked(plain, ASSIGNMENT, ASSIGNED_VALUE, secretName), ENV_ASSIGNMENT, ENV_VALUE, name => ENV_SECRET_NAME.test(name))
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -620,7 +617,7 @@ export function completed(s: AgentTreeState, input: CompleteInput, now: number):
     const kept = Object.entries({ ...s.orphans, [input.agentId]: { status, at: now, answerTokens, answer, durationMs: input.durationMs } }).slice(
       -ORPHANS_KEPT,
     )
-    return forgotten({ ...s, orphans: Object.fromEntries(kept) }, input.agentId)
+    return { ...s, orphans: Object.fromEntries(kept) }
   }
   if (node.status !== 'running' && node.answerTokens !== undefined) return s
   const final = node.status === 'stopped' || wasStopSent(s, node.id) ? 'stopped' : status
@@ -679,15 +676,17 @@ export function withLimits(s: AgentTreeState, limits: AgentTreeLimit[]): AgentTr
 
 export function freshTree(from: AgentTreeState, now: number): AgentTreeState {
   const base = carriedChoices(from, withAdvisorModel(createTree(now), from.advisor.model))
-  const ended = endedIds(from)
-  const done = (id: string) => ended.has(id)
+  const running = from.agents.filter(n => n.status === 'running')
+  const alive = runningIds(from)
+  const gone = (id: string) => !alive.has(id)
   const old = choicesOf(from)
   const fresh: AgentTreeState = {
     ...base,
-    choices: { ...choicesOf(base), agents: without(old.agents, done), efforts: without(old.efforts ?? {}, done) },
-    ...(from.stopping ? { stopping: from.stopping.filter(id => !done(id)) } : {}),
-    ...(from.stopSent ? { stopSent: from.stopSent.filter(id => !done(id)) } : {}),
-    ...(from.corrections ? { corrections: without(from.corrections, done) } : {}),
+    agents: running,
+    choices: { ...choicesOf(base), agents: without(old.agents, gone), efforts: without(old.efforts ?? {}, gone) },
+    ...(from.stopping ? { stopping: from.stopping.filter(id => alive.has(id)) } : {}),
+    ...(from.stopSent ? { stopSent: from.stopSent.filter(id => alive.has(id)) } : {}),
+    ...(from.corrections ? { corrections: without(from.corrections, gone) } : {}),
   }
   return from.main.limits ? withLimits(fresh, from.main.limits) : fresh
 }
@@ -879,7 +878,7 @@ const BARE_TOOLS = new Set(['Grep', 'Glob', 'WebSearch', 'ToolSearch', 'Subagent
 
 export function toolLabel(tool: string, input: Record<string, unknown>): string {
   const text = (value: unknown) => (typeof value === 'string' ? oneLine(value) : '')
-  const fileName = (value: unknown) => text(value).split('/').filter(Boolean).at(-1) ?? ''
+  const fileName = (value: unknown) => text(value).split(/[\\/]/).filter(Boolean).at(-1) ?? ''
   const program = (value: unknown) =>
     fileName(text(typeof value === 'string' ? value.trimStart().replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+/, '') : value).split(' ')[0])
   const host = (value: unknown) => {
