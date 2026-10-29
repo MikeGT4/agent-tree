@@ -20,6 +20,7 @@ import {
   choicesOf,
   clockTime,
   counts,
+  cut,
   effortBar,
   effortLabel,
   familyLabel,
@@ -450,7 +451,7 @@ function wrappedLines(parts: readonly string[], width: number, gap = 1): number 
 }
 
 export function clip(text: string, width: number): string {
-  return text.length > width ? `${text.slice(0, Math.max(0, width - 1))}…` : text
+  return text.length > width ? `${cut(text, Math.max(0, width - 1))}…` : text
 }
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
@@ -679,8 +680,8 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
           {nested
             ? `↳ ${w.under} ${nested}`
-            : running && choices.efforts?.[n.id] && choices.efforts[n.id] !== n.effort
-              ? `${n.effort ?? '?'} → ${choices.efforts[n.id]}`
+            : running && n.effort !== undefined && choices.efforts?.[n.id] && choices.efforts[n.id] !== n.effort
+              ? `${n.effort} → ${choices.efforts[n.id]}`
               : effortLine(n.effort, glyphs)}
         </Text>
         <Text size={SIZE.detail} color={running ? undefined : palette.dim} wrap="truncate-end">

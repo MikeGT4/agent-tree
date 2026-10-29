@@ -173,7 +173,7 @@ export const WORDS: Record<Lang, Words> = {
     answers: n => `${n} ${n === 1 ? 'Antwort' : 'Antworten'}`,
     tools: 'Werkzeuge',
     under: 'unter',
-    more: (n, r) => (r > 0 ? `+${n} weitere, ${r} davon laufen` : `+${n} weitere beendet`),
+    more: (n, r) => (r > 0 ? `+${n} weitere, ${r} davon ${r === 1 ? 'läuft' : 'laufen'}` : `+${n} weitere beendet`),
     earlier: n => `aus früheren Runden: ${n} ${n === 1 ? 'Agent' : 'Agenten'}`,
     advisorTitle: 'BERATER',
     onCall: 'auf Abruf',
@@ -280,7 +280,7 @@ export const WORDS: Record<Lang, Words> = {
         d.status === 'done'
           ? `${d.type} fertig nach ${fmtDuration(Number(d.durationMs))} · ↑ ${fmtTokens(Number(d.tokens))}`
           : `${d.type} ${WORDS.de.status[d.status as AgentTreeStatus] ?? d.status}`,
-      workflowDone: d => `Workflow fertig: ${d.size} Agenten`,
+      workflowDone: d => `Workflow fertig: ${d.size} ${Number(d.size) === 1 ? 'Agent' : 'Agenten'}`,
       resumed: d => `${d.type} fortgesetzt: ${d.description}`,
       adopted: d => `${d.count} ${Number(d.count) === 1 ? 'Agent' : 'Agenten'} aus der Agentenliste übernommen`,
       advisor: d => `gefragt aus ${d.where ? d.where : 'Hauptsitzung'}`,
@@ -426,7 +426,7 @@ export const WORDS: Record<Lang, Words> = {
         d.status === 'done'
           ? `${d.type} done after ${fmtDuration(Number(d.durationMs))} · ↑ ${fmtTokens(Number(d.tokens), '.')}`
           : `${d.type} ${WORDS.en.status[d.status as AgentTreeStatus] ?? d.status}`,
-      workflowDone: d => `Workflow done: ${d.size} agents`,
+      workflowDone: d => `Workflow done: ${d.size} ${Number(d.size) === 1 ? 'agent' : 'agents'}`,
       resumed: d => `${d.type} resumed: ${d.description}`,
       adopted: d => `${d.count} ${Number(d.count) === 1 ? 'agent' : 'agents'} taken over from the agent list`,
       advisor: d => `consulted from ${d.where ? d.where : 'main session'}`,

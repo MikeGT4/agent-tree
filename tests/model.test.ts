@@ -861,15 +861,46 @@ describe('Aussehen', () => {
     expect(effortFrom(3)).toBeUndefined()
   })
 
-  test('die Denkstufe eines Agenten geht der für alle Unteragenten vor', () => {
+  test('die Stufe für neue Unteragenten gilt ab ihrem Start, die eigene Wahl eines Agenten geht vor', () => {
     let s = spawned(createTree(0), spawn('a1'), 1)
     expect(stepEffortFor(s, 'a1')).toBeUndefined()
     s = withNewEffort(s, 'low')
-    expect(stepEffortFor(s, 'a1')).toBe('low')
+    expect(stepEffortFor(s, 'a1')).toBeUndefined()
+    expect(stepEffortFor(s, 'a2')).toBe('low')
+    s = spawned(s, { ...spawn('a2'), effort: 'low' }, 2)
+    s = withNewEffort(s, 'high')
+    expect(stepEffortFor(s, 'a2')).toBe('low')
     s = effortChosen(s, 'a1', 'max', 2)
     expect(stepEffortFor(s, 'a1')).toBe('max')
     s = effortChosen(s, 'a1', undefined, 3)
-    expect(stepEffortFor(s, 'a1')).toBe('low')
+    expect(stepEffortFor(s, 'a1')).toBeUndefined()
     expect(s.log.at(-1)?.kind).toBe('effort')
+  })
+})
+
+describe('Prüfschleife Runde 2, Modell', () => {
+  test('sehr lange Texte ohne Leerzeichen werden schnell gekürzt', () => {
+    for (const text of ['a'.repeat(120_000), 'a.'.repeat(60_000), 'KEY'.repeat(40_000), 'token'.repeat(24_000), '0123456789abcdef'.repeat(7_500), 'sk-'.repeat(40_000)]) {
+      const started = Date.now()
+      const out = excerpt(text)
+      expect(Date.now() - started).toBeLessThan(1500)
+      expect(out.length).toBeLessThanOrEqual(160)
+    }
+  })
+
+  test('Kürzen trennt kein Zeichen außerhalb der Grundebene', () => {
+    const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+    expect(lone.test(excerpt('a'.repeat(79) + '🐛', 80))).toBe(false)
+    const tree = createTree(0)
+    const s = spawned(tree, { agentId: 'x', agentType: 'Plan', description: 'a'.repeat(79) + '🐛🐛', prompt: 'p' } as never, 1)
+    expect(lone.test(s.agents[0]?.description ?? '')).toBe(false)
+  })
+
+  test('Einzahl in den Zählern', () => {
+    expect(WORDS.de.more(1, 1)).toBe('+1 weitere, 1 davon läuft')
+    expect(WORDS.de.more(3, 2)).toBe('+3 weitere, 2 davon laufen')
+    expect(WORDS.de.lines.workflowDone({ size: 1 })).toBe('Workflow fertig: 1 Agent')
+    expect(WORDS.en.lines.workflowDone({ size: 1 })).toBe('Workflow done: 1 agent')
+    expect(WORDS.en.lines.workflowDone({ size: 2 })).toBe('Workflow done: 2 agents')
   })
 })

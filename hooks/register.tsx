@@ -2,7 +2,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { AgentTreeState } from '../types'
+import type { AgentTreeLook, AgentTreeState } from '../types'
 import { INTRO_MS } from './logo.ts'
 import { drawIntro } from './intro.tsx'
 import { introInfo } from './intro-model.ts'
@@ -105,15 +105,42 @@ let stoppingIds = new Set<string>()
 let stopSentIds = new Set<string>()
 let lastAdvisor = 'opus'
 let advisorCommand = true
-let carried: AgentTreeState | undefined
+type Carried = { tree: AgentTreeState; look: AgentTreeLook }
+let carried: Carried | undefined
+let handing: Promise<void> | undefined
+const delivered = new Set<string>()
 
-async function takeOver($: EngineInterface): Promise<void> {
+function takeOver($: EngineInterface): Promise<void> {
+  if (handing) return handing
   const from = carried
-  if (!from) return
-  carried = undefined
+  if (!from) return Promise.resolve()
+  const run: Promise<void> = handOver($, from)
+    .catch(() => undefined)
+    .finally(() => {
+      if (handing === run) handing = undefined
+    })
+  handing = run
+  return run
+}
+
+async function handOver($: EngineInterface, from: Carried): Promise<void> {
+  await update($, appearance, () => from.look).catch(() => undefined)
+  await update($, introDone, () => true).catch(() => undefined)
+  await update($, unreadTexts, () => ({})).catch(() => undefined)
   const now = await clock($)
-  await change($, () => freshTree(from, now))
-  await update($, unreadTexts, () => ({}))
+  await write($, () => freshTree(from.tree, now))
+  if (carried === from) carried = undefined
+}
+
+async function latest($: EngineInterface): Promise<AgentTreeState> {
+  await takeOver($)
+  return read($, tree)
+}
+
+async function snapshot($: EngineInterface): Promise<Carried | undefined> {
+  const ending = await read($, tree).catch(() => undefined)
+  if (!ending) return undefined
+  return { tree: ending, look: await read($, appearance).catch(() => DEFAULT_LOOK) }
 }
 
 function busy(s: AgentTreeState): boolean {
@@ -164,7 +191,7 @@ async function maybeStartIntro($: EngineInterface, interactive: boolean): Promis
   await update($, introDone, () => true)
   if (!introOn || !animate || !interactive) return
   if ((await $.settings.read({ key: 'prefersReducedMotion' }).catch(() => undefined)) === true) return
-  if ((await read($, tree)).agents.length > 0) return
+  if ((await latest($)).agents.length > 0) return
   await readIntroModel($)
   startIntro($, await clock($))
 }
@@ -211,6 +238,11 @@ async function clock($: EngineInterface): Promise<number> {
 }
 
 async function change($: EngineInterface, apply: (s: AgentTreeState) => AgentTreeState): Promise<AgentTreeState> {
+  await takeOver($)
+  return write($, apply)
+}
+
+async function write($: EngineInterface, apply: (s: AgentTreeState) => AgentTreeState): Promise<AgentTreeState> {
   const next = await update($, tree, apply)
   stoppingIds = new Set(next.stopping ?? [])
   stopSentIds = new Set(next.stopSent ?? [])
@@ -256,7 +288,7 @@ async function restoreLook($: EngineInterface): Promise<void> {
 
 async function restoreChoices($: EngineInterface, interactive: boolean): Promise<boolean> {
   await restoreLook($)
-  if (!interactive || choicesOf(await read($, tree)).restored) return false
+  if (!interactive || choicesOf(await latest($)).restored) return false
   const model = await $.store.get(MODEL_KEY).catch(() => undefined)
   const effort = await $.store.get(EFFORT_KEY).catch(() => undefined)
   const mainEffort = await $.store.get(MAIN_EFFORT_KEY).catch(() => undefined)
@@ -312,16 +344,18 @@ async function openDetail($: EngineInterface, agentId: string): Promise<void> {
 
 async function appendRow($: EngineInterface, text: string, agentId?: string): Promise<boolean> {
   const row = { message: { type: 'user' as const, content: [{ type: 'text' as const, text }] }, ...(agentId ? { agentId } : {}) }
-  return $.session.append(row).then(
+  const kept = await $.session.append(row).then(
     result => (result as { deny?: string }).deny === undefined,
     () => false,
   )
+  if (kept) delivered.add(agentId ?? MAIN)
+  return kept
 }
 
 async function sayTo($: EngineInterface, agentId: string, text: string): Promise<boolean> {
   if (!text.trim()) return false
   const w = wordsFor(lang)
-  const current = await read($, tree)
+  const current = await latest($)
   const node = current.agents.find(n => n.id === agentId)
   if (!node) {
     $.ui.status(w.correctionFailedStatus)
@@ -344,7 +378,7 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
     }
     await change($, t => correctionCounted(t, agentId))
   }
-  focusField($, await read($, tree), agentId)
+  focusField($, await latest($), agentId)
   const note = w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text)
   await appendRow($, note)
   const parent = node.parentId ? current.agents.find(n => n.id === node.parentId) : undefined
@@ -355,7 +389,7 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
 const WRITE_PREFIX = /^\/agent-tree\s+(?:an|to|say)\s+\S+\s?/i
 
 async function startWrite($: EngineInterface, agentId: string): Promise<void> {
-  const s = await read($, tree)
+  const s = await latest($)
   const node = s.agents.find(n => n.id === agentId)
   if (!node) return
   const w = wordsFor(lang)
@@ -382,7 +416,7 @@ async function advisorSettled($: EngineInterface, wanted: boolean): Promise<bool
 }
 
 async function toggleAdvisor($: EngineInterface): Promise<void> {
-  const args = (await read($, tree)).advisor.model ? 'off' : lastAdvisor
+  const args = (await latest($)).advisor.model ? 'off' : lastAdvisor
   const ran = await $.command.run({ command: 'advisor', args }).then(
     () => true,
     () => false,
@@ -500,7 +534,7 @@ export const register: Register = (on, options) => {
       .register({ name: COMMAND, description: wordsFor(lang).commandDescription, argumentHint: wordsFor(lang).commandHint, immediate: true })
       .catch(() => undefined)
     const restored = await restoreChoices($, e.isInteractive !== false).catch(() => false)
-    const saved = restored ? choicesOf(await read($, tree)) : undefined
+    const saved = restored ? choicesOf(await latest($)) : undefined
     if (saved && (saved.newAgents || saved.newEffort)) {
       const w = wordsFor(lang)
       $.ui.toast(w.savedChoice(`${familyOr(saved.newAgents, w.standard)}${saved.newEffort ? ` · ${effortLabel(saved.newEffort)}` : ''}`))
@@ -526,7 +560,7 @@ export const register: Register = (on, options) => {
     const w = wordsFor(lang)
     const said = /^(?:an|to|say)\s+(\S+)(?:\s+([\s\S]*))?$/i.exec(e.args.trim())
     if (said) {
-      const node = agentByPrefix(await read($, tree), said[1] ?? '')
+      const node = agentByPrefix(await latest($), said[1] ?? '')
       if (!node) return { text: w.writeUnknown(said[1] ?? '') }
       const label = `${typeLabel(node.type)} · ${node.description}`
       const message = (said[2] ?? '').trim()
@@ -548,7 +582,7 @@ export const register: Register = (on, options) => {
       await restyle($, row, id)
       return { text: w.lookSet(w.lookRow[row], lookOptionLabel(w, row, id)) }
     }
-    if (word === 'aussehen' || word === 'look') {
+    if ((word === 'aussehen' || word === 'look') && /^(?:zurück|zurueck|reset|standard|default)$/i.test(names.join(' '))) {
       await resetLook($)
       return { text: w.lookResetDone }
     }
@@ -570,7 +604,7 @@ export const register: Register = (on, options) => {
     } catch (err) {
       return { text: w.notOpened(String(err)) }
     }
-    const s = await read($, tree)
+    const s = await latest($)
     return { text: w.opened(s.agents.length) }
   }).catch(() => ({ text: wordsFor(lang).commandFailed }))
 
@@ -587,7 +621,8 @@ export const register: Register = (on, options) => {
   on('turn.step', async function* ($, e, next) {
     await takeOver($).catch(() => undefined)
     const agentId = e.agentId
-    const before = await read($, tree).catch(() => undefined)
+    const fed = delivered.delete(agentId ?? MAIN)
+    const before = agentId !== undefined || e.effort !== undefined ? await latest($).catch(() => undefined) : undefined
     if (agentId && before && isStopping(before, agentId)) {
       const report = wordsFor(lang).stopAnswer(before.agents.find(n => n.id === agentId)?.toolCount ?? 0)
       const first = !wasStopSent(before, agentId)
@@ -608,7 +643,7 @@ export const register: Register = (on, options) => {
         usage: null,
       }
     }
-    const carriesInput = e.index === 0 || Boolean(agentId && before && pendingCorrection(before, agentId))
+    const carriesInput = e.index === 0 || fed || Boolean(agentId && before && pendingCorrection(before, agentId))
     if (agentId && before && pendingCorrection(before, agentId)) {
       const readAt = await clock($)
       await forget($, agentId).catch(() => undefined)
@@ -622,7 +657,9 @@ export const register: Register = (on, options) => {
         : before && !agentId && e.effort !== undefined
           ? mainStepEffort(before)
           : undefined
-    const shownEffort = carriesInput || effort === undefined ? (effort ?? e.effort) : undefined
+    const known = agentId ? before?.agents.find(n => n.id === agentId)?.effort : before?.main.effort
+    const sent = effort ?? e.effort
+    const shownEffort = carriesInput || typeof sent === 'number' || (effort === undefined && known === undefined) ? sent : undefined
     const changed = model !== undefined || (effort !== undefined && effort !== e.effort)
     const result = yield* next(changed ? { ...e, ...(model ? { model } : {}), ...(effort ? { effort } : {}) } : e)
     const usage = result.usage
@@ -654,7 +691,8 @@ export const register: Register = (on, options) => {
   on('agent.spawn', async ($, e, next) => {
     await takeOver($).catch(() => undefined)
     if (introTicker) await endIntro($).catch(() => undefined)
-    const family = choicesOf(await read($, tree)).newAgents
+    const choices = choicesOf(await latest($))
+    const family = choices.newAgents
     const input = family && !e.model && !e.fork && !e.resume ? { ...e, model: family } : e
     const result = await next(input)
     const agentId = result.agentId
@@ -674,6 +712,7 @@ export const register: Register = (on, options) => {
               background: e.background,
               fork: e.fork,
               workflowRunId: e.workflow?.runId || undefined,
+              effort: choices.newEffort,
             },
             now,
           ),
@@ -691,14 +730,14 @@ export const register: Register = (on, options) => {
     const stopping = stoppingIds.has(agentId)
     if (stopping) {
       if (String(e.tool) !== HANDBACK) {
-        const current = await read($, tree)
+        const current = await latest($)
         return { deny: wordsFor(lang).stopAnswer(current.agents.find(n => n.id === agentId)?.toolCount ?? 0) }
       }
       if (stopSentIds.has(agentId)) return next(e)
       await change($, s => stopCancelled(s, agentId)).catch(() => undefined)
     }
     if (!stopping && String(e.tool) === HANDBACK) {
-      const waiting = pendingCorrection(await read($, tree), agentId)
+      const waiting = pendingCorrection(await latest($), agentId)
       if (waiting && !waiting.held) {
         await change($, s => correctionHeld(s, agentId)).catch(() => undefined)
         return { deny: wordsFor(lang).correctionWaiting(HANDBACK) }
@@ -706,7 +745,7 @@ export const register: Register = (on, options) => {
     }
     const label = toolLabel(String(e.tool), e as unknown as Record<string, unknown>)
     const noted = (async () => {
-      const known = (await read($, tree)).agents.some(n => n.id === agentId)
+      const known = (await latest($)).agents.some(n => n.id === agentId)
       if (!known) return
       const now = await clock($)
       await change($, s => toolRan(s, { agentId, label }, now))
@@ -747,9 +786,16 @@ export const register: Register = (on, options) => {
 
   on('session.end', async ($, e, next) => {
     if (e.reason !== 'clear' && e.reason !== 'resume') return next(e)
-    const ending = await read($, tree).catch(() => undefined)
+    const ending = carried ?? (await snapshot($))
     const result = await next(e)
-    if (ending) carried = ending
+    if (ending) {
+      carried = { ...ending }
+      handing = undefined
+      delivered.clear()
+      const fresh = freshTree(ending.tree, await clock($))
+      $.ui.status(statusText(fresh, lang))
+      keepTicking($, fresh)
+    }
     return result
   })
 
@@ -758,13 +804,15 @@ export const register: Register = (on, options) => {
     const { Box, Text, Button } = elements
     const Input = 'Input' in elements ? elements.Input : undefined
     const now = await clock($)
-    const s = carried ? freshTree(carried, now) : await read($, tree)
+    const stored = await read($, tree)
+    const storedLook = await read($, appearance)
+    await read($, introBeat)
+    const s = carried ? freshTree(carried.tree, now) : stored
+    const look = carried ? carried.look : storedLook
     const tick = animate ? await read($, frame) : 0
     if (introTicker) {
-      await read($, introBeat)
       introStartedAt ??= now
       introShown ??= introInfo(s, wordsFor(lang), introModelSetting)
-      const look = await read($, appearance)
       const palette = PALETTES[look.colors]
       const rows = e.props.scroll?.bodyRows
       const intro = drawIntro(
@@ -783,7 +831,7 @@ export const register: Register = (on, options) => {
       now,
       lang,
       actions: actionsFor($),
-      appearance: await read($, appearance),
+      appearance: look,
       canAdvise: advisorCommand,
     })
   })

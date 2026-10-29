@@ -12,7 +12,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; holdAppend?: Promise<void> } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -73,6 +73,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   on('session.append', async (_, e, next) => {
     const row = e as unknown as Appended
     if (refuse.append && row.agentId) return { deny: 'no running loop' } as never
+    if (refuse.holdAppend && row.agentId) await refuse.holdAppend
     appended.push(row)
     return next(e)
   })
@@ -96,15 +97,22 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   let newSession = false
-  const isTree = (e: unknown) => (e as { plugin?: string; key?: string }).plugin === 'agent-tree' && (e as { key?: string }).key === 'tree'
-  on('state.get', async (_, e, next) => (refuse.clearResets && newSession && isTree(e) ? ({ value: createTree(0), version: 0 } as never) : next(e)))
+  const written = new Set<string>()
+  const ownKey = (e: unknown) => ((e as { plugin?: string }).plugin === 'agent-tree' ? (e as { key?: string }).key : undefined)
+  on('state.get', async (_, e, next) => {
+    const key = ownKey(e)
+    const real = await next(e)
+    return refuse.clearResets && newSession && key && !written.has(key) ? ({ value: { value: undefined, version: 0 } } as never) : real
+  })
   on('state.set', async (_, e, next) => {
-    if (isTree(e)) newSession = false
+    const key = ownKey(e)
+    if (key && newSession) written.add(key)
     return next(e)
   })
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
   const sessionReplaced = () => {
     newSession = true
+    written.clear()
   }
   on('session.measure', (_, e) => ({ changed: e.changed }))
   on('agent.list', () => ({ value: listed }) as never)
@@ -356,6 +364,9 @@ describe('Agent Tree', () => {
     await ui.press({ key: 'effort:new:low' })
     await ui.unmount()
     await step($, { agentId: 'sub-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
+    await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' } as never)
+    await step($, { agentId: 'sub-2' })
     expect(seen.stepEfforts.at(-1)).toBe('low')
     await step($)
     expect(seen.stepEfforts.at(-1)).toBe('high')
@@ -729,8 +740,8 @@ describe('Agent Tree', () => {
     engine(on)
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))
-    await ui.press({ key: 'pick:new' })
-    await ui.press({ key: 'effort:new:low' })
+    await ui.press({ key: 'pick:sub-1' })
+    await ui.press({ key: 'effort:sub-1:low' })
     await ui.unmount()
     await step($, { agentId: 'sub-1' })
     const again = await $.ui.mount(pane(90))
@@ -740,13 +751,17 @@ describe('Agent Tree', () => {
 
   test('ein auf ein Modell mit Denkstufe umgestellter Agent bekommt die gewählte Stufe', de, async ($, on) => {
     const seen = engine(on)
-    await oneAgentWithAdvisor($)
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
     const ui = await $.ui.mount(pane(90))
     await ui.press({ key: 'pick:new' })
     await ui.press({ key: 'effort:new:low' })
-    await ui.press({ key: 'pick:sub-1' })
-    await ui.press({ key: 'choose:sub-1:opus' })
     await ui.unmount()
+    await $.agent.spawn({ prompt: 'Lies den Code.', description: 'Code lesen', subagentType: 'Explore' } as never)
+    const again = await $.ui.mount(pane(90))
+    await again.press({ key: 'pick:sub-1' })
+    await again.press({ key: 'choose:sub-1:opus' })
+    await again.unmount()
     await step($, { agentId: 'sub-1', noEffort: true })
     expect(seen.stepModels.at(-1)).toMatch(/opus/)
     expect(seen.stepEfforts.at(-1)).toBe('low')
@@ -2305,5 +2320,159 @@ describe('Prüfschleife 29.10.2026', () => {
     await ui.press({ key: 'look:open' })
     expect(await ui.find({ key: 'look:default' })).toBeDefined()
     await ui.unmount()
+  })
+})
+
+describe('Prüfschleife Runde 2', () => {
+  const run = ($: Engine, args: string) =>
+    $.command.run({ command: 'agent-tree', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } } as never)
+  const clearSession = async ($: Engine, seen: { sessionReplaced: () => void }, id = 's1') => {
+    await $.session.end({ reason: 'clear', sessionId: id, resume: { id } } as never)
+    seen.sessionReplaced()
+  }
+  const blocks = (text: string) => [...text].filter(c => c === '█' || c === '▀').length
+
+  test('zweimal /clear ohne Eingabe dazwischen behält alle Wahlen', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:low' })
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'choose:new:sonnet' })
+    await ui.unmount()
+    await clearSession($, seen, 's1')
+    await clearSession($, seen, 's2')
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('low')
+    await $.agent.spawn({ prompt: 'P.', description: 'Neu', subagentType: 'Plan' } as never)
+    expect(seen.spawnModels.at(-1)).toBe('sonnet')
+  })
+
+  test('nach /clear wirkt ein Druck in der Leiste sofort', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true })
+    await oneAgentWithAdvisor($)
+    await clearSession($, seen)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    expect(await ui.find({ key: 'effort:main:low' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('nach /clear bleibt das gespeicherte Aussehen sofort sichtbar und die Statuszeile leert sich', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true }, { look: { style: 'ascii', colors: 'retro', light: 'standard' } })
+    await oneAgentWithAdvisor($)
+    expect(seen.status.at(-1)).toMatch(/Unteragenten \[1\/1\]/)
+    await clearSession($, seen)
+    expect(seen.status.at(-1) ?? '').not.toMatch(/Unteragenten/)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toContain(PALETTES.retro.main)
+    await ui.unmount()
+  })
+
+  test('nach /clear und einem Neuladen spielt das Intro nicht mitten in der Unterhaltung', { options: { language: 'de', intro: true } }, async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const seen = engine(on, [], { clearResets: true })
+    await startSession($)
+    const first = await $.ui.mount(pane(90))
+    await clock.advance(2500)
+    await first.redraw()
+    expect(blocks(await screen(first))).toBe(0)
+    await first.unmount()
+    await clearSession($, seen)
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(300)
+    await ui.redraw()
+    expect(blocks(await screen(ui))).toBe(0)
+    await ui.unmount()
+  })
+
+  test('zwei Ereignisse gleichzeitig nach /clear nehmen beide die übernommene Wahl und bleiben im Baum', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'choose:new:sonnet' })
+    await ui.unmount()
+    await clearSession($, seen)
+    await Promise.all([
+      $.agent.spawn({ prompt: 'A', description: 'Eins', subagentType: 'Plan' } as never),
+      $.agent.spawn({ prompt: 'B', description: 'Zwei', subagentType: 'Plan' } as never),
+    ])
+    expect(seen.spawnModels.slice(-2)).toEqual(['sonnet', 'sonnet'])
+    const after = await $.ui.mount(pane(90))
+    const text = await screen(after)
+    expect(text).toMatch(/Eins/)
+    expect(text).toMatch(/Zwei/)
+    await after.unmount()
+  })
+
+  test('/agent-tree intro auf einer offenen Leiste spielt das Logo ohne Zeichnen von außen', { options: { language: 'de', intro: false } }, async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await run($, 'intro')
+    await clock.advance(400)
+    expect(blocks(await screen(ui))).toBeGreaterThan(0)
+    await ui.unmount()
+  })
+
+  test('ein Agent ohne Denkstufe zeigt keinen Pfeil', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await $.agent.spawn({ prompt: 'P', description: 'Ohne', subagentType: 'Plan' } as never)
+    await step($, { agentId: 'sub-1', noEffort: true })
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:sub-1' })
+    await ui.press({ key: 'effort:sub-1:high' })
+    await ui.press({ key: 'picker:close' })
+    await ui.redraw()
+    expect(await screen(ui)).not.toMatch(/→ high/)
+    await ui.unmount()
+  })
+
+  test('/agent-tree look ohne „zurück“ löscht das Aussehen nicht', de, async ($, on) => {
+    const seen = engine(on, [], {}, { look: { style: 'ascii', colors: 'retro', light: 'gold' } })
+    await startSession($)
+    for (const args of ['look', 'aussehen', 'look gold']) expect((await run($, args)).text).toMatch(/gibt es nicht/)
+    expect(seen.storeSets.filter(s => s.key === 'look')).toEqual([])
+    expect((await run($, 'aussehen zurück')).text).toMatch(/zurück auf Standard/)
+  })
+
+  test('nach einer Notiz an die Hauptsitzung gilt ihre gewählte Stufe als gesendet', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:low' })
+    await ui.unmount()
+    await run($, 'an sub-1 Bitte kürzer')
+    const stream = $.turn.step({ turnId: 't1', index: 1, model: 'claude-opus-5-5', effort: 'high', messageCount: 5 })
+    let read = await stream.next()
+    while (!read.done) read = await stream.next()
+    const after = await $.ui.mount(pane(90))
+    expect((await after.find({ key: 'pick:main' }))?.props.label).toBe('Effort low ▾')
+    await after.unmount()
+  })
+
+  test('ein Schritt, bevor die Korrektur gespeichert ist, zählt sie nicht als gelesen', de, async ($, on) => {
+    let release: () => void = () => undefined
+    const held = new Promise<void>(resolve => {
+      release = resolve
+    })
+    engine(on, [], { holdAppend: held })
+    await oneAgentWithAdvisor($)
+    const sending = run($, 'an sub-1 Bitte kürzer')
+    for (let i = 0; i < 20; i++) await Promise.resolve()
+    await step($, { agentId: 'sub-1' })
+    release()
+    expect((await sending).text).toMatch(/geschickt/)
+    const handback = await $.tool.call({ tool: 'SubagentHandback', message: 'Bericht', agentId: 'sub-1' } as never)
+    expect(JSON.stringify(handback)).toMatch(/deny/)
   })
 })

@@ -40,6 +40,7 @@ export type SpawnInput = {
   description: string
   prompt?: string
   model?: string
+  effort?: string
   background: boolean
   fork: boolean
   workflowRunId?: string
@@ -118,7 +119,7 @@ export function correctionSent(
   const count = (s.corrections?.[input.agentId]?.count ?? 0) + (input.recount === false ? 0 : 1)
   const correction: AgentTreeCorrection = { at: now, text: excerpt(input.text), via: input.via, state: 'sent', count }
   const next = { ...s, corrections: { ...s.corrections, [input.agentId]: correction } }
-  return logged(next, 'agent', 'correction', { type: node.type, text: oneLine(input.text).slice(0, LOG_EXCERPT) }, now)
+  return logged(next, 'agent', 'correction', { type: node.type, text: cut(oneLine(input.text), LOG_EXCERPT) }, now)
 }
 
 export function correctionFailed(
@@ -133,7 +134,7 @@ export function correctionFailed(
       ? input.before
       : { at: now, text: excerpt(input.text), state: 'failed', count: input.count ?? input.before?.count ?? 0 }
   const next = { ...s, corrections: { ...s.corrections, [input.agentId]: kept } }
-  return logged(next, 'agent', 'correctionFailed', { type: node.type, text: oneLine(input.text).slice(0, LOG_EXCERPT) }, now)
+  return logged(next, 'agent', 'correctionFailed', { type: node.type, text: cut(oneLine(input.text), LOG_EXCERPT) }, now)
 }
 
 export function correctionCounted(s: AgentTreeState, agentId: string): AgentTreeState {
@@ -286,7 +287,8 @@ export function mainStepEffort(s: AgentTreeState): EffortLevel | undefined {
 
 export function stepEffortFor(s: AgentTreeState, agentId: string): EffortLevel | undefined {
   const current = choicesOf(s)
-  return effortFrom(current.efforts?.[agentId] ?? current.newEffort)
+  if (current.efforts && agentId in current.efforts) return effortFrom(current.efforts[agentId])
+  return findAgent(s, agentId) ? undefined : effortFrom(current.newEffort)
 }
 
 export function chosen(s: AgentTreeState, target: string, family: string | undefined, now: number): AgentTreeState {
@@ -355,9 +357,9 @@ const TOKEN =
   /\b(?:ghp_|gho_|ghu_|ghs_|github_pat_|sk-|xox[abprs]-|AKIA|AIza|eyJ)[A-Za-z0-9_\-.]{6,}|\bBasic\s+(?=[A-Za-z0-9+\/]*[0-9+\/=])[A-Za-z0-9+\/]{8,}={0,2}/g
 
 const SECRET =
-  /\bBearer\s+\S+|\b[a-z][a-z0-9+.-]*:\/\/[^\s\/:@]+:[^\s\/@]+@|[A-Za-z0-9_]*(?:password|passwort|passwd|token|secret|api[_-]?key|access[_-]?key)[A-Za-z0-9_]*["']?\s*[=:]\s*(?:"[^"]*"|'[^']*'|["']?[^\s"',;]+)/gi
+  /\bBearer\s+\S+|\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s\/:@]+:[^\s\/@]+@|[A-Za-z0-9_]{0,64}(?:password|passwort|passwd|token|secret|api[_-]?key|access[_-]?key)[A-Za-z0-9_]{0,64}["']?\s*[=:]\s*(?:"[^"]*"|'[^']*'|["']?[^\s"',;]+)/gi
 
-const ENV_SECRET = /\b[A-Z][A-Z0-9_]*(?:PASS|PWD|KEY|CREDENTIALS?)[A-Z0-9_]*=\S+/g
+const ENV_SECRET = /\b[A-Z][A-Z0-9_]{0,64}(?:PASS|PWD|KEY|CREDENTIALS?)[A-Z0-9_]{0,64}=\S+/g
 
 function oneLine(text: string): string {
   return text
@@ -370,8 +372,14 @@ function oneLine(text: string): string {
     .trim()
 }
 
+export function cut(text: string, limit: number): string {
+  if (text.length <= limit) return text
+  const end = limit > 0 && /[\uD800-\uDBFF]/.test(text.charAt(limit - 1)) ? limit - 1 : limit
+  return text.slice(0, end)
+}
+
 export function excerpt(text: string | undefined, limit = DETAIL_LIMIT): string {
-  return oneLine(text ?? '').slice(0, limit)
+  return cut(oneLine(text ?? ''), limit)
 }
 
 export function counts(s: AgentTreeState): AgentTreeCounts {
@@ -401,7 +409,7 @@ export function turnStarted(s: AgentTreeState, input: { text: string; agentId?: 
     return { ...s, main: { ...s.main, active: true, resumed: true, turnStartedAt: now } }
   }
   const turn = s.main.turn + 1
-  const excerpt = oneLine(input.text).slice(0, LOG_EXCERPT)
+  const excerpt = cut(oneLine(input.text), LOG_EXCERPT)
   const next: AgentTreeState = {
     ...s,
     startedAt: s.startedAt || now,
@@ -485,7 +493,7 @@ export function spawned(s: AgentTreeState, input: SpawnInput, now: number): Agen
     id: input.agentId,
     parentId: input.parentAgentId,
     type: input.fork ? 'Fork' : input.agentType,
-    description: oneLine(input.description).slice(0, DESCRIPTION_LIMIT),
+    description: cut(oneLine(input.description), DESCRIPTION_LIMIT),
     task: input.prompt ? excerpt(input.prompt) || undefined : undefined,
     model: input.model,
     background: input.background,
@@ -506,6 +514,10 @@ export function spawned(s: AgentTreeState, input: SpawnInput, now: number): Agen
     startedAt: s.startedAt || now,
     orphans,
     agents: [...s.agents, node],
+  }
+  if (input.effort) {
+    const current = choicesOf(next)
+    next = { ...next, choices: { ...current, efforts: { ...(current.efforts ?? {}), [node.id]: input.effort } } }
   }
   if (orphan) next = returnedTo(next, node, orphan.answerTokens)
   if (runSeen) return next
@@ -654,7 +666,7 @@ export function adopted(s: AgentTreeState, list: readonly ListedAgent[], now: nu
       id: entry.id,
       parentId: entry.parentId,
       type: entry.type,
-      description: oneLine(entry.description).slice(0, DESCRIPTION_LIMIT),
+      description: cut(oneLine(entry.description), DESCRIPTION_LIMIT),
       background: false,
       fork: false,
       status,
@@ -812,5 +824,5 @@ export function toolLabel(tool: string, input: Record<string, unknown>): string 
       program(input.command) ||
       text(input.skill) ||
       host(input.url)
-  return (detail ? `${tool} ${detail}` : tool).slice(0, LABEL_LIMIT)
+  return cut(detail ? `${tool} ${detail}` : tool, LABEL_LIMIT)
 }
