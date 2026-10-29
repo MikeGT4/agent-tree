@@ -11,7 +11,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -43,13 +43,24 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
     focused.push(JSON.stringify(e))
     return {} as never
   })
-  on('settings.read', () => ({ value: { ...settings } }) as never)
+  let deferred: (() => void) | undefined
+  on('settings.read', () => {
+    const value = { ...settings }
+    const later = deferred
+    deferred = undefined
+    later?.()
+    return { value } as never
+  })
   on('command.run', (_, e) => {
     if (refuse.command) throw new Error('refused')
     commands.push({ command: e.command, args: e.args })
-    if (refuse.lag) return { text: 'ok' } as never
-    if (e.command === 'advisor' && e.args === 'off') delete settings.advisorModel
-    else if (e.command === 'advisor') settings.advisorModel = e.args
+    if (e.command === 'advisor' && refuse.advisorFails) return {} as never
+    const apply = () => {
+      if (e.command === 'advisor' && e.args === 'off') delete settings.advisorModel
+      else if (e.command === 'advisor') settings.advisorModel = e.args
+    }
+    if (refuse.lag) deferred = apply
+    else apply()
     return { text: 'ok' } as never
   })
   on('prompt.fill', (_, e) => {
@@ -1351,6 +1362,29 @@ describe('Modellwahl, Zeile und Fokus', () => {
 })
 
 describe('Berater per Knopf', () => {
+  test('lehnt Claude Code das Modell ab, zeigt die Leiste weiter aus und nennt den Grund', de, async ($, on) => {
+    const seen = engine(on, [], { advisorFails: 'Invalid advisor model: API error: 400 · model not changed' })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'advisor:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.commands.at(-1)).toEqual({ command: 'advisor', args: 'opus' })
+    expect((await ui.find({ key: 'advisor:toggle' }))?.props.label).toBe('einschalten')
+    expect(seen.toasts.join(' ')).toMatch(/Claude Code hat den Berater nicht umgestellt/)
+    await ui.unmount()
+  })
+
+  test('ohne Rang für das Hauptmodell bleibt der Berater aus', de, async ($, on) => {
+    const seen = engine(on, [], { advisorFails: "Advisor disabled \u2014 base model 'claude-haiku' has no advisor rank in the model catalog." })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'advisor:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect((await ui.find({ key: 'advisor:toggle' }))?.props.label).toBe('einschalten')
+    expect(seen.toasts.join(' ')).toMatch(/Claude Code hat den Berater nicht umgestellt/)
+    await ui.unmount()
+  })
+
   test('der Knopf schaltet den Berater über /advisor ein und wieder aus', de, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
@@ -1368,7 +1402,7 @@ describe('Berater per Knopf', () => {
     await ui.unmount()
   })
 
-  test('nach dem Befehl zeigt die Leiste den neuen Stand sofort, auch wenn die Einstellung noch nicht gelesen werden kann', de, async ($, on) => {
+  test('kommt die Einstellung verzögert an, wartet die Leiste darauf und zeigt dann den neuen Stand', de, async ($, on) => {
     engine(on, [], { lag: true })
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))

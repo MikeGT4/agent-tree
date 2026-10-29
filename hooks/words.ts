@@ -92,6 +92,7 @@ export type Words = {
   advisorOn: string
   advisorOff: string
   advisorUnavailable: string
+  advisorUnchanged: string
   starHint: string
   updateInstalled: (version: string) => string
   updateFailed: (version: string, command: string) => string
@@ -221,6 +222,7 @@ export const WORDS: Record<Lang, Words> = {
     advisorOn: 'einschalten',
     advisorOff: 'ausschalten',
     advisorUnavailable: 'Agent Tree: /advisor ist in dieser Sitzung nicht verfügbar',
+    advisorUnchanged: 'Agent Tree: Claude Code hat den Berater nicht umgestellt, den Grund nennt der Verlauf',
     starHint: 'Gefällt dir Agent Tree? Ein Stern auf GitHub hilft: github.com/MikeGT4/agent-tree',
     updateInstalled: version => `Agent Tree ${version} ist installiert und lädt beim nächsten Start`,
     updateFailed: (version, command) => `Agent Tree ${version} ist da, aktualisieren mit: ${command}`,
@@ -353,6 +355,7 @@ export const WORDS: Record<Lang, Words> = {
     advisorOn: 'turn on',
     advisorOff: 'turn off',
     advisorUnavailable: 'Agent Tree: /advisor is not available in this session',
+    advisorUnchanged: 'Agent Tree: Claude Code did not switch the advisor, the transcript says why',
     starHint: 'Like Agent Tree? A star on GitHub helps: github.com/MikeGT4/agent-tree',
     updateInstalled: version => `Agent Tree ${version} is installed and loads at the next start`,
     updateFailed: (version, command) => `Agent Tree ${version} is out, update with: ${command}`,

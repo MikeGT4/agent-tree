@@ -287,6 +287,15 @@ async function readAdvisor($: EngineInterface): Promise<void> {
   await change($, s => withAdvisorModel(s, name))
 }
 
+async function advisorSettled($: EngineInterface, on: boolean): Promise<boolean> {
+  for (let i = 0; i < 8; i++) {
+    const model = await $.settings.read({ key: 'advisorModel' }).catch(() => undefined)
+    if ((typeof model === 'string' && model !== '') === on) return true
+    await $.clock.sleep(250).catch(() => undefined)
+  }
+  return false
+}
+
 async function toggleAdvisor($: EngineInterface): Promise<void> {
   const args = (await read($, tree)).advisor.model ? 'off' : lastAdvisor
   const ran = await $.command.run({ command: 'advisor', args }).then(
@@ -297,7 +306,8 @@ async function toggleAdvisor($: EngineInterface): Promise<void> {
     $.ui.toast(wordsFor(lang).advisorUnavailable)
     return
   }
-  await change($, s => withAdvisorModel(s, args === 'off' ? undefined : args))
+  if (!(await advisorSettled($, args !== 'off'))) $.ui.toast(wordsFor(lang).advisorUnchanged)
+  await readAdvisor($)
 }
 
 async function settleUnread($: EngineInterface, s: AgentTreeState, agentId: string, now: number): Promise<void> {
