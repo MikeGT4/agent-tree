@@ -657,7 +657,7 @@ describe('Agent Tree', () => {
     const ui = await $.ui.mount(pane(90))
     await ui.press({ key: 'detail:sub-1' })
     await ui.redraw()
-    expect(await screen(ui)).toMatch(/Nachricht:/)
+    expect(await screen(ui)).toMatch(/"label":"Nachricht"/)
     expect(await screen(ui)).toMatch(/hier klicken und tippen/)
     await ui.unmount()
   })
