@@ -9,7 +9,7 @@ import {
   effortFrom,
   familyFrom,
   freshTree,
-  prunedChoices,
+  isNewInput,
   limitsFrom,
   stepEffortFor,
   withNewEffort,
@@ -731,7 +731,7 @@ describe('Aussehen', () => {
     }
   })
 
-  test('Original entspricht den Farben von 0.3.0', () => {
+  test('Original entspricht den ursprünglichen Farben', () => {
     expect(PALETTES.original).toEqual({ main: '#E6845D', agent: '#7CAAE8', advisor: '#B1A7E6', done: '#7BE396', dim: '#8E8E9A', failed: 'error' })
   })
 
@@ -880,7 +880,7 @@ describe('Aussehen', () => {
   })
 })
 
-describe('Prüfschleife Runde 2, Modell', () => {
+describe('Kürzen, Maskierung und Zähler', () => {
   test('sehr lange Texte ohne Leerzeichen werden schnell gekürzt', () => {
     for (const text of ['a'.repeat(120_000), 'a.'.repeat(60_000), 'KEY'.repeat(40_000), 'token'.repeat(24_000), '0123456789abcdef'.repeat(7_500), 'sk-'.repeat(40_000), 'a='.repeat(60_000), 'A='.repeat(60_000), 'a-'.repeat(60_000), 'token="'.repeat(15_000), 'x://'.repeat(30_000)]) {
       const started = Date.now()
@@ -908,7 +908,7 @@ describe('Prüfschleife Runde 2, Modell', () => {
   })
 })
 
-describe('Prüfschleife Runde 3, Modell', () => {
+describe('Maskierung, Kürzen nach Zeichenfolgen und neuer Baum', () => {
   test('Geheimnisse hinter langen Namen, in Kopfzeilen und hinter Zuweisungen bleiben maskiert', () => {
     for (const secret of [
       'export ' + 'A'.repeat(70) + '_KEY=hunter2',
@@ -941,8 +941,19 @@ describe('Prüfschleife Runde 3, Modell', () => {
     expect(fresh.choices?.efforts).toEqual({ a1: 'low' })
     expect(fresh.choices?.agents).toEqual({ a1: 'opus' })
     expect(freshTree(fresh, 6).choices?.efforts).toEqual({ a1: 'low' })
-    expect(prunedChoices(fresh, new Set(['a1'])).choices?.efforts).toEqual({ a1: 'low' })
-    expect(prunedChoices(fresh, new Set()).choices?.efforts).toEqual({})
+    const gone = completed(fresh, { agentId: 'a1', answer: 'fertig', reason: 'done', isAborted: false, durationMs: 1 }, 7)
+    expect([gone.choices?.efforts, gone.choices?.agents]).toEqual([{}, {}])
+  })
+
+  test('ein neuer Baum nimmt angeforderte Stopps und Korrekturen laufender Agenten mit', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = spawned(s, spawn('a2'), 1)
+    s = stopRequested(s, 'a1', 2)
+    s = correctionSent(s, { agentId: 'a1', text: 'Nimm das raus', via: 'append' }, 3)
+    s = completed(s, { agentId: 'a2', answer: 'fertig', reason: 'done', isAborted: false, durationMs: 1 }, 4)
+    const fresh = freshTree(s, 5)
+    expect(isStopping(fresh, 'a1')).toBe(true)
+    expect(pendingCorrection(fresh, 'a1')?.text).toBe('Nimm das raus')
   })
 
   test('ein beim Fortsetzen schon bekannter Agent bekommt die Stufe nur ohne eigene', () => {
@@ -952,5 +963,17 @@ describe('Prüfschleife Runde 3, Modell', () => {
     s = effortChosen(s, 'a1', 'max', 3)
     s = spawned(s, { ...spawn('a1'), effort: 'low' }, 4)
     expect(stepEffortFor(s, 'a1')).toBe('max')
+  })
+})
+
+describe('Eingaben für die Denkstufe', () => {
+  test('nur Zeilen, die eine Anfrage als Nutzerzeile trägt, und Zwischeneingaben zählen', () => {
+    expect(isNewInput('prompt', { role: 'user' })).toBe(true)
+    expect(isNewInput('delivery', { role: 'user' })).toBe(true)
+    expect(isNewInput('note', { role: 'user' })).toBe(true)
+    expect(isNewInput('note', {})).toBe(false)
+    expect(isNewInput('command', { name: 'local_command' })).toBe(false)
+    expect(isNewInput('attachment', { role: 'user', name: 'queued_command' })).toBe(true)
+    expect(isNewInput('attachment', { role: 'user', name: 'nested_memory' })).toBe(false)
   })
 })

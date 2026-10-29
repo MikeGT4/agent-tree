@@ -301,14 +301,19 @@ function without<T>(map: Record<string, T>, drop: (id: string) => boolean): Reco
   return Object.fromEntries(Object.entries(map).filter(([id]) => !drop(id)))
 }
 
-export function prunedChoices(s: AgentTreeState, running: ReadonlySet<string>): AgentTreeState {
+export function isNewInput(door: string, message: { role?: string; name?: string }): boolean {
+  return door === 'attachment' ? message.name === 'queued_command' : message.role === 'user'
+}
+
+export function endedIds(s: AgentTreeState): Set<string> {
+  return new Set(s.agents.filter(n => n.status !== 'running').map(n => n.id))
+}
+
+function forgotten(s: AgentTreeState, agentId: string): AgentTreeState {
+  const gone = (id: string) => id === agentId
   const current = choicesOf(s)
-  const shown = new Set(s.agents.map(n => n.id))
-  const gone = (id: string) => !shown.has(id) && !running.has(id)
-  const agents = without(current.agents, gone)
-  const efforts = current.efforts && without(current.efforts, gone)
-  if (Object.keys(agents).length === Object.keys(current.agents).length && Object.keys(efforts ?? {}).length === Object.keys(current.efforts ?? {}).length) return s
-  return { ...s, choices: { ...current, agents, ...(efforts ? { efforts } : {}) } }
+  const choices = s.choices && { ...current, agents: without(current.agents, gone), ...(current.efforts ? { efforts: without(current.efforts, gone) } : {}) }
+  return withoutStop({ ...s, ...(choices ? { choices } : {}), ...(s.corrections ? { corrections: without(s.corrections, gone) } : {}) }, agentId)
 }
 
 export function chosen(s: AgentTreeState, target: string, family: string | undefined, now: number): AgentTreeState {
@@ -615,7 +620,7 @@ export function completed(s: AgentTreeState, input: CompleteInput, now: number):
     const kept = Object.entries({ ...s.orphans, [input.agentId]: { status, at: now, answerTokens, answer, durationMs: input.durationMs } }).slice(
       -ORPHANS_KEPT,
     )
-    return { ...s, orphans: Object.fromEntries(kept) }
+    return forgotten({ ...s, orphans: Object.fromEntries(kept) }, input.agentId)
   }
   if (node.status !== 'running' && node.answerTokens !== undefined) return s
   const final = node.status === 'stopped' || wasStopSent(s, node.id) ? 'stopped' : status
@@ -674,9 +679,16 @@ export function withLimits(s: AgentTreeState, limits: AgentTreeLimit[]): AgentTr
 
 export function freshTree(from: AgentTreeState, now: number): AgentTreeState {
   const base = carriedChoices(from, withAdvisorModel(createTree(now), from.advisor.model))
-  const ended = new Set(from.agents.filter(n => n.status !== 'running').map(n => n.id))
+  const ended = endedIds(from)
+  const done = (id: string) => ended.has(id)
   const old = choicesOf(from)
-  const fresh = { ...base, choices: { ...choicesOf(base), agents: without(old.agents, id => ended.has(id)), efforts: without(old.efforts ?? {}, id => ended.has(id)) } }
+  const fresh: AgentTreeState = {
+    ...base,
+    choices: { ...choicesOf(base), agents: without(old.agents, done), efforts: without(old.efforts ?? {}, done) },
+    ...(from.stopping ? { stopping: from.stopping.filter(id => !done(id)) } : {}),
+    ...(from.stopSent ? { stopSent: from.stopSent.filter(id => !done(id)) } : {}),
+    ...(from.corrections ? { corrections: without(from.corrections, done) } : {}),
+  }
   return from.main.limits ? withLimits(fresh, from.main.limits) : fresh
 }
 
@@ -705,7 +717,7 @@ export function synced(s: AgentTreeState, list: readonly { id: string; status: s
 
 export type ListedAgent = { id: string; description: string; type: string; status: string; parentId?: string }
 
-export const LISTED_STATUS: Record<string, AgentTreeStatus> = {
+const LISTED_STATUS: Record<string, AgentTreeStatus> = {
   pending: 'running',
   running: 'running',
   waiting: 'running',
@@ -747,17 +759,18 @@ export function trimmed(s: AgentTreeState, maxAgents: number): AgentTreeState {
     .filter(n => n.status !== 'running')
     .sort((a, b) => (a.endedAt ?? a.startedAt) - (b.endedAt ?? b.startedAt))
   const dropped = new Set(finished.slice(0, s.agents.length - limit).map(n => n.id))
+  const gone = (id: string) => dropped.has(id)
   const choices = s.choices && {
     ...s.choices,
-    agents: Object.fromEntries(Object.entries(s.choices.agents).filter(([id]) => !dropped.has(id))),
-    ...(s.choices.efforts ? { efforts: Object.fromEntries(Object.entries(s.choices.efforts).filter(([id]) => !dropped.has(id))) } : {}),
+    agents: without(s.choices.agents, gone),
+    ...(s.choices.efforts ? { efforts: without(s.choices.efforts, gone) } : {}),
     picker: s.choices.picker && dropped.has(s.choices.picker) ? undefined : s.choices.picker,
   }
   return {
     ...s,
     choices,
     detail: s.detail && dropped.has(s.detail.agentId) ? undefined : s.detail,
-    corrections: s.corrections && Object.fromEntries(Object.entries(s.corrections).filter(([id]) => !dropped.has(id))),
+    corrections: s.corrections && without(s.corrections, gone),
     agents: s.agents.filter(n => !dropped.has(n.id)),
   }
 }

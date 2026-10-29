@@ -2278,7 +2278,7 @@ describe('Schreiben an Unteragenten', () => {
   })
 })
 
-describe('Prüfschleife 29.10.2026', () => {
+describe('Tasten und Übergabe nach /clear', () => {
   test('eine Denkstufe für einen laufenden Agenten steht als „→ Stufe“ am Kasten, bis eine Nachricht sie wirksam macht', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
@@ -2331,7 +2331,7 @@ describe('Prüfschleife 29.10.2026', () => {
   })
 })
 
-describe('Prüfschleife Runde 2', () => {
+describe('Zweites /clear, Intro, Aussehen und Eingaben', () => {
   const run = ($: Engine, args: string) =>
     $.command.run({ command: 'agent-tree', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } } as never)
   const clearSession = async ($: Engine, seen: { sessionReplaced: () => void }, id = 's1') => {
@@ -2485,7 +2485,7 @@ describe('Prüfschleife Runde 2', () => {
   })
 })
 
-describe('Prüfschleife Runde 3', () => {
+describe('Wahlen und Stopps laufender Agenten über /clear', () => {
   const run = ($: Engine, args: string) =>
     $.command.run({ command: 'agent-tree', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } } as never)
   const clearSession = async ($: Engine, seen: { sessionReplaced: () => void }, id = 's1') => {
@@ -2600,7 +2600,7 @@ describe('Prüfschleife Runde 3', () => {
     await ui.press({ key: 'pick:main' })
     await ui.press({ key: 'effort:main:low' })
     await ui.unmount()
-    await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: 'Hinweis' }] }, door: 'delivery' } as never)
+    await $.session.append({ message: { type: 'user', role: 'user', content: [{ type: 'text', text: 'Hinweis' }] }, door: 'delivery' } as never)
     await toolStep($, undefined, 'high')
     const after = await $.ui.mount(pane(90))
     expect((await after.find({ key: 'pick:main' }))?.props.label).toBe('Effort low ▾')
@@ -2664,4 +2664,36 @@ describe('Prüfschleife Runde 3', () => {
     expect(text).toMatch(/▮▯▯▯▯ low/)
     await ui.unmount()
   })
+
+  test('ein angeforderter Stopp bleibt über /agent-tree clear und /clear bestehen', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'detail:sub-1' })
+    await ui.redraw()
+    await ui.press({ key: 'stop:sub-1' })
+    await ui.unmount()
+    await run($, 'clear')
+    await clearSession($, seen)
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    const before = seen.stepModels.length
+    const chunks: unknown[] = []
+    await step($, { agentId: 'sub-1', chunks })
+    expect(seen.stepModels.length - before).toBe(0)
+    expect(JSON.stringify(chunks)).toMatch(/SubagentHandback/)
+  })
+
+
+  test('ein verborgener Agent, den die Liste nicht führt, behält seine Stufe nach dem nächsten Zug', de, async ($, on) => {
+    const seen = engine(on, [])
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await newAgentsOn($, 'low')
+    await $.agent.spawn({ prompt: 'P', description: 'Workflow-Agent', subagentType: 'Plan' } as never)
+    await run($, 'clear')
+    await $.turn.complete({ turnId: 't1', answer: 'ok', reason: 'end_turn', isAborted: false, durationMs: 10 } as never)
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('low')
+  })
 })
+

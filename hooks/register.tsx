@@ -43,8 +43,8 @@ import {
   pendingCorrection,
   phaseOf,
   pickerOpened,
-  prunedChoices,
-  LISTED_STATUS,
+  endedIds,
+  isNewInput,
   restoredChoices,
   shortId,
   spawned,
@@ -107,7 +107,7 @@ let stoppingIds = new Set<string>()
 let stopSentIds = new Set<string>()
 let lastAdvisor = 'opus'
 let advisorCommand = true
-type Carried = { tree: AgentTreeState; look: AgentTreeLook; sessionId?: string }
+type Carried = { tree: AgentTreeState; look: AgentTreeLook; unread: Record<string, string[]>; sessionId?: string }
 let carried: Carried | undefined
 let handing: Promise<void> | undefined
 let generation = 0
@@ -115,7 +115,7 @@ const delivered = new Set<string>()
 const seen = new Set<string>()
 const starting = new Map<string, string | undefined>()
 const standing = new Map<string, string | number>()
-const INPUT_DOORS: ReadonlySet<string> = new Set(['prompt', 'command', 'delivery', 'note'])
+const INPUT_DOORS = ['prompt', 'command', 'delivery', 'note', 'attachment'] as const
 
 function takeOver($: EngineInterface): Promise<void> {
   if (handing) return handing
@@ -136,7 +136,8 @@ async function handOver($: EngineInterface, from: Carried): Promise<void> {
   if (from.sessionId !== undefined && id === from.sessionId) return
   await update($, appearance, () => from.look).catch(() => undefined)
   await update($, introDone, () => true).catch(() => undefined)
-  await update($, unreadTexts, () => ({})).catch(() => undefined)
+  const ended = endedIds(from.tree)
+  await update($, unreadTexts, () => withoutTexts(from.unread, id => ended.has(id))).catch(() => undefined)
   const now = await clock($)
   if (round !== generation) return
   await write($, () => freshTree(from.tree, now))
@@ -151,7 +152,11 @@ async function latest($: EngineInterface): Promise<AgentTreeState> {
 async function snapshot($: EngineInterface): Promise<Carried | undefined> {
   const ending = await read($, tree).catch(() => undefined)
   if (!ending) return undefined
-  return { tree: ending, look: await read($, appearance).catch(() => DEFAULT_LOOK) }
+  return {
+    tree: ending,
+    look: await read($, appearance).catch(() => DEFAULT_LOOK),
+    unread: await read($, unreadTexts).catch(() => ({})),
+  }
 }
 
 function busy(s: AgentTreeState): boolean {
@@ -262,8 +267,8 @@ async function write($: EngineInterface, apply: (s: AgentTreeState) => AgentTree
   return next
 }
 
-function without(texts: Record<string, string[]>, agentId: string): Record<string, string[]> {
-  return Object.fromEntries(Object.entries(texts).filter(([id]) => id !== agentId))
+function withoutTexts(texts: Record<string, string[]>, drop: (agentId: string) => boolean): Record<string, string[]> {
+  return Object.fromEntries(Object.entries(texts).filter(([id]) => !drop(id)))
 }
 
 async function remember($: EngineInterface, agentId: string, text: string): Promise<void> {
@@ -271,7 +276,7 @@ async function remember($: EngineInterface, agentId: string, text: string): Prom
 }
 
 async function forget($: EngineInterface, agentId: string): Promise<void> {
-  await update($, unreadTexts, texts => without(texts, agentId))
+  await update($, unreadTexts, texts => withoutTexts(texts, id => id === agentId))
 }
 
 async function restyle($: EngineInterface, row: LookRow, id: string): Promise<void> {
@@ -323,8 +328,7 @@ async function chooseEffort($: EngineInterface, target: string, effort: string |
 async function catchUp($: EngineInterface, now: number, keep: number): Promise<void> {
   const list = await $.agent.list().catch(() => [])
   for (const entry of list) seen.add(entry.id)
-  const running = new Set(list.filter(entry => LISTED_STATUS[entry.status] === 'running').map(entry => entry.id))
-  await change($, s => prunedChoices(trimmed(synced(adopted(s, list, now), list, now), keep), running))
+  await change($, s => trimmed(synced(adopted(s, list, now), list, now), keep))
 }
 
 type Found = { task?: string; answer?: string; denied?: boolean }
@@ -613,8 +617,9 @@ export const register: Register = (on, options) => {
     }
     const now = await clock($)
     if (arg === 'clear') {
+      const ended = endedIds(await latest($))
       await change($, s => freshTree(s, now))
-      await update($, unreadTexts, () => ({}))
+      await update($, unreadTexts, texts => withoutTexts(texts, id => ended.has(id)))
       return { text: w.cleared }
     }
     if (arg) return { text: w.commandUnknown(e.args.trim()) }
@@ -683,6 +688,7 @@ export const register: Register = (on, options) => {
     const sent = effort ?? e.effort
     const applies = carriesInput || typeof sent === 'number'
     if (applies && sent !== undefined) standing.set(agentId ?? MAIN, sent)
+    else if (applies) standing.delete(agentId ?? MAIN)
     const shownEffort = applies ? sent : known === undefined ? (standing.get(agentId ?? MAIN) ?? e.effort) : undefined
     const changed = model !== undefined || (effort !== undefined && effort !== e.effort)
     const result = yield* next(changed ? { ...e, ...(model ? { model } : {}), ...(effort ? { effort } : {}) } : e)
@@ -837,9 +843,9 @@ export const register: Register = (on, options) => {
     }
   })
 
-  on('session.append', async ($, e, next) => {
+  on('session.append', { door: INPUT_DOORS }, async ($, e, next) => {
     const kept = await next(e)
-    if (INPUT_DOORS.has(e.door) && (kept as { deny?: string }).deny === undefined) delivered.add(e.agentId ?? MAIN)
+    if (isNewInput(e.door, e.message) && (kept as { deny?: string }).deny === undefined) delivered.add(e.agentId ?? MAIN)
     return kept
   }).catch(($, e, next) => next(e))
 

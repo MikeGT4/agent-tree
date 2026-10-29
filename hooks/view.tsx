@@ -120,45 +120,38 @@ export type TreeLook = {
 }
 
 export function pressKey(actions: TreeActions, key: string): boolean {
-  const cut = key.indexOf(':')
-  if (cut < 0) return false
-  const kind = key.slice(0, cut)
-  const rest = key.slice(cut + 1)
+  const colon = key.indexOf(':')
+  if (colon < 0) return false
+  const kind = key.slice(0, colon)
+  const rest = key.slice(colon + 1)
   if (key === 'picker:close' || key === 'detail:close' || key === 'look:close') actions.close()
   else if (key === 'advisor:toggle') actions.advisor()
   else if (kind === 'look') return lookKey(actions, rest)
   else if (kind === 'pick') actions.pick(rest)
-  else if (kind === 'choose') return chooseKey(actions, rest)
+  else if (kind === 'choose') return targetKey(rest, (target, value) => actions.choose(target, value))
   else if (kind === 'detail') actions.detail(rest)
   else if (kind === 'write') actions.write(rest)
   else if (kind === 'stop' || kind === 'halt') actions.stop(rest)
-  else if (kind === 'effort') return effortKey(actions, rest)
+  else if (kind === 'effort') return targetKey(rest, (target, value) => actions.effort(target, value))
   else return false
   return true
 }
 
-function effortKey(actions: TreeActions, rest: string): boolean {
-  const cut = rest.lastIndexOf(':')
-  if (cut < 1 || cut + 1 >= rest.length) return false
-  const level = rest.slice(cut + 1)
-  actions.effort(rest.slice(0, cut), level === 'default' ? undefined : level)
-  return true
-}
 
 export function inputKey(actions: TreeActions, element: string, kind: string, value: string): boolean {
   if (kind !== 'submit' || !element.startsWith('say:')) return false
   const rest = element.slice('say:'.length)
-  const cut = rest.lastIndexOf(':')
-  if (cut < 1) return false
-  actions.say(rest.slice(0, cut), value)
+  const colon = rest.lastIndexOf(':')
+  if (colon < 1) return false
+  actions.say(rest.slice(0, colon), value)
   return true
 }
 
-function chooseKey(actions: TreeActions, rest: string): boolean {
-  const cut = rest.lastIndexOf(':')
-  if (cut < 1 || cut + 1 >= rest.length) return false
-  const family = rest.slice(cut + 1)
-  actions.choose(rest.slice(0, cut), family === 'default' ? undefined : family)
+function targetKey(rest: string, apply: (target: string, value: string | undefined) => void): boolean {
+  const colon = rest.lastIndexOf(':')
+  if (colon < 1 || colon + 1 >= rest.length) return false
+  const value = rest.slice(colon + 1)
+  apply(rest.slice(0, colon), value === 'default' ? undefined : value)
   return true
 }
 
@@ -166,10 +159,10 @@ function lookKey(actions: TreeActions, rest: string): boolean {
   if (rest === 'open') actions.look()
   else if (rest === 'default') actions.restyleDefault()
   else {
-    const cut = rest.indexOf(':')
-    const row = rest.slice(0, cut)
-    const id = rest.slice(cut + 1)
-    if (cut < 1 || !isLookChoice(row, id)) return false
+    const colon = rest.indexOf(':')
+    const row = rest.slice(0, colon)
+    const id = rest.slice(colon + 1)
+    if (colon < 1 || !isLookChoice(row, id)) return false
     actions.restyle(row, id)
   }
   return true
