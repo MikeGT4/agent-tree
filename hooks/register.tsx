@@ -87,6 +87,16 @@ let stoppingIds = new Set<string>()
 let stopSentIds = new Set<string>()
 let lastAdvisor = 'opus'
 let advisorCommand = true
+let carried: AgentTreeState | undefined
+
+async function takeOver($: EngineInterface): Promise<void> {
+  const from = carried
+  if (!from) return
+  carried = undefined
+  const now = await clock($)
+  await change($, () => freshTree(from, now))
+  await update($, unreadTexts, () => ({}))
+}
 
 function busy(s: AgentTreeState): boolean {
   return counts(s).running > 0 || phaseOf(s) === 'reviewing'
@@ -414,6 +424,7 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: COMMAND }, async ($, e) => {
+    await takeOver($).catch(() => undefined)
     const w = wordsFor(lang)
     const arg = e.args.trim().toLowerCase()
     if (arg === 'stop' || arg === 'close') {
@@ -452,6 +463,7 @@ export const register: Register = (on, options) => {
   }).catch(() => ({ text: wordsFor(lang).commandFailed }))
 
   on('turn.start', async ($, e, next) => {
+    await takeOver($).catch(() => undefined)
     const result = await next(e)
     const now = await clock($)
     await change($, s => turnStarted(s, { text: e.text, agentId: e.agentId }, now)).catch(() => undefined)
@@ -461,6 +473,7 @@ export const register: Register = (on, options) => {
   })
 
   on('turn.step', async function* ($, e, next) {
+    await takeOver($).catch(() => undefined)
     const agentId = e.agentId
     const before = await read($, tree).catch(() => undefined)
     if (agentId && before && isStopping(before, agentId)) {
@@ -599,6 +612,7 @@ export const register: Register = (on, options) => {
   })
 
   on('session.measure', async ($, e, next) => {
+    await takeOver($).catch(() => undefined)
     const result = await next(e)
     if (e.changed.includes('context') || e.changed.includes('cost') || e.changed.includes('rateLimits')) {
       await change($, s =>
@@ -618,9 +632,7 @@ export const register: Register = (on, options) => {
     if (e.reason !== 'clear' && e.reason !== 'resume') return next(e)
     const ending = await read($, tree).catch(() => undefined)
     const result = await next(e)
-    const now = await clock($)
-    if (ending) await change($, () => freshTree(ending, now)).catch(() => undefined)
-    await update($, unreadTexts, () => ({})).catch(() => undefined)
+    if (ending) carried = ending
     return result
   })
 
@@ -628,9 +640,9 @@ export const register: Register = (on, options) => {
     const elements = $.ui.resolve(e)
     const { Box, Text, Button } = elements
     const Input = 'Input' in elements ? elements.Input : undefined
-    const s = await read($, tree)
-    const tick = animate ? await read($, frame) : 0
     const now = await clock($)
+    const s = carried ? freshTree(carried, now) : await read($, tree)
+    const tick = animate ? await read($, frame) : 0
     return drawTree({ Box, Text, Button, Input } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {
       frame: tick,
       animate,
@@ -642,11 +654,13 @@ export const register: Register = (on, options) => {
     })
   })
 
-  on('ui.press', { component: 'Pane', requestId: PANE }, async ($, e, next) =>
-    pressKey(actionsFor($), e.element) ? { element: e.element } : next(e),
-  )
+  on('ui.press', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    await takeOver($).catch(() => undefined)
+    return pressKey(actionsFor($), e.element) ? { element: e.element } : next(e)
+  })
 
   on('ui.input', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    await takeOver($).catch(() => undefined)
     let work: Promise<void> | undefined
     const actions = { ...actionsFor($), say: (agentId: string, text: string) => void (work = sayTo($, agentId, text)) }
     if (!inputKey(actions, e.element, e.kind, e.value)) return next(e)

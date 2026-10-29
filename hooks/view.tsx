@@ -768,7 +768,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const mainEffortPending = mainChosen !== undefined && !s.main.effortless && mainChosen !== mainSent
   const mainEffortLabel = mainEffortPending
     ? `Effort ${mainSent ? `${mainSent} ` : ''}→ ${mainChosen} ▾`
-    : `${mainSent ? `Effort ${mainSent}` : w.effortNone} ▾`
+    : `${mainSent ? `Effort ${mainSent}` : s.main.effortless ? w.effortNone : 'Effort'} ▾`
 
   const roundLine = s.main.turn ? `${w.round} ${s.main.turn}${s.main.costUsd !== undefined ? ` · ${w.cost(s.main.costUsd)}` : ''}` : w.noRound
 
@@ -779,6 +779,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       </Text>
       <Text wrap="truncate-end">{w.phase[phase]}</Text>
       {actions ? (
+        <Box key="main-effort" justifyContent="center" width={Math.max(1, mainWidth - 2)}>
         <Button key="pick:main" plain hotkey="e" label={mainEffortLabel} onPress={() => actions.pick(MAIN)}>
           {mainEffortPending ? (
             <Text wrap="truncate-end">
@@ -794,10 +795,11 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             </Text>
           ) : (
             <Text color={palette.dim} wrap="truncate-end">
-              {`${mainSent ? `Effort ${mainSent}` : w.effortNone} ▾`}
+              {mainEffortLabel}
             </Text>
           )}
         </Button>
+        </Box>
       ) : s.main.effort && effortCells(s.main.effort, glyphs) ? (
         <Text size={SIZE.detail} wrap="truncate-end">
           <Text color={palette.dim}>{'Effort '}</Text>
@@ -1026,8 +1028,8 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         <Box key="picker-main" flexDirection="row" flexWrap="wrap" columnGap={1}>
           <Text color={palette.main}>{w.mainEffortFor}</Text>
           <Button key="effort:main:default" hotkey="0" label={w.standard} variant={mainChosen === undefined ? 'primary' : undefined} onPress={() => actions.effort(MAIN, undefined)} />
-          {EFFORT_LEVELS.map(level => (
-            <Button key={`effort:main:${level}`} label={effortLabel(level)} variant={mainChosen === level ? 'primary' : undefined} onPress={() => actions.effort(MAIN, level)} />
+          {EFFORT_LEVELS.map((level, i) => (
+            <Button key={`effort:main:${level}`} hotkey={String(i + 1)} label={effortLabel(level)} variant={mainChosen === level ? 'primary' : undefined} onPress={() => actions.effort(MAIN, level)} />
           ))}
           <Button key="picker:close" hotkey="x" label="×" onPress={() => actions.close()} />
         </Box>

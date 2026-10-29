@@ -90,13 +90,10 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
     if (isTree(e)) newSession = false
     return next(e)
   })
-  on('session.end', async (_, e) => {
-    if (refuse.clearResets && (e.reason === 'clear' || e.reason === 'resume')) {
-      for (let i = 0; i < 500; i++) await Promise.resolve()
-      newSession = true
-    }
-    return { sessionId: e.sessionId }
-  })
+  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  const sessionReplaced = () => {
+    newSession = true
+  }
   on('session.measure', (_, e) => ({ changed: e.changed }))
   on('agent.list', () => ({ value: listed }) as never)
   on('agent.spawn', async (_, e) => {
@@ -125,7 +122,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   const storeGetFails = () => {
     storeBroken = true
   }
-  return { status, spawnModels, stepModels, stepEfforts, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts, storeGetFails }
+  return { status, spawnModels, stepModels, stepEfforts, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts, storeGetFails, sessionReplaced }
 }
 
 async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[]; noEffort?: boolean } = {}) {
@@ -1775,14 +1772,16 @@ describe('Nach /clear in einer neuen Sitzung', () => {
     await ui.press({ key: 'effort:main:medium' })
     await ui.unmount()
     await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+    seen.sessionReplaced()
+    await $.turn.start({ text: 'Neu', turnId: 't9' })
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
     const after = await $.ui.mount(pane(90))
     const text = await screen(after)
     expect(text).toMatch(/Woche \S+ 84 %/)
     expect(text).toMatch(/Opus/)
+    expect(text).not.toMatch(/Code lesen/)
     expect((await after.find({ key: 'pick:new' }))?.props.label).toMatch(/Sonnet/)
     await after.unmount()
-    await $.turn.start({ text: 'Neu', turnId: 't9' })
-    await step($)
-    expect(seen.stepEfforts.at(-1)).toBe('medium')
   })
 })
