@@ -55,7 +55,7 @@
     "intro": {
       "type": "boolean",
       "title": "Start intro",
-      "description": "A bonsai grows in the pane when a session starts; click or type to skip",
+      "description": "The Agent Tree logo builds up in the pane when a session starts; click or type to skip",
       "default": true
     },
     "autoUpdate": {
