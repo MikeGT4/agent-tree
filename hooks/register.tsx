@@ -3,7 +3,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentTreeState } from '../types'
-import { INTRO_MS } from './bonsai.ts'
+import { INTRO_MS } from './logo.ts'
 import { drawIntro } from './intro.tsx'
 import { introInfo } from './intro-model.ts'
 import type { IntroInfo } from './intro-model.ts'
@@ -96,7 +96,6 @@ let introOn = true
 let introTicker: Timer | undefined
 let introOpenedAt: number | undefined
 let introStartedAt: number | undefined
-let introSeed = 1
 let introRun = 0
 let introShown: IntroInfo | undefined
 let introModelSetting: string | undefined
@@ -143,7 +142,6 @@ function startIntro($: EngineInterface, now: number): void {
   introOpenedAt = now
   introStartedAt = undefined
   introShown = undefined
-  introSeed = Math.floor(now) % 2147483647 || 1
   try {
     introTicker = $.clock.every(INTRO_FRAME_MS, () => {
       void introTick($, run).catch(() => undefined)
@@ -770,7 +768,7 @@ export const register: Register = (on, options) => {
         e.props.bodyColumns,
         e.props.placement === 'inline' ? Math.min(rows ?? INTRO_INLINE_ROWS, INTRO_INLINE_ROWS) : rows,
         now - introStartedAt,
-        { palette, leaf: palette.done, lang, info: introShown, seed: introSeed },
+        { palette, lang, info: introShown },
         () => void endIntro($).catch(() => undefined),
       )
       if (intro) return intro

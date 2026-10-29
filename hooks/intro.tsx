@@ -1,7 +1,8 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import type { Elements } from 'claude-code'
 
-import { introFrame, partColor } from './intro-model.ts'
+import { introFrame } from './intro-model.ts'
+import { LOGO_TITLE } from './logo.ts'
 import type { IntroLook } from './intro-model.ts'
 
 type IntroUi = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
@@ -16,8 +17,8 @@ export function drawIntro(ui: IntroUi, width: number, height: number | undefined
         <Box key={`intro-row:${i}`}>
           <Text>
             {runs.map((run, j) =>
-              run.part ? (
-                <Text key={`intro-run:${i}:${j}`} color={partColor(run.part, look)}>
+              run.color ? (
+                <Text key={`intro-run:${i}:${j}`} color={run.color}>
                   {run.text}
                 </Text>
               ) : (
@@ -28,7 +29,7 @@ export function drawIntro(ui: IntroUi, width: number, height: number | undefined
         </Box>
       ))}
       <Text key="intro-gap"> </Text>
-      <Text key="intro-title" bold color={look.palette.main}>
+      <Text key="intro-title" bold color={LOGO_TITLE}>
         {frame.title || ' '}
       </Text>
       {frame.lines.map((line, i) => (

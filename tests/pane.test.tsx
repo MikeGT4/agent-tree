@@ -4,6 +4,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES } from '../hooks/looks.ts'
+import { LOGO_COLORS, LOGO_EMPTY, LOGO_FLASH } from '../hooks/logo.ts'
 import { createTree } from '../hooks/model.ts'
 
 const usage = { input_tokens: 2000, output_tokens: 40, cache_read_input_tokens: 30000, cache_creation_input_tokens: 0 }
@@ -767,14 +768,14 @@ describe('Agent Tree', () => {
   })
 
   const introOn = { options: { language: 'de', intro: true } }
-  const plantDots = /[⠁-⣿]/
+  const plantDots = /[█▀]/
   const introStart = async ($: Engine, on: On, saved: Record<string, unknown> = {}) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     const seen = engine(on, [], {}, saved)
     return { clock, seen }
   }
 
-  test('beim Start wächst ein Bonsai, nach 2 s steht die normale Leiste', introOn, async ($, on) => {
+  test('beim Start baut sich das Logo auf, nach 2 s steht die normale Leiste', introOn, async ($, on) => {
     const { clock } = await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(90))
@@ -800,7 +801,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('ab Werk wächst der Bonsai', { options: { language: 'de' } }, async ($, on) => {
+  test('ab Werk kommt das Logo', { options: { language: 'de' } }, async ($, on) => {
     const { clock } = await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(90))
@@ -875,7 +876,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('während des Intros gibt es genau einen Knopf, die Baumzeilen sind Text', introOn, async ($, on) => {
+  test('während des Intros gibt es genau einen Knopf, die Logozeilen sind Text', introOn, async ($, on) => {
     await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(90))
@@ -886,7 +887,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('das Intro nimmt die Farben des gewählten Aussehens', introOn, async ($, on) => {
+  test('das Logo behält seine Farben in jedem Aussehen, die Startzeilen folgen dem Aussehen', introOn, async ($, on) => {
     const look = { style: 'line', colors: 'light', light: 'standard' } as const
     const { clock } = await introStart($, on, { look })
     await startSession($)
@@ -894,8 +895,9 @@ describe('Agent Tree', () => {
     await clock.advance(1100)
     await ui.redraw()
     const colors = new Set((await ui.findAll({ type: 'Text' })).map(f => f.props.color).filter(Boolean))
-    const allowed = new Set([PALETTES.light.main, PALETTES.light.dim, PALETTES.light.done])
-    expect(colors.size).toBeGreaterThan(1)
+    const allowed = new Set([...Object.values(LOGO_COLORS), LOGO_EMPTY, LOGO_FLASH, PALETTES.light.dim])
+    expect(colors.has(LOGO_COLORS.O)).toBe(true)
+    expect(colors.has(LOGO_COLORS.N)).toBe(true)
     expect([...colors].every(c => allowed.has(c as string))).toBe(true)
     await ui.unmount()
   })
@@ -911,7 +913,7 @@ describe('Agent Tree', () => {
   const runCommand = ($: Engine, args: string) =>
     $.command.run({ command: 'agent-tree', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
 
-  const brailleCount = (text: string) => [...text].filter(c => c >= '⠁' && c <= '⣿').length
+  const brailleCount = (text: string) => [...text].filter(c => c === '█' || c === '▀').length
 
   test('/agent-tree intro spielt das Intro, auch bei ausgeschalteter Option', de, async ($, on) => {
     const { clock } = await introStart($, on)
@@ -983,7 +985,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('am Ende bleibt der Bonsai aufrecht stehen, bis die Leiste übernimmt', introOn, async ($, on) => {
+  test('am Ende bleibt das Logo stehen, bis die Leiste übernimmt', introOn, async ($, on) => {
     const { clock } = await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(90))
@@ -1007,9 +1009,10 @@ describe('Agent Tree', () => {
     await startSession($)
     await runCommand($, 'intro')
     const ui = await $.ui.mount(pane(90))
-    const first = brailleCount(await screen(ui))
+    const first = await screen(ui)
     for (let i = 0; i < 15; i++) await clock.advance(40)
-    expect(brailleCount(await screen(ui))).toBeGreaterThan(first)
+    expect(brailleCount(await screen(ui))).toBeGreaterThan(0)
+    expect(await screen(ui)).not.toBe(first)
     for (let i = 0; i < 45; i++) await clock.advance(40)
     expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
     await ui.unmount()
@@ -1021,7 +1024,13 @@ describe('Agent Tree', () => {
       ({ value: { startedAt: 0, context: { window: 200000 }, rateLimits: [{ kind: 'five_hour', percentUsed: 35 }, { kind: 'seven_day', percentUsed: 8 }, { kind: 'spend_limit', percentUsed: 12 }] } }) as never,
     )
     await startSession($)
-    for (const [cols, rows] of [[90, 14], [90, 20], [40, 20]] as const) {
+    await runCommand($, 'intro')
+    const tooLow = await $.ui.mount(pane(90, 14))
+    await clock.advance(1500)
+    await tooLow.redraw()
+    expect((await tooLow.findAll({ type: 'Box' })).filter(f => String(f.key).startsWith('intro-row'))).toHaveLength(0)
+    await tooLow.unmount()
+    for (const [cols, rows] of [[90, 20], [40, 20]] as const) {
       await runCommand($, 'intro')
       const ui = await $.ui.mount(pane(cols, rows))
       await clock.advance(1500)
