@@ -2764,5 +2764,32 @@ describe('Wahlen und Stopps laufender Agenten über /clear', () => {
     await ui.unmount()
     expect(seen.toasts.at(-1) ?? '').not.toMatch(/Enter schickt/)
   })
+
+  test('ein beendeter Agent, der nach /agent-tree clear fortgesetzt wird, behält seine festgehaltene Stufe', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await newAgentsOn($, 'low')
+    await $.agent.spawn({ prompt: 'P', description: 'Teammitglied', subagentType: 'Plan' } as never)
+    await step($, { agentId: 'sub-1' })
+    await $.turn.complete({ turnId: 't1', agentId: 'sub-1', answer: 'ok', reason: 'answer', isAborted: false, durationMs: 5 } as never)
+    await newAgentsOn($, 'high')
+    await run($, 'clear')
+    await $.agent.spawn({ prompt: 'Weiter', description: 'Teammitglied', subagentType: 'Plan', resume: { agentId: 'sub-1' } } as never)
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('low')
+  })
+
+  test('ein Agent, der kurz nach /clear noch in der alten Sitzung endet, kommt nicht als laufend in die neue', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true })
+    await oneAgentWithAdvisor($)
+    await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+    await $.turn.complete({ turnId: 't1', agentId: 'sub-1', answer: 'ok', reason: 'answer', isAborted: false, durationMs: 5 } as never)
+    seen.sessionReplaced()
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).not.toMatch(/Code lesen/)
+    await ui.unmount()
+  })
 })
 

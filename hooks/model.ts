@@ -683,7 +683,7 @@ export function freshTree(from: AgentTreeState, now: number): AgentTreeState {
   const fresh: AgentTreeState = {
     ...base,
     agents: running,
-    choices: { ...choicesOf(base), agents: without(old.agents, gone), efforts: without(old.efforts ?? {}, gone) },
+    choices: { ...choicesOf(base), agents: { ...old.agents }, efforts: { ...(old.efforts ?? {}) } },
     ...(from.stopping ? { stopping: from.stopping.filter(id => alive.has(id)) } : {}),
     ...(from.stopSent ? { stopSent: from.stopSent.filter(id => alive.has(id)) } : {}),
     ...(from.corrections ? { corrections: without(from.corrections, gone) } : {}),

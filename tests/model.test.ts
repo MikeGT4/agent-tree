@@ -931,18 +931,18 @@ describe('Maskierung, Kürzen nach Zeichenfolgen und neuer Baum', () => {
     expect(excerpt('abcdef', -1)).toBe('')
   })
 
-  test('ein neuer Baum nimmt die Wahlen laufender Agenten mit, nicht die beendeter', () => {
+  test('ein neuer Baum nimmt die Wahlen aller Agenten mit, die Knoten nur von laufenden', () => {
     let s = spawned(createTree(0), { ...spawn('a1'), effort: 'low' }, 1)
     s = spawned(s, { ...spawn('a2'), effort: 'high' }, 2)
     s = chosen(s, 'a1', 'opus', 3)
     s = completed(s, { agentId: 'a2', answer: 'fertig', reason: 'done', isAborted: false, durationMs: 1 }, 4)
     const fresh = freshTree(s, 5)
     expect(fresh.agents.map(n => n.id)).toEqual(['a1'])
-    expect(fresh.choices?.efforts).toEqual({ a1: 'low' })
+    expect(fresh.choices?.efforts).toEqual({ a1: 'low', a2: 'high' })
     expect(fresh.choices?.agents).toEqual({ a1: 'opus' })
-    expect(freshTree(fresh, 6).choices?.efforts).toEqual({ a1: 'low' })
+    expect(freshTree(fresh, 6).choices?.efforts).toEqual({ a1: 'low', a2: 'high' })
     const ended = freshTree(completed(fresh, { agentId: 'a1', answer: 'fertig', reason: 'done', isAborted: false, durationMs: 1 }, 7), 8)
-    expect([ended.agents, ended.choices?.efforts, ended.choices?.agents]).toEqual([[], {}, {}])
+    expect([ended.agents, ended.choices?.efforts, ended.choices?.agents]).toEqual([[], { a1: 'low', a2: 'high' }, { a1: 'opus' }])
   })
 
   test('ein neuer Baum nimmt angeforderte Stopps und Korrekturen laufender Agenten mit', () => {

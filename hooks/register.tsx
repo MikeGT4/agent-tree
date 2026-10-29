@@ -122,10 +122,17 @@ async function takeOver($: EngineInterface): Promise<void> {
   if (handing) return handing
   const from = carried
   if (!from) return
-  const run = handOver($, from)
+  let finish: () => void = () => undefined
+  const run = new Promise<void>(resolve => {
+    finish = resolve
+  })
   handing = run
-  await run
-  if (handing === run) handing = undefined
+  try {
+    await handOver($, from)
+  } finally {
+    finish()
+    if (handing === run) handing = undefined
+  }
 }
 
 async function handOver($: EngineInterface, from: Carried): Promise<void> {
@@ -263,7 +270,10 @@ async function change($: EngineInterface, apply: (s: AgentTreeState) => AgentTre
 async function write($: EngineInterface, apply: (s: AgentTreeState) => AgentTreeState): Promise<AgentTreeState> {
   const next = await update($, tree, apply)
   const ending = carried?.sessionId
-  if (ending !== undefined && (await $.session.id().catch(() => undefined)) === ending) return next
+  if (ending !== undefined && (await $.session.id().catch(() => undefined)) === ending) {
+    if (carried && carried.sessionId === ending) carried = { ...carried, tree: apply(carried.tree) }
+    return next
+  }
   stoppingIds = new Set(next.stopping ?? [])
   stopSentIds = new Set(next.stopSent ?? [])
   $.ui.status(statusText(next, lang))
@@ -863,13 +873,11 @@ export const register: Register = (on, options) => {
     const { Box, Text, Button } = elements
     const Input = 'Input' in elements ? elements.Input : undefined
     const draft = carried
-    const [now, stored, storedLook, , tick] = await Promise.all([
-      clock($),
-      read($, tree),
-      read($, appearance),
-      read($, introBeat),
-      animate ? read($, frame) : Promise.resolve(0),
-    ])
+    const now = await clock($)
+    const stored = await read($, tree)
+    const storedLook = await read($, appearance)
+    await read($, introBeat)
+    const tick = animate ? await read($, frame) : 0
     const s = draft ? freshTree(draft.tree, now) : stored
     const look = draft ? draft.look : storedLook
     if (introTicker) {
