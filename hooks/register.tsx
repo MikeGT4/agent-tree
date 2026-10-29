@@ -118,17 +118,14 @@ const standing = new Map<string, string | number>()
 let spawning = 0
 const INPUT_DOORS = ['prompt', 'command', 'delivery', 'note', 'attachment'] as const
 
-function takeOver($: EngineInterface): Promise<void> {
+async function takeOver($: EngineInterface): Promise<void> {
   if (handing) return handing
   const from = carried
-  if (!from) return Promise.resolve()
-  const run: Promise<void> = handOver($, from)
-    .catch(() => undefined)
-    .finally(() => {
-      if (handing === run) handing = undefined
-    })
+  if (!from) return
+  const run = handOver($, from)
   handing = run
-  return run
+  await run
+  if (handing === run) handing = undefined
 }
 
 async function handOver($: EngineInterface, from: Carried): Promise<void> {
@@ -141,7 +138,11 @@ async function handOver($: EngineInterface, from: Carried): Promise<void> {
   await update($, unreadTexts, () => withoutTexts(from.unread, id => !alive.has(id))).catch(() => undefined)
   const now = await clock($)
   if (round !== generation) return
-  await write($, () => freshTree(from.tree, now))
+  try {
+    await write($, () => freshTree(from.tree, now))
+  } catch {
+    return
+  }
   if (carried === from) carried = undefined
 }
 
@@ -627,9 +628,7 @@ export const register: Register = (on, options) => {
     }
     if (arg) return { text: w.commandUnknown(e.args.trim()) }
     await catchUp($, now, keep)
-    const opened = await $.ui
-      .open({ id: PANE, title: TITLE, focus: true, columns, rows: INLINE_ROWS })
-      .catch((err: unknown) => ({ isPlaced: false, reason: String(err) }))
+    const opened = await $.ui.open({ id: PANE, title: TITLE, focus: true, columns, rows: INLINE_ROWS }).catch((err: unknown) => ({ isPlaced: false, reason: String(err) }))
     if (!opened.isPlaced) return { text: w.notOpened('reason' in opened && opened.reason ? String(opened.reason) : '') }
     const s = await latest($)
     return { text: w.opened(s.agents.length) }
@@ -740,30 +739,32 @@ export const register: Register = (on, options) => {
       seen.add(agentId)
       starting.set(agentId, pin)
       const now = await clock($)
-      const written = await change($, s =>
-        trimmed(
-          spawned(
-            s,
-            {
-              agentId,
-              parentAgentId: e.parentAgentId,
-              agentType: e.subagentType,
-              description: e.description,
-              prompt: e.prompt,
-              model: result.model,
-              background: e.background,
-              fork: e.fork,
-              workflowRunId: e.workflow?.runId || undefined,
-              effort: pin,
-            },
-            now,
+      let written = true
+      try {
+        await change($, s =>
+          trimmed(
+            spawned(
+              s,
+              {
+                agentId,
+                parentAgentId: e.parentAgentId,
+                agentType: e.subagentType,
+                description: e.description,
+                prompt: e.prompt,
+                model: result.model,
+                background: e.background,
+                fork: e.fork,
+                workflowRunId: e.workflow?.runId || undefined,
+                effort: pin,
+              },
+              now,
+            ),
+            keep,
           ),
-          keep,
-        ),
-      ).then(
-        () => true,
-        () => false,
-      )
+        )
+      } catch {
+        written = false
+      }
       if (written) starting.delete(agentId)
     }
     return result
