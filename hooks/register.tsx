@@ -608,6 +608,7 @@ export const register: Register = (on, options) => {
         usage: null,
       }
     }
+    const carriesInput = e.index === 0 || Boolean(agentId && before && pendingCorrection(before, agentId))
     if (agentId && before && pendingCorrection(before, agentId)) {
       const readAt = await clock($)
       await forget($, agentId).catch(() => undefined)
@@ -621,7 +622,7 @@ export const register: Register = (on, options) => {
         : before && !agentId && e.effort !== undefined
           ? mainStepEffort(before)
           : undefined
-    const shownEffort = e.index === 0 || effort === undefined ? (effort ?? e.effort) : undefined
+    const shownEffort = carriesInput || effort === undefined ? (effort ?? e.effort) : undefined
     const changed = model !== undefined || (effort !== undefined && effort !== e.effort)
     const result = yield* next(changed ? { ...e, ...(model ? { model } : {}), ...(effort ? { effort } : {}) } : e)
     const usage = result.usage
@@ -651,6 +652,7 @@ export const register: Register = (on, options) => {
   })
 
   on('agent.spawn', async ($, e, next) => {
+    await takeOver($).catch(() => undefined)
     if (introTicker) await endIntro($).catch(() => undefined)
     const family = choicesOf(await read($, tree)).newAgents
     const input = family && !e.model && !e.fork && !e.resume ? { ...e, model: family } : e
@@ -683,6 +685,7 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   on('tool.call', async ($, e, next) => {
+    await takeOver($).catch(() => undefined)
     const agentId = e.agentId
     if (!agentId) return next(e)
     const stopping = stoppingIds.has(agentId)
@@ -714,6 +717,7 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {
+    await takeOver($).catch(() => undefined)
     const result = await next(e)
     const now = await clock($)
     const after = await change($, s =>
@@ -786,9 +790,6 @@ export const register: Register = (on, options) => {
 
   on('ui.press', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
     await takeOver($).catch(() => undefined)
-    return pressKey(actionsFor($), e.element) ? { element: e.element } : next(e)
-  })
-  on('ui.press', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
     if (e.element.startsWith('intro:skip')) {
       await endIntro($).catch(() => undefined)
       return { element: e.element }

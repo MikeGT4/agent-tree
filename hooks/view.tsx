@@ -677,7 +677,11 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           </Text>
         )}
         <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
-          {nested ? `↳ ${w.under} ${nested}` : effortLine(n.effort, glyphs)}
+          {nested
+            ? `↳ ${w.under} ${nested}`
+            : running && choices.efforts?.[n.id] && choices.efforts[n.id] !== n.effort
+              ? `${n.effort ?? '?'} → ${choices.efforts[n.id]}`
+              : effortLine(n.effort, glyphs)}
         </Text>
         <Text size={SIZE.detail} color={running ? undefined : palette.dim} wrap="truncate-end">
           {n.description || ' '}
