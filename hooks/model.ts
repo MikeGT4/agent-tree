@@ -28,6 +28,7 @@ export type StepInput = {
   answer?: string
   model: string
   effort?: string | number
+  effortless?: boolean
   contextTokens?: number
   advisorUses?: readonly AdvisorUse[]
 }
@@ -63,6 +64,8 @@ const ENGINE_STATUS: Record<string, AgentTreeStatus> = {
 export const MODEL_FAMILIES = ['haiku', 'sonnet', 'opus', 'fable'] as const
 
 export const NEW_AGENTS = 'new'
+
+export const MAIN = 'main'
 
 export function familyFrom(value: unknown): string | undefined {
   return typeof value === 'string' && (MODEL_FAMILIES as readonly string[]).includes(value) ? value : undefined
@@ -226,13 +229,18 @@ export function withNewEffort(s: AgentTreeState, effort: string | undefined): Ag
   return current.newEffort === effort ? s : { ...s, choices: { ...current, newEffort: effort } }
 }
 
-export function restoredChoices(s: AgentTreeState, family: string | undefined, effort: string | undefined): AgentTreeState {
-  return { ...s, choices: { ...choicesOf(s), newAgents: family, newEffort: effort, restored: true } }
+export function restoredChoices(
+  s: AgentTreeState,
+  family: string | undefined,
+  effort: string | undefined,
+  mainEffort?: string,
+): AgentTreeState {
+  return { ...s, choices: { ...choicesOf(s), newAgents: family, newEffort: effort, mainEffort, restored: true } }
 }
 
 export function carriedChoices(from: AgentTreeState, to: AgentTreeState): AgentTreeState {
-  const { newAgents, newEffort, restored } = choicesOf(from)
-  return { ...to, choices: { ...choicesOf(to), newAgents, newEffort, restored } }
+  const { newAgents, newEffort, mainEffort, restored } = choicesOf(from)
+  return { ...to, choices: { ...choicesOf(to), newAgents, newEffort, mainEffort, restored } }
 }
 
 export function effortChosen(s: AgentTreeState, target: string, effort: string | undefined, now: number): AgentTreeState {
@@ -240,6 +248,10 @@ export function effortChosen(s: AgentTreeState, target: string, effort: string |
   const efforts = { ...(current.efforts ?? {}) }
   let choices: AgentTreeChoices
   let who = ''
+  if (target === MAIN) {
+    const picker = current.picker === MAIN ? undefined : current.picker
+    return logged({ ...s, choices: { ...current, mainEffort: effort, picker } }, 'session', 'effort', { who, main: 1, effort: effort ?? '' }, now)
+  }
   if (target === NEW_AGENTS) {
     choices = { ...current, newEffort: effort, efforts }
   } else {
@@ -251,6 +263,10 @@ export function effortChosen(s: AgentTreeState, target: string, effort: string |
     who = node.type
   }
   return logged({ ...s, choices }, 'session', 'effort', { who, effort: effort ?? '' }, now)
+}
+
+export function mainStepEffort(s: AgentTreeState): EffortLevel | undefined {
+  return effortFrom(choicesOf(s).mainEffort)
 }
 
 export function stepEffortFor(s: AgentTreeState, agentId: string): EffortLevel | undefined {
@@ -408,7 +424,8 @@ export function stepped(s: AgentTreeState, input: StepInput, now: number): Agent
       main: {
         ...next.main,
         model: input.model,
-        effort: effort ?? next.main.effort,
+        effort: input.effortless ? undefined : (effort ?? next.main.effort),
+        effortless: input.effortless ? true : effort !== undefined ? false : next.main.effortless,
         contextTokens: input.contextTokens ?? next.main.contextTokens,
       },
     }
@@ -416,7 +433,7 @@ export function stepped(s: AgentTreeState, input: StepInput, now: number): Agent
     next = withAgent(next, input.agentId, n => ({
       ...n,
       model: input.model,
-      effort: effort ?? n.effort,
+      effort: input.effortless ? undefined : (effort ?? n.effort),
       contextTokens: input.contextTokens ?? n.contextTokens,
       answer: input.answer ? excerpt(input.answer) : n.answer,
     }))

@@ -14,6 +14,7 @@ import type {
 } from '../types'
 import {
   EFFORT_LEVELS,
+  MAIN,
   MODEL_FAMILIES,
   NEW_AGENTS,
   choicesOf,
@@ -405,6 +406,12 @@ export function pickerLines(name: string, width: number, lang: Lang = 'de', runn
   return models + efforts + (running ? wrappedLines([w.effortNextMessage], width) : 0)
 }
 
+export function mainPickerLines(width: number, lang: Lang = 'de'): number {
+  const w = wordsFor(lang)
+  const efforts = wrappedLines([w.mainEffortFor, `[ ${w.standard} ]`, ...EFFORT_LEVELS.map(level => `[ ${effortLabel(level)} ]`), '[ × ]'], width)
+  return efforts + wrappedLines(w.mainEffortHint, width)
+}
+
 function lookLabelWidth(w: Words): number {
   return Math.max(...LOOK_ROWS.map(row => w.lookRow[row].length))
 }
@@ -505,7 +512,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     total: current.length,
     advisorRows: wide ? ADVISOR_BASE_ROWS + recentCalls.length : ADVISOR_COMPACT_ROWS,
     earlier: earlier > 0,
-    pickerRows: (pickerTarget && actions ? 1 + pickerLines(pickerName, width, lang, pickerTarget !== NEW_AGENTS) : 0) + (s.lookOpen && actions ? lookLines(width, lang) : 0),
+    pickerRows: (pickerTarget && actions ? 1 + (pickerTarget === MAIN ? mainPickerLines(width, lang) : pickerLines(pickerName, width, lang, pickerTarget !== NEW_AGENTS)) : 0) + (s.lookOpen && actions ? lookLines(width, lang) : 0),
     detailRows: detailNode && actions ? DETAIL_ROWS : 0,
     helpRows: tight ? 0 : 1,
     limitRows: s.main.limits?.length ? 1 : 0,
@@ -756,6 +763,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     </Box>
   )
 
+  const mainSent = s.main.effortless ? undefined : s.main.effort
+  const mainChosen = choices.mainEffort
+  const mainEffortPending = mainChosen !== undefined && !s.main.effortless && mainChosen !== mainSent
+  const mainEffortLabel = mainEffortPending
+    ? `Effort ${mainSent ? `${mainSent} ` : ''}→ ${mainChosen} ▾`
+    : `${mainSent ? `Effort ${mainSent}` : w.effortNone} ▾`
+
   const roundLine = s.main.turn ? `${w.round} ${s.main.turn}${s.main.costUsd !== undefined ? ` · ${w.cost(s.main.costUsd)}` : ''}` : w.noRound
 
   const mainBox = (
@@ -764,7 +778,27 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         {[mainModel, w.main].filter(Boolean).join(' · ')}
       </Text>
       <Text wrap="truncate-end">{w.phase[phase]}</Text>
-      {s.main.effort && effortCells(s.main.effort, glyphs) ? (
+      {actions ? (
+        <Button key="pick:main" plain hotkey="e" label={mainEffortLabel} onPress={() => actions.pick(MAIN)}>
+          {mainEffortPending ? (
+            <Text wrap="truncate-end">
+              <Text color={palette.dim}>{`Effort ${mainSent ? `${mainSent} ` : ''}`}</Text>
+              <Text color={palette.main}>{`→ ${mainChosen}`}</Text>
+              {' ▾'}
+            </Text>
+          ) : mainSent && effortCells(mainSent, glyphs) ? (
+            <Text wrap="truncate-end">
+              <Text color={palette.dim}>{'Effort '}</Text>
+              <Text color={palette.main}>{effortCells(mainSent, glyphs)}</Text>
+              {` ${mainSent} ▾`}
+            </Text>
+          ) : (
+            <Text color={palette.dim} wrap="truncate-end">
+              {`${mainSent ? `Effort ${mainSent}` : w.effortNone} ▾`}
+            </Text>
+          )}
+        </Button>
+      ) : s.main.effort && effortCells(s.main.effort, glyphs) ? (
         <Text size={SIZE.detail} wrap="truncate-end">
           <Text color={palette.dim}>{'Effort '}</Text>
           <Text color={palette.main}>{effortCells(s.main.effort, glyphs)}</Text>
@@ -986,8 +1020,29 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const pickerCurrent = pickerTarget === NEW_AGENTS ? choices.newAgents : pickerTarget ? choices.agents[pickerTarget] : undefined
   const effortCurrent = pickerTarget === NEW_AGENTS ? choices.newEffort : pickerTarget ? choices.efforts?.[pickerTarget] : undefined
+  const mainPicker =
+    pickerTarget === MAIN && actions ? (
+      <Box key="picker" flexDirection="column" width={width} marginTop={1}>
+        <Box key="picker-main" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          <Text color={palette.main}>{w.mainEffortFor}</Text>
+          <Button key="effort:main:default" hotkey="0" label={w.standard} variant={mainChosen === undefined ? 'primary' : undefined} onPress={() => actions.effort(MAIN, undefined)} />
+          {EFFORT_LEVELS.map(level => (
+            <Button key={`effort:main:${level}`} label={effortLabel(level)} variant={mainChosen === level ? 'primary' : undefined} onPress={() => actions.effort(MAIN, level)} />
+          ))}
+          <Button key="picker:close" hotkey="x" label="×" onPress={() => actions.close()} />
+        </Box>
+        <Box key="picker-main-hint" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          {w.mainEffortHint.map((part, i) => (
+            <Text key={`main-hint:${i}`} color={palette.dim}>
+              {part}
+            </Text>
+          ))}
+        </Box>
+      </Box>
+    ) : null
+
   const pickerRow =
-    pickerTarget && actions ? (
+    pickerTarget === MAIN ? mainPicker : pickerTarget && actions ? (
       <Box key="picker" flexDirection="column" width={width} marginTop={1}>
         <Box key="picker-models" flexDirection="row" flexWrap="wrap" columnGap={1}>
           <Text color={palette.agent} wrap="truncate-end">

@@ -32,6 +32,8 @@ import {
   isStopping,
   lookOpened,
   limitsFrom,
+  MAIN,
+  mainStepEffort,
   measured,
   pendingCorrection,
   phaseOf,
@@ -68,6 +70,7 @@ const LOOK_KEY = 'look'
 const STAR_KEY = 'star'
 const MODEL_KEY = 'model'
 const EFFORT_KEY = 'effort'
+const MAIN_EFFORT_KEY = 'mainEffort'
 const INLINE_ROWS = 40
 const FRAME_MS = 250
 const HANDBACK = 'SubagentHandback'
@@ -175,7 +178,8 @@ async function restoreChoices($: EngineInterface, interactive: boolean): Promise
   if (!interactive || choicesOf(await read($, tree)).restored) return false
   const model = await $.store.get(MODEL_KEY).catch(() => undefined)
   const effort = await $.store.get(EFFORT_KEY).catch(() => undefined)
-  await change($, s => restoredChoices(s, familyFrom(model), effortFrom(effort)))
+  const mainEffort = await $.store.get(MAIN_EFFORT_KEY).catch(() => undefined)
+  await change($, s => restoredChoices(s, familyFrom(model), effortFrom(effort), effortFrom(mainEffort)))
   return true
 }
 
@@ -189,6 +193,7 @@ async function chooseEffort($: EngineInterface, target: string, effort: string |
   const now = await clock($)
   await change($, t => effortChosen(t, target, effort, now))
   if (target === NEW_AGENTS) await $.store.set(EFFORT_KEY, effort ?? null).catch(() => undefined)
+  if (target === MAIN) await $.store.set(MAIN_EFFORT_KEY, effort ?? null).catch(() => undefined)
 }
 
 async function catchUp($: EngineInterface, now: number, keep: number): Promise<void> {
@@ -393,6 +398,7 @@ export const register: Register = (on, options) => {
       const w = wordsFor(lang)
       $.ui.toast(w.savedChoice(`${familyOr(saved.newAgents, w.standard)}${saved.newEffort ? ` · ${effortLabel(saved.newEffort)}` : ''}`))
     }
+    if (saved?.mainEffort) $.ui.toast(wordsFor(lang).savedMainEffort(effortLabel(saved.mainEffort)))
     const usage = await $.session.usage().catch(() => undefined)
     if (usage) await change($, s => withLimits(s, limitsFrom(usage.rateLimits))).catch(() => undefined)
     const listed = await $.command.list().catch(() => undefined)
@@ -456,7 +462,7 @@ export const register: Register = (on, options) => {
 
   on('turn.step', async function* ($, e, next) {
     const agentId = e.agentId
-    const before = agentId ? await read($, tree) : undefined
+    const before = await read($, tree).catch(() => undefined)
     if (agentId && before && isStopping(before, agentId)) {
       const report = wordsFor(lang).stopAnswer(before.agents.find(n => n.id === agentId)?.toolCount ?? 0)
       const first = !wasStopSent(before, agentId)
@@ -484,7 +490,12 @@ export const register: Register = (on, options) => {
     }
     const family = before && e.agentId ? choicesOf(before).agents[e.agentId] : undefined
     const model = before && family ? stepModelFor(before, family) : undefined
-    const effort = before && agentId && (e.effort !== undefined || model !== undefined) ? stepEffortFor(before, agentId) : undefined
+    const effort =
+      before && agentId && (e.effort !== undefined || model !== undefined)
+        ? stepEffortFor(before, agentId)
+        : before && !agentId && e.effort !== undefined
+          ? mainStepEffort(before)
+          : undefined
     const shownEffort = e.index === 0 || effort === undefined ? (effort ?? e.effort) : undefined
     const changed = model !== undefined || (effort !== undefined && effort !== e.effort)
     const result = yield* next(changed ? { ...e, ...(model ? { model } : {}), ...(effort ? { effort } : {}) } : e)
@@ -499,7 +510,15 @@ export const register: Register = (on, options) => {
     await change($, s =>
       stepped(
         s,
-        { agentId: e.agentId, answer: result.answer, model: usage?.model ?? model ?? e.model, effort: shownEffort, contextTokens, advisorUses },
+        {
+          agentId: e.agentId,
+          answer: result.answer,
+          model: usage?.model ?? model ?? e.model,
+          effort: shownEffort,
+          effortless: e.index === 0 && effort === undefined && e.effort === undefined,
+          contextTokens,
+          advisorUses,
+        },
         now,
       ),
     ).catch(() => undefined)
@@ -596,15 +615,12 @@ export const register: Register = (on, options) => {
   })
 
   on('session.end', async ($, e, next) => {
-    const reset =
-      e.reason === 'clear' || e.reason === 'resume'
-        ? clock($)
-            .then(now => change($, s => freshTree(s, now)))
-            .then(() => update($, unreadTexts, () => ({})))
-            .catch(() => undefined)
-        : Promise.resolve()
+    if (e.reason !== 'clear' && e.reason !== 'resume') return next(e)
+    const ending = await read($, tree).catch(() => undefined)
     const result = await next(e)
-    await reset
+    const now = await clock($)
+    if (ending) await change($, () => freshTree(ending, now)).catch(() => undefined)
+    await update($, unreadTexts, () => ({})).catch(() => undefined)
     return result
   })
 

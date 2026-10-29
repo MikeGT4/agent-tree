@@ -78,6 +78,7 @@ export type AgentTreeMain = {
   roundStartedAt?: number
   model?: string
   effort?: string
+  effortless?: boolean
   contextTokens?: number
   window?: number
   percent?: number
@@ -104,6 +105,7 @@ export type AgentTreeOrphanEnd = {
 export type AgentTreeChoices = {
   newAgents?: string
   newEffort?: string
+  mainEffort?: string
   agents: Record<string, string>
   efforts?: Record<string, string>
   restored?: boolean

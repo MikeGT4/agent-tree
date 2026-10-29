@@ -51,6 +51,8 @@ export type Words = {
   source: Record<AgentTreeLogSource, string>
   pickerFor: (name: string) => string
   effortFor: string
+  mainEffortFor: string
+  mainEffortHint: readonly string[]
   effortNextMessage: string
   newAgents: string
   help: readonly string[]
@@ -72,6 +74,7 @@ export type Words = {
   sayPlaceholder: string
   sayLabel: string
   savedChoice: (label: string) => string
+  savedMainEffort: (label: string) => string
   limitKind: (kind: string) => string
   limitReset: (time: string) => string
   locale: string
@@ -174,6 +177,8 @@ export const WORDS: Record<Lang, Words> = {
     source: { session: 'sitzung', main: 'haupt', agent: 'agent', advisor: 'berater' },
     pickerFor: name => `Modell für ${name}:`,
     effortFor: 'Denkstufe:',
+    mainEffortFor: 'Denkstufe der Hauptsitzung:',
+    mainEffortHint: ['ab deiner nächsten Nachricht ·', 'Standard = Einstellung von Claude Code ·', 'bleibt für neue Sitzungen'],
     effortNextMessage: 'gilt, sobald es eine neue Nachricht bekommt (nur Modelle mit Denkstufe)',
     newAgents: 'neue Unteragenten',
     help: ['ctrl+x tab: Leiste', 'Typ: Details', '■: stoppen', 'm: Modell', 'a: Aussehen', 'Tab: wandern'],
@@ -195,6 +200,7 @@ export const WORDS: Record<Lang, Words> = {
     sayPlaceholder: 'hier klicken und tippen, Enter sendet · Esc: zurück',
     sayLabel: 'Nachricht:',
     savedChoice: label => `Agent Tree: gespeicherte Wahl für Unteragenten: ${label} (m in der Leiste ändert sie)`,
+    savedMainEffort: label => `Agent Tree: gespeicherte Denkstufe der Hauptsitzung: ${label} (e in der Leiste ändert sie)`,
     limitKind: kind => (kind === 'five_hour' ? '5 h' : kind === 'seven_day' ? 'Woche' : kind === 'spend_limit' ? 'Budget' : kind),
     limitReset: time => `bis ${time}`,
     locale: 'de-DE',
@@ -251,7 +257,8 @@ export const WORDS: Record<Lang, Words> = {
       adopted: d => `${d.count} ${Number(d.count) === 1 ? 'Agent' : 'Agenten'} aus der Agentenliste übernommen`,
       advisor: d => `gefragt aus ${d.where ? d.where : 'Hauptsitzung'}`,
       choice: d => `Modell für ${d.who ? d.who : 'neue Unteragenten'}: ${familyOr(d.family, 'Standard')}`,
-      effort: d => `Denkstufe für ${d.who ? d.who : 'Unteragenten'}: ${d.effort ? effortLabel(String(d.effort)) : 'Standard'}`,
+      effort: d =>
+        `${d.main ? 'Denkstufe der Hauptsitzung' : `Denkstufe für ${d.who ? d.who : 'Unteragenten'}`}: ${d.effort ? effortLabel(String(d.effort)) : 'Standard'}`,
       stopRequested: d => `Stopp für ${d.type} angefordert`,
       correction: d => `Korrektur an ${d.type}: ${d.text}`,
       correctionFailed: d => `Korrektur an ${d.type} nicht zugestellt${d.text ? `: ${d.text}` : ''}`,
@@ -303,6 +310,8 @@ export const WORDS: Record<Lang, Words> = {
     source: { session: 'session', main: 'main', agent: 'agent', advisor: 'advisor' },
     pickerFor: name => `Model for ${name}:`,
     effortFor: 'Effort:',
+    mainEffortFor: 'Main session effort:',
+    mainEffortHint: ['from your next message ·', "Default = Claude Code's setting ·", 'kept for new sessions'],
     effortNextMessage: 'applies once it gets a new message (models with effort only)',
     newAgents: 'new sub-agents',
     help: ['ctrl+x tab: pane', 'type: details', '■: stop', 'm: model', 'a: look', 'Tab: move'],
@@ -324,6 +333,7 @@ export const WORDS: Record<Lang, Words> = {
     sayPlaceholder: 'click here and type, Enter sends · Esc: back',
     sayLabel: 'Message:',
     savedChoice: label => `Agent Tree: saved sub-agent choice: ${label} (m in the pane changes it)`,
+    savedMainEffort: label => `Agent Tree: saved main session effort: ${label} (e in the pane changes it)`,
     limitKind: kind => (kind === 'five_hour' ? '5h' : kind === 'seven_day' ? 'week' : kind === 'spend_limit' ? 'spend' : kind),
     limitReset: time => `resets ${time}`,
     locale: 'en-US',
@@ -379,7 +389,8 @@ export const WORDS: Record<Lang, Words> = {
       adopted: d => `${d.count} ${Number(d.count) === 1 ? 'agent' : 'agents'} taken over from the agent list`,
       advisor: d => `consulted from ${d.where ? d.where : 'main session'}`,
       choice: d => `Model for ${d.who ? d.who : 'new sub-agents'}: ${familyOr(d.family, 'Default')}`,
-      effort: d => `Effort for ${d.who ? d.who : 'sub-agents'}: ${d.effort ? effortLabel(String(d.effort)) : 'Default'}`,
+      effort: d =>
+        `${d.main ? 'Main session effort' : `Effort for ${d.who ? d.who : 'sub-agents'}`}: ${d.effort ? effortLabel(String(d.effort)) : 'Default'}`,
       stopRequested: d => `Stop requested for ${d.type}`,
       correction: d => `Correction to ${d.type}: ${d.text}`,
       correctionFailed: d => `Correction to ${d.type} not delivered${d.text ? `: ${d.text}` : ''}`,

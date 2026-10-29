@@ -4,13 +4,14 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES } from '../hooks/looks.ts'
+import { createTree } from '../hooks/model.ts'
 
 const usage = { input_tokens: 2000, output_tokens: 40, cache_read_input_tokens: 30000, cache_creation_input_tokens: 0 }
 const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<string, string>)[model] ?? model
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown> } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -82,7 +83,20 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
     return { value: undefined } as never
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  let newSession = false
+  const isTree = (e: unknown) => (e as { plugin?: string; key?: string }).plugin === 'agent-tree' && (e as { key?: string }).key === 'tree'
+  on('state.get', async (_, e, next) => (refuse.clearResets && newSession && isTree(e) ? ({ value: createTree(0), version: 0 } as never) : next(e)))
+  on('state.set', async (_, e, next) => {
+    if (isTree(e)) newSession = false
+    return next(e)
+  })
+  on('session.end', async (_, e) => {
+    if (refuse.clearResets && (e.reason === 'clear' || e.reason === 'resume')) {
+      for (let i = 0; i < 500; i++) await Promise.resolve()
+      newSession = true
+    }
+    return { sessionId: e.sessionId }
+  })
   on('session.measure', (_, e) => ({ changed: e.changed }))
   on('agent.list', () => ({ value: listed }) as never)
   on('agent.spawn', async (_, e) => {
@@ -1639,5 +1653,136 @@ describe('Stern-Hinweis', () => {
     const e = engine(on)
     for (let i = 0; i < 3; i++) await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
     expect(star(e.toasts)).toEqual([])
+  })
+})
+
+describe('Denkstufe der Hauptsitzung', () => {
+  test('die Hauptsitzung hat einen Knopf für ihre Denkstufe, die Auswahl zeigt nur Stufen', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    const ui = await $.ui.mount(pane(90))
+    const button = await ui.find({ key: 'pick:main' })
+    expect(button?.props.hotkey).toBe('e')
+    expect(button?.props.label).toMatch(/Effort .*high ▾/)
+    await ui.press({ key: 'pick:main' })
+    expect(await screen(ui)).toMatch(/Denkstufe der Hauptsitzung:/)
+    for (const key of ['effort:main:default', 'effort:main:low', 'effort:main:medium', 'effort:main:high', 'effort:main:xhigh', 'effort:main:max', 'picker:close']) {
+      expect(await ui.find({ key })).toBeDefined()
+    }
+    expect(await ui.find({ key: 'choose:main:opus' })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('die gewählte Stufe geht ab der nächsten Anfrage der Hauptsitzung hinaus und wird gespeichert', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:medium' })
+    expect(await ui.find({ key: 'effort:main:low' })).toBeUndefined()
+    expect(seen.storeSets.filter(s => s.key === 'mainEffort').at(-1)).toEqual({ key: 'mainEffort', value: 'medium' })
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
+    await ui.redraw()
+    expect((await ui.find({ key: 'pick:main' }))?.props.label).toMatch(/Effort .*medium ▾/)
+    await ui.unmount()
+  })
+
+  test('Unteragenten behalten ihre eigene Stufe', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:low' })
+    await ui.unmount()
+    await $.agent.spawn({ prompt: 'P.', description: 'Lesen', subagentType: 'Explore' } as never)
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
+  })
+
+  test('Standard gibt die Stufe an Claude Code zurück', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:max' })
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:default' })
+    await ui.unmount()
+    expect(seen.storeSets.filter(s => s.key === 'mainEffort').at(-1)).toEqual({ key: 'mainEffort', value: null })
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('high')
+  })
+
+  test('ein Modell ohne Denkstufe bekommt keine', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:low' })
+    await ui.unmount()
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($, { noEffort: true })
+    expect(seen.stepEfforts.at(-1)).toBeUndefined()
+  })
+
+  test('eine gespeicherte Stufe gilt nach dem Start und meldet sich', de, async ($, on) => {
+    const seen = engine(on, [], {}, { mainEffort: 'low' })
+    await startSession($)
+    expect(seen.toasts.join(' ')).toMatch(/Denkstufe der Hauptsitzung: Low/)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('low')
+  })
+
+  test('Sitzungen ohne Bedienung übernehmen keine gespeicherte Stufe', de, async ($, on) => {
+    const seen = engine(on, [], {}, { mainEffort: 'low' })
+    await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('high')
+  })
+
+  test('auf Englisch', { options: { language: 'en' } }, async ($, on) => {
+    engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:main' })
+    expect(await screen(ui)).toMatch(/Main session effort:/)
+    await ui.unmount()
+  })
+})
+
+describe('Nach /clear in einer neuen Sitzung', () => {
+  test('Berater, Limits und alle Wahlen bleiben, obwohl die neue Sitzung leer beginnt', de, async ($, on) => {
+    const seen = engine(on, [], { clearResets: true })
+    seen.settings.advisorModel = 'opus'
+    await oneAgentWithAdvisor($)
+    await $.session.measure({
+      context: { window: 200000, tokens: 50000, percent: 25 },
+      rateLimits: [{ kind: 'seven_day', percentUsed: 84, resetsAt: new Date(2026, 10, 2, 9, 0).toISOString() }],
+      cost: { usd: 1.5 },
+      changed: ['context', 'rateLimits'],
+    } as never)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'pick:new' })
+    await ui.press({ key: 'choose:new:sonnet' })
+    await ui.press({ key: 'pick:main' })
+    await ui.press({ key: 'effort:main:medium' })
+    await ui.unmount()
+    await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+    const after = await $.ui.mount(pane(90))
+    const text = await screen(after)
+    expect(text).toMatch(/Woche \S+ 84 %/)
+    expect(text).toMatch(/Opus/)
+    expect((await after.find({ key: 'pick:new' }))?.props.label).toMatch(/Sonnet/)
+    await after.unmount()
+    await $.turn.start({ text: 'Neu', turnId: 't9' })
+    await step($)
+    expect(seen.stepEfforts.at(-1)).toBe('medium')
   })
 })
