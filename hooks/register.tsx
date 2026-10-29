@@ -10,6 +10,7 @@ import type { LookRow } from './looks.ts'
 import {
   NEW_AGENTS,
   adopted,
+  agentByPrefix,
   choicesOf,
   chosen,
   closed,
@@ -39,6 +40,7 @@ import {
   phaseOf,
   pickerOpened,
   restoredChoices,
+  shortId,
   spawned,
   stepEffortFor,
   stepModelFor,
@@ -247,14 +249,14 @@ async function appendRow($: EngineInterface, text: string, agentId?: string): Pr
   )
 }
 
-async function sayTo($: EngineInterface, agentId: string, text: string): Promise<void> {
-  if (!text.trim()) return
+async function sayTo($: EngineInterface, agentId: string, text: string): Promise<boolean> {
+  if (!text.trim()) return false
   const w = wordsFor(lang)
   const current = await read($, tree)
   const node = current.agents.find(n => n.id === agentId)
   if (!node) {
     $.ui.status(w.correctionFailedStatus)
-    return
+    return false
   }
   const before = current.corrections?.[agentId]
   const now = await clock($)
@@ -269,7 +271,7 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
     if (!sent?.isDelivered) {
       await change($, t => correctionFailed(t, { agentId, text, before }, now))
       $.ui.status(w.correctionFailedStatus)
-      return
+      return false
     }
     await change($, t => correctionCounted(t, agentId))
   }
@@ -278,6 +280,20 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
   await appendRow($, note)
   const parent = node.parentId ? current.agents.find(n => n.id === node.parentId) : undefined
   if (parent?.status === 'running') await appendRow($, note, parent.id)
+  return true
+}
+
+const WRITE_PREFIX = /^\/agent-tree\s+(?:an|to|say)\s+\S+\s?/i
+
+async function startWrite($: EngineInterface, agentId: string): Promise<void> {
+  const s = await read($, tree)
+  const node = s.agents.find(n => n.id === agentId)
+  if (!node) return
+  const w = wordsFor(lang)
+  const box = await $.prompt.read().catch(() => ({ text: '', cursor: 0 }))
+  const text = `/${COMMAND} ${w.writeWord} ${shortId(s, agentId)} ${box.text.replace(WRITE_PREFIX, '')}`
+  const filled = await $.prompt.fill({ text }).catch(() => undefined)
+  $.ui.toast(filled?.isFilled === false ? w.writeNoPrompt : w.writeHint(`${typeLabel(node.type)} · ${node.description}`))
 }
 
 async function readAdvisor($: EngineInterface): Promise<void> {
@@ -342,6 +358,7 @@ function actionsFor($: EngineInterface): TreeActions {
         .catch(ignore)
     },
     say: (agentId, text) => void sayTo($, agentId, text).catch(ignore),
+    write: agentId => void startWrite($, agentId).catch(ignore),
     advisor: () => void toggleAdvisor($).catch(ignore),
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
     restyle: (row, id) => void restyle($, row, id).catch(ignore),
@@ -436,6 +453,15 @@ export const register: Register = (on, options) => {
   on('command.run', { command: COMMAND }, async ($, e) => {
     await takeOver($).catch(() => undefined)
     const w = wordsFor(lang)
+    const said = /^(?:an|to|say)\s+(\S+)(?:\s+([\s\S]*))?$/i.exec(e.args.trim())
+    if (said) {
+      const node = agentByPrefix(await read($, tree), said[1] ?? '')
+      if (!node) return { text: w.writeUnknown(said[1] ?? '') }
+      const label = `${typeLabel(node.type)} · ${node.description}`
+      const message = (said[2] ?? '').trim()
+      if (!message) return { text: w.writeEmpty(label) }
+      return { text: (await sayTo($, node.id, message)) ? w.writeSent(label) : w.writeFailed(label) }
+    }
     const arg = e.args.trim().toLowerCase()
     if (arg === 'stop' || arg === 'close') {
       await $.ui.close({ id: PANE }).catch(() => undefined)
@@ -671,7 +697,7 @@ export const register: Register = (on, options) => {
 
   on('ui.input', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
     await takeOver($).catch(() => undefined)
-    let work: Promise<void> | undefined
+    let work: Promise<unknown> | undefined
     const actions = { ...actionsFor($), say: (agentId: string, text: string) => void (work = sayTo($, agentId, text)) }
     if (!inputKey(actions, e.element, e.kind, e.value)) return next(e)
     await work?.catch(() => undefined)

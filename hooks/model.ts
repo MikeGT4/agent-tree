@@ -265,6 +265,21 @@ export function effortChosen(s: AgentTreeState, target: string, effort: string |
   return logged({ ...s, choices }, 'session', 'effort', { who, effort: effort ?? '' }, now)
 }
 
+export function shortId(s: AgentTreeState, agentId: string): string {
+  for (let n = 8; n < agentId.length; n++) {
+    const head = agentId.slice(0, n)
+    if (s.agents.every(a => a.id === agentId || !a.id.startsWith(head))) return head
+  }
+  return agentId
+}
+
+export function agentByPrefix(s: AgentTreeState, prefix: string): AgentTreeNode | undefined {
+  const exact = s.agents.find(a => a.id === prefix)
+  if (exact) return exact
+  const hits = s.agents.filter(a => a.id.startsWith(prefix))
+  return hits.length === 1 ? hits[0] : undefined
+}
+
 export function mainStepEffort(s: AgentTreeState): EffortLevel | undefined {
   return effortFrom(choicesOf(s).mainEffort)
 }

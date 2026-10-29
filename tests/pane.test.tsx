@@ -1819,3 +1819,74 @@ describe('Nach /clear in einer neuen Sitzung', () => {
     await after.unmount()
   })
 })
+
+describe('Schreiben an Unteragenten', () => {
+  const run = ($: Engine, args: string) =>
+    $.command.run({ command: 'agent-tree', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } } as never)
+
+  test('✎ am Kasten legt den Befehl in die Eingabe, ein Entwurf bleibt dahinter', de, async ($, on) => {
+    const seen = engine(on)
+    on('prompt.read', () => ({ value: { text: 'Bitte kürzer', cursor: 12 } }) as never)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await ui.find({ key: 'write:sub-1' })).toBeDefined()
+    await ui.press({ key: 'write:sub-1' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.fills.at(-1)).toBe('/agent-tree an sub-1 Bitte kürzer')
+    expect(seen.toasts.join(' ')).toMatch(/Nachricht an Explore · Code lesen eintippen, Enter schickt sie/)
+    await ui.unmount()
+  })
+
+  test('ein früheres Ziel in der Eingabe wird ersetzt, nicht doppelt vorangestellt', de, async ($, on) => {
+    const seen = engine(on)
+    on('prompt.read', () => ({ value: { text: '/agent-tree an sub-9 Hallo', cursor: 26 } }) as never)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'write:sub-1' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.fills.at(-1)).toBe('/agent-tree an sub-1 Hallo')
+    await ui.unmount()
+  })
+
+  test('auch ein fertiger Agent hat den Knopf', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    const ui = await $.ui.mount(pane(90))
+    expect(await ui.find({ key: 'write:sub-1' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('/agent-tree an <Kennung> <Text> schickt die Nachricht an den laufenden Agenten', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const result = await run($, 'an sub-1 Bitte nur die Datei auth.ts lesen')
+    expect(result.text).toMatch(/Nachricht an Explore · Code lesen geschickt/)
+    expect(seen.appended.some(a => a.agentId === 'sub-1' && JSON.stringify(a.message).includes('Bitte nur die Datei auth.ts lesen'))).toBe(true)
+  })
+
+  test('unbekannte Kennung und fehlender Text werden genannt', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    expect((await run($, 'an zzz Hallo')).text).toMatch(/Kein Agent mit der Kennung zzz/)
+    expect((await run($, 'an sub-1')).text).toMatch(/Text fehlt/)
+  })
+
+  test('lehnt Claude Code die Zustellung ab, sagt der Befehl das', de, async ($, on) => {
+    engine(on, [], { append: true, send: true })
+    await oneAgentWithAdvisor($)
+    expect((await run($, 'an sub-1 Hallo')).text).toMatch(/nicht zugestellt/)
+  })
+
+  test('auf Englisch mit to', { options: { language: 'en' } }, async ($, on) => {
+    const seen = engine(on)
+    on('prompt.read', () => ({ value: { text: '', cursor: 0 } }) as never)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'write:sub-1' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.fills.at(-1)).toBe('/agent-tree to sub-1 ')
+    await ui.unmount()
+    expect((await run($, 'to sub-1 Shorter please')).text).toMatch(/Message sent to Explore · Code lesen/)
+  })
+})

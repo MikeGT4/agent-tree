@@ -101,6 +101,7 @@ export type TreeActions = {
   detail: (agentId: string) => void
   stop: (agentId: string) => void
   say: (agentId: string, text: string) => void
+  write: (agentId: string) => void
   advisor: () => void
   look: () => void
   restyle: (row: LookRow, id: string) => void
@@ -128,6 +129,7 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   else if (kind === 'pick') actions.pick(rest)
   else if (kind === 'choose') return chooseKey(actions, rest)
   else if (kind === 'detail') actions.detail(rest)
+  else if (kind === 'write') actions.write(rest)
   else if (kind === 'stop' || kind === 'halt') actions.stop(rest)
   else return false
   return true
@@ -656,10 +658,18 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             <Button
               key={`pick:${n.id}`}
               plain
-              label={clip(`${choices.agents[n.id] ? `→ ${familyLabel(choices.agents[n.id])}` : modelLabel(n.model) || w.model} ▾`, AGENT_WIDTH - 5)}
+              label={clip(`${choices.agents[n.id] ? `→ ${familyLabel(choices.agents[n.id])}` : modelLabel(n.model) || w.model} ▾`, AGENT_WIDTH - 7)}
               onPress={() => actions.pick(n.id)}
             />
+            <Button key={`write:${n.id}`} plain label="✎" onPress={() => actions.write(n.id)} />
             {stopping ? null : <Button key={`halt:${n.id}`} plain label="■" onPress={() => actions.stop(n.id)} />}
+          </Box>
+        ) : actions ? (
+          <Box key={`write-row:${n.id}`} width={AGENT_WIDTH - 2} flexDirection="row" justifyContent="center" columnGap={1}>
+            <Text color={palette.dim} wrap="truncate-end">
+              {clip(modelLabel(n.model) || ' ', AGENT_WIDTH - 5)}
+            </Text>
+            <Button key={`write:${n.id}`} plain label="✎" onPress={() => actions.write(n.id)} />
           </Box>
         ) : (
           <Text color={running ? undefined : palette.dim} wrap="truncate-end">
@@ -712,12 +722,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     return (
       <Box key={`ag:${n.id}`} width={treeWidth} flexDirection="row" columnGap={1}>
         {actions ? (
-          <Button key={`detail:${n.id}`} plain label={clip(text, halt ? treeWidth - 2 : treeWidth)} onPress={() => actions.detail(n.id)} />
+          <Button key={`detail:${n.id}`} plain label={clip(text, treeWidth - (halt ? 4 : 2))} onPress={() => actions.detail(n.id)} />
         ) : (
           <Text color={statusColor(palette, n.status)} wrap="truncate-end">
             {text}
           </Text>
         )}
+        {actions ? <Button key={`write:${n.id}`} plain label="✎" onPress={() => actions.write(n.id)} /> : null}
         {halt ? <Button key={`halt:${n.id}`} plain label="■" onPress={() => actions.stop(n.id)} /> : null}
       </Box>
     )
