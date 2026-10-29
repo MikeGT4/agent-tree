@@ -303,10 +303,10 @@ async function readAdvisor($: EngineInterface): Promise<void> {
   await change($, s => withAdvisorModel(s, name))
 }
 
-async function advisorSettled($: EngineInterface, on: boolean): Promise<boolean> {
+async function advisorSettled($: EngineInterface, wanted: boolean): Promise<boolean> {
   for (let i = 0; i < 8; i++) {
     const model = await $.settings.read({ key: 'advisorModel' }).catch(() => undefined)
-    if ((typeof model === 'string' && model !== '') === on) return true
+    if ((typeof model === 'string' && model !== '') === wanted) return true
     await $.clock.sleep(250).catch(() => undefined)
   }
   return false
