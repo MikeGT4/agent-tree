@@ -80,6 +80,7 @@ export type Words = {
   introSubAgents: (choice: string) => string
   introLimits: (limits: string) => string
   introPlaying: string
+  introSkip: string
   send: string
   correctionFrame: (text: string, tool: string) => string
   mainNote: (agent: string, text: string) => string
@@ -208,6 +209,7 @@ export const WORDS: Record<Lang, Words> = {
     introSubAgents: choice => `Unteragenten ${choice}`,
     introLimits: limits => `Limits ${limits}`,
     introPlaying: 'Intro läuft',
+    introSkip: 'überspringen',
     send: 'senden',
     correctionFrame: (text, tool) =>
       `Nachricht des Nutzers über Agent Tree: ${text}\n\nSie gilt ab jetzt für deinen Auftrag. Berücksichtige sie bei der weiteren Arbeit und in deinem Bericht über ${tool}.`,
@@ -342,6 +344,7 @@ export const WORDS: Record<Lang, Words> = {
     introSubAgents: choice => `sub-agents ${choice}`,
     introLimits: limits => `limits ${limits}`,
     introPlaying: 'Intro playing',
+    introSkip: 'skip',
     send: 'send',
     correctionFrame: (text, tool) =>
       `Message from the user via Agent Tree: ${text}\n\nIt applies to your task from now on. Take it into account in your remaining work and in your report via ${tool}.`,

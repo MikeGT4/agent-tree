@@ -118,7 +118,8 @@ describe('Bonsai', () => {
     const look = { palette: PALETTES.original, leaf: PALETTES.original.done, lang: 'de' as const, seed: 3, info: { limits: '5 h 35 % · Woche 8 % · Budget 12 %', subAgents: 'Sonnet · XHigh' } }
     const frame = introFrame(40, 20, 1600, look)
     expect(frame).toBeDefined()
-    expect([frame?.title ?? '', ...(frame?.lines ?? [])].every(line => [...line].length <= 40)).toBe(true)
+    expect(frame?.skip).toBe('überspringen')
+    expect([frame?.title ?? '', ...(frame?.lines ?? []), frame?.skip ?? ''].every(line => [...line].length <= 40)).toBe(true)
   })
 
   test('Startzeilen: Denkstufe als Wort, Modell aus der Einstellung, wenn die Sitzung noch keins kennt', () => {

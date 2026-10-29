@@ -79,6 +79,7 @@ const HANDBACK = 'SubagentHandback'
 const tree = atom({ plugin: 'agent-tree', key: 'tree' } as const, createTree(0), { shape: SHAPE })
 const frame = atom({ plugin: 'agent-tree', key: 'frame' } as const, 0)
 const introDone = atom({ plugin: 'agent-tree', key: 'intro' } as const, false)
+const introBeat = atom({ plugin: 'agent-tree', key: 'introBeat' } as const, 0)
 const INTRO_FRAME_MS = 40
 const INTRO_WAIT_MS = 5000
 const INTRO_INLINE_ROWS = 22
@@ -142,7 +143,7 @@ async function introTick($: EngineInterface, run: number): Promise<void> {
   if (run !== introRun) return
   const over = introStartedAt === undefined ? now - (introOpenedAt ?? now) >= INTRO_WAIT_MS : now - introStartedAt >= INTRO_MS
   if (over) await endIntro($)
-  else await update($, frame, n => (n + 1) % 1_000_000)
+  else await update($, introBeat, n => (n + 1) % 1_000_000)
 }
 
 async function maybeStartIntro($: EngineInterface, interactive: boolean): Promise<void> {
@@ -151,14 +152,19 @@ async function maybeStartIntro($: EngineInterface, interactive: boolean): Promis
   if (!introOn || !animate || !interactive) return
   if ((await $.settings.read({ key: 'prefersReducedMotion' }).catch(() => undefined)) === true) return
   if ((await read($, tree)).agents.length > 0) return
+  await readIntroModel($)
+  startIntro($, await clock($))
+}
+
+async function readIntroModel($: EngineInterface): Promise<void> {
   const model = await $.session.model().catch(() => undefined)
   introModelSetting = typeof model === 'string' && model ? model : undefined
-  startIntro($, await clock($))
 }
 
 async function replayIntro($: EngineInterface): Promise<void> {
   introTicker?.cancel()
   introTicker = undefined
+  await readIntroModel($)
   startIntro($, await clock($))
 }
 
@@ -167,7 +173,7 @@ async function endIntro($: EngineInterface): Promise<void> {
   introTicker.cancel()
   introTicker = undefined
   introRun++
-  await update($, frame, n => (n + 1) % 1_000_000)
+  await update($, introBeat, n => (n + 1) % 1_000_000)
 }
 
 function paneColumns(value: unknown): number {
@@ -689,7 +695,7 @@ export const register: Register = (on, options) => {
     const tick = animate ? await read($, frame) : 0
     const now = await clock($)
     if (introTicker) {
-      await read($, frame)
+      await read($, introBeat)
       introStartedAt ??= now
       introShown ??= introInfo(s, wordsFor(lang), introModelSetting)
       const look = await read($, appearance)

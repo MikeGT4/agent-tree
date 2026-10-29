@@ -153,6 +153,6 @@ export type AgentTreeGroup =
 
 declare module 'claude-code' {
   interface PluginState {
-    'agent-tree': { tree: Shaped<AgentTreeState>; frame: number; look: Shaped<AgentTreeLook>; unread: Record<string, string[]>; intro: boolean }
+    'agent-tree': { tree: Shaped<AgentTreeState>; frame: number; look: Shaped<AgentTreeLook>; unread: Record<string, string[]>; intro: boolean; introBeat: number }
   }
 }

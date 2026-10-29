@@ -18,7 +18,7 @@ const CELL_RANK: Record<Part, number> = { pot: 1, leaf: 2, wood: 3 }
 export type IntroInfo = { model?: string; effort?: string; advisor?: string; subAgents?: string; limits?: string }
 export type IntroLook = { palette: Palette; leaf: string; lang: Lang; info: IntroInfo; seed: number }
 export type IntroRun = { text: string; part?: Part }
-export type IntroFrame = { rows: IntroRun[][]; title: string; lines: string[] }
+export type IntroFrame = { rows: IntroRun[][]; title: string; lines: string[]; skip: string }
 
 export function introInfo(s: AgentTreeState, w: Words, modelSetting?: string): IntroInfo {
   const choices = choicesOf(s)
@@ -93,8 +93,9 @@ function centered(text: string, width: number): string {
 export function introFrame(width: number, height: number | undefined, ms: number, look: IntroLook): IntroFrame | undefined {
   const total = height ?? INTRO_ROWS
   if (width < INTRO_MIN.cols || total < INTRO_MIN.rows || introPhase(ms) === 'done') return undefined
-  const lines = introLines(look.info, wordsFor(look.lang))
-  const canvasRows = total - lines.length - 2
+  const w = wordsFor(look.lang)
+  const lines = introLines(look.info, w)
+  const canvasRows = total - lines.length - 3
   const rows = introRows(visibleDots(plantFor(look.seed, width * 2, canvasRows * 4).dots, ms), width, canvasRows)
   const titleChars = Math.max(0, Math.min(INTRO_TITLE.length, Math.floor((ms - TITLE_FROM) / TITLE_STEP)))
   const shownLines = ms < GROW_TO ? 0 : Math.min(lines.length, Math.floor((ms - GROW_TO) / LINE_STEP) + 1)
@@ -102,5 +103,6 @@ export function introFrame(width: number, height: number | undefined, ms: number
     rows,
     title: centered(INTRO_TITLE.slice(0, titleChars), width),
     lines: lines.map((line, i) => (i < shownLines ? centered(line, width) : '')),
+    skip: w.introSkip,
   }
 }

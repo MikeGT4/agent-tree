@@ -772,7 +772,7 @@ describe('Agent Tree', () => {
     await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(90))
-    await ui.press({ key: 'intro:skip:0' })
+    await ui.press({ key: 'intro:skip' })
     await ui.redraw()
     expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
     await ui.unmount()
@@ -853,13 +853,14 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('während des Intros gibt es nur Knöpfe zum Überspringen', introOn, async ($, on) => {
+  test('während des Intros gibt es genau einen Knopf, die Baumzeilen sind Text', introOn, async ($, on) => {
     await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(90))
     const buttons = await ui.findAll({ type: 'Button' })
-    expect(buttons.length).toBeGreaterThan(0)
-    expect(buttons.every(b => String(b.key).startsWith('intro:skip'))).toBe(true)
+    expect(buttons.map(b => String(b.key))).toEqual(['intro:skip'])
+    expect(buttons[0]?.props.label).toBe('überspringen')
+    expect((await ui.findAll({ type: 'Box' })).filter(f => String(f.key).startsWith('intro-row')).length).toBeGreaterThan(5)
     await ui.unmount()
   })
 
@@ -916,6 +917,50 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
+  test('Tippen in der Eingabe beendet das Intro, der Text bleibt, wie er ist', introOn, async ($, on) => {
+    const { clock } = await introStart($, on)
+    on('prompt.edit', (_$, e) => ({ text: e.text.slice(0, e.start) + e.inputText + e.text.slice(e.end), cursor: e.start + e.inputText.length }))
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(300)
+    await ui.redraw()
+    expect(brailleCount(await screen(ui))).toBeGreaterThan(0)
+    const host = $.prompt as unknown as { edit: (input: unknown) => Promise<unknown> }
+    const edited = await host.edit({ origin: { kind: 'composer' }, text: 'Ha', cursor: 2, start: 2, end: 2, inputText: 'l' })
+    expect(edited).toEqual({ text: 'Hal', cursor: 3 })
+    await clock.advance(1)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('/agent-tree intro nennt das Modell, auch wenn das Start-Intro aus war', de, async ($, on) => {
+    const { clock } = await introStart($, on)
+    on('session.model', () => ({ value: 'claude-haiku-5-5' }))
+    await startSession($)
+    await runCommand($, 'intro')
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(1500)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Modell Haiku 5\.5/)
+    await ui.unmount()
+  })
+
+  test('ein Intro, das nicht in die Leiste passt, treibt ihre Animation nicht an', de, async ($, on) => {
+    const { clock } = await introStart($, on)
+    await startSession($)
+    await $.agent.spawn({ prompt: 'Lies den Code.', description: 'Code lesen', subagentType: 'Explore' } as never)
+    await runCommand($, 'intro')
+    const ui = await $.ui.mount(pane(39))
+    await ui.redraw()
+    const before = await screen(ui)
+    expect(before).toMatch(/Code lesen/)
+    await clock.advance(40)
+    await ui.redraw()
+    expect(await screen(ui)).toBe(before)
+    await ui.unmount()
+  })
+
   test('am Ende bleibt der Bonsai aufrecht stehen, bis die Leiste übernimmt', introOn, async ($, on) => {
     const { clock } = await introStart($, on)
     await startSession($)
@@ -959,7 +1004,7 @@ describe('Agent Tree', () => {
       const ui = await $.ui.mount(pane(cols, rows))
       await clock.advance(1500)
       await ui.redraw()
-      const rowsDrawn = (await ui.findAll({ type: 'Button' })).filter(f => String(f.key).startsWith('intro:skip'))
+      const rowsDrawn = (await ui.findAll({ type: 'Box' })).filter(f => String(f.key).startsWith('intro-row'))
       expect(rowsDrawn.length).toBeGreaterThan(0)
       expect(rowsDrawn.length).toBeLessThanOrEqual(rows - 3)
       const shown = [...rowsDrawn, ...(await ui.findAll({ type: 'Text' }))]
@@ -984,7 +1029,7 @@ describe('Agent Tree', () => {
     await clock.advance(1200)
     await ui.redraw()
     expect(await screen(ui)).toMatch(/AGENT TREE/)
-    const rowsDrawn = (await ui.findAll({ type: 'Button' })).filter(f => String(f.key).startsWith('intro:skip'))
+    const rowsDrawn = (await ui.findAll({ type: 'Box' })).filter(f => String(f.key).startsWith('intro-row'))
     expect(rowsDrawn.length).toBeGreaterThan(0)
     expect(rowsDrawn.length).toBeLessThanOrEqual(20)
     await ui.unmount()
