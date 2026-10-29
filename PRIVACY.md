@@ -8,7 +8,7 @@ If it came from a marketplace and a newer version exists, it runs Claude Code's 
 
 The Auto-update option turns this off, as do DO_NOT_TRACK=1, DISABLE_AUTOUPDATER, DISABLE_UPDATES and Claude Code's switch for nonessential traffic.
 
-Claude Code's plugin storage keeps your look, the sub-agent model and effort, the update state and whether it asked for a star. No telemetry, account or cookie.
+Claude Code's plugin storage keeps your look, the sub-agent model and effort, the main session's effort, the update state and whether it asked for a star. No telemetry, account or cookie.
 
 ## Hooks
 

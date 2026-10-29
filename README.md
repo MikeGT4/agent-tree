@@ -4,7 +4,7 @@
 
 A side pane for Claude Code that shows a session's agents as a live tree.
 
-Stop a running sub-agent, correct it while it works, switch its model and effort, change the look, watch your 5-hour and weekly limits.
+Set the main session's effort, stop and correct running sub-agents, switch their model and effort, change the look, watch 5-hour and weekly limits.
 
 ![Agent Tree](https://github.com/MikeGT4/agent-tree/releases/download/v0.4.1/agent-tree-opener.gif)
 
