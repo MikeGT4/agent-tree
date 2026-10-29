@@ -114,6 +114,7 @@ let generation = 0
 const delivered = new Set<string>()
 const seen = new Set<string>()
 const starting = new Map<string, string | undefined>()
+const standing = new Map<string, string | number>()
 const INPUT_DOORS: ReadonlySet<string> = new Set(['prompt', 'command', 'delivery', 'note'])
 
 function takeOver($: EngineInterface): Promise<void> {
@@ -544,6 +545,7 @@ export const register: Register = (on, options) => {
     delivered.clear()
     seen.clear()
     starting.clear()
+    standing.clear()
     const result = await next(e)
     if (options.language !== 'de' && options.language !== 'en') {
       lang = resolveLang(options.language, await $.settings.read({ key: 'language' }).catch(() => undefined))
@@ -679,7 +681,9 @@ export const register: Register = (on, options) => {
           : undefined
     const known = agentId ? before?.agents.find(n => n.id === agentId)?.effort : before?.main.effort
     const sent = effort ?? e.effort
-    const shownEffort = carriesInput || typeof sent === 'number' ? sent : known === undefined ? e.effort : undefined
+    const applies = carriesInput || typeof sent === 'number'
+    if (applies && sent !== undefined) standing.set(agentId ?? MAIN, sent)
+    const shownEffort = applies ? sent : known === undefined ? (standing.get(agentId ?? MAIN) ?? e.effort) : undefined
     const changed = model !== undefined || (effort !== undefined && effort !== e.effort)
     const result = yield* next(changed ? { ...e, ...(model ? { model } : {}), ...(effort ? { effort } : {}) } : e)
     const usage = result.usage
