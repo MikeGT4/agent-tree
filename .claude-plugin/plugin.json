@@ -1,7 +1,7 @@
 {
   "name": "agent-tree",
   "displayName": "Agent Tree",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "Terminal side pane that shows a session's agents as a live tree: stop a sub-agent, send it new instructions mid-task, switch its model and effort, change the look.",
   "author": {
     "name": "Mike Pollow, Digitalroots"

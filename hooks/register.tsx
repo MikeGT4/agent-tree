@@ -108,15 +108,16 @@ let stopSentIds = new Set<string>()
 let lastAdvisor = 'opus'
 let advisorCommand = true
 type Carried = { tree: AgentTreeState; look: AgentTreeLook; unread: Record<string, string[]>; sessionId?: string }
-let carried: Carried | undefined
-let handing: Promise<void> | undefined
-let generation = 0
+type Pin = string | undefined
+type Level = string | number
 const delivered = new Set<string>()
 const seen = new Set<string>()
-const starting = new Map<string, string | undefined>()
-const standing = new Map<string, string | number>()
+const starting: Map<string, Pin> = new Map()
+const standing: Map<string, Level> = new Map()
 let spawning = 0
-const INPUT_DOORS = ['prompt', 'command', 'delivery', 'note', 'attachment'] as const
+let generation = 0
+let handing: Promise<void> | undefined
+let carried: Carried | undefined
 
 async function takeOver($: EngineInterface): Promise<void> {
   if (handing) return handing
@@ -862,7 +863,7 @@ export const register: Register = (on, options) => {
     }
   })
 
-  on('session.append', { door: INPUT_DOORS }, async ($, e, next) => {
+  on('session.append', { door: ['prompt', 'command', 'delivery', 'note', 'attachment'] }, async ($, e, next) => {
     const kept = await next(e)
     if (isNewInput(e.door, e.message) && (kept as { deny?: string }).deny === undefined) delivered.add(e.agentId ?? MAIN)
     return kept
