@@ -1,7 +1,7 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import type { AgentTreeState } from '../types'
 import { GROW_TO, bonsaiPlant, brailleChar, dotBit, introPhase, visibleDots } from './bonsai.ts'
-import type { BonsaiForm, Dot, Part, Plant } from './bonsai.ts'
+import type { Dot, Part, Plant } from './bonsai.ts'
 import type { Palette } from './looks.ts'
 import { choicesOf, effortLabel, modelLabel } from './model.ts'
 import { familyOr, wordsFor } from './words.ts'
@@ -16,7 +16,7 @@ const LINE_STEP = 110
 const CELL_RANK: Record<Part, number> = { pot: 1, leaf: 2, wood: 3 }
 
 export type IntroInfo = { model?: string; effort?: string; advisor?: string; subAgents?: string; limits?: string }
-export type IntroLook = { palette: Palette; leaf: string; lang: Lang; info: IntroInfo; seed: number; form: BonsaiForm }
+export type IntroLook = { palette: Palette; leaf: string; lang: Lang; info: IntroInfo; seed: number }
 export type IntroRun = { text: string; part?: Part }
 export type IntroFrame = { rows: IntroRun[][]; title: string; lines: string[] }
 
@@ -79,9 +79,9 @@ export function partColor(part: Part, look: IntroLook): string {
 
 let cachedPlant: { key: string; plant: Plant } | undefined
 
-function plantFor(seed: number, wide: number, high: number, form: BonsaiForm): Plant {
-  const key = `${seed}:${wide}:${high}:${form}`
-  if (!cachedPlant || cachedPlant.key !== key) cachedPlant = { key, plant: bonsaiPlant(seed, wide, high, form) }
+function plantFor(seed: number, wide: number, high: number): Plant {
+  const key = `${seed}:${wide}:${high}`
+  if (!cachedPlant || cachedPlant.key !== key) cachedPlant = { key, plant: bonsaiPlant(seed, wide, high) }
   return cachedPlant.plant
 }
 
@@ -95,7 +95,7 @@ export function introFrame(width: number, height: number | undefined, ms: number
   if (width < INTRO_MIN.cols || total < INTRO_MIN.rows || introPhase(ms) === 'done') return undefined
   const lines = introLines(look.info, wordsFor(look.lang))
   const canvasRows = total - lines.length - 2
-  const rows = introRows(visibleDots(plantFor(look.seed, width * 2, canvasRows * 4, look.form).dots, ms), width, canvasRows)
+  const rows = introRows(visibleDots(plantFor(look.seed, width * 2, canvasRows * 4).dots, ms), width, canvasRows)
   const titleChars = Math.max(0, Math.min(INTRO_TITLE.length, Math.floor((ms - TITLE_FROM) / TITLE_STEP)))
   const shownLines = ms < GROW_TO ? 0 : Math.min(lines.length, Math.floor((ms - GROW_TO) / LINE_STEP) + 1)
   return {

@@ -1,7 +1,7 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import { describe, expect, test } from 'claude-code/testing'
 
-import { BONSAI_FORMS, bonsaiPlant, brailleRows, introPhase, visibleDots } from '../hooks/bonsai.ts'
+import { GROW_TO, INTRO_MS, bonsaiPlant, brailleRows, introPhase, visibleDots } from '../hooks/bonsai.ts'
 import { introFrame, introInfo, introLines, introRows } from '../hooks/intro-model.ts'
 import { PALETTES } from '../hooks/looks.ts'
 import { createTree } from '../hooks/model.ts'
@@ -25,13 +25,12 @@ describe('Bonsai', () => {
     expect(bonsaiPlant(7, 162, 88).dots).not.toEqual(bonsaiPlant(8, 162, 88).dots)
   })
 
-  test('die Pflanze passt ins Raster, in jeder Form und Größe', () => {
-    for (const form of BONSAI_FORMS)
-      for (const [cols, rows] of [[40, 20], [81, 30], [100, 40]] as const) {
-        const { dots } = bonsaiPlant(3, cols * 2, rows * 4, form)
-        expect(dots.length).toBeGreaterThan(50)
-        expect(dots.every(d => d.x >= 0 && d.x < cols * 2 && d.y >= 0 && d.y < rows * 4)).toBe(true)
-      }
+  test('die Pflanze passt ins Raster, in jeder Größe', () => {
+    for (const [cols, rows] of [[40, 20], [81, 30], [100, 40]] as const) {
+      const { dots } = bonsaiPlant(3, cols * 2, rows * 4)
+      expect(dots.length).toBeGreaterThan(50)
+      expect(dots.every(d => d.x >= 0 && d.x < cols * 2 && d.y >= 0 && d.y < rows * 4)).toBe(true)
+    }
   })
 
   test('drei Äste bei kleiner Leiste, drei bis fünf bei großer', () => {
@@ -42,35 +41,21 @@ describe('Bonsai', () => {
     }
   })
 
-  test('der Topf steht ab dem ersten Bild unten, die Kaskade fällt über den Rand', () => {
-    const upright = bonsaiPlant(4, 162, 88, 'upright').dots
-    const lowest = Math.max(...upright.map(d => d.y))
-    expect(upright.filter(d => d.y === lowest).every(d => d.part === 'pot')).toBe(true)
-    expect(upright.filter(d => d.part === 'pot').every(d => d.at === 0)).toBe(true)
-    const cascade = bonsaiPlant(4, 162, 88, 'cascade').dots
-    const potBottom = Math.max(...cascade.filter(d => d.part === 'pot').map(d => d.y))
-    expect(cascade.some(d => d.part === 'wood' && d.y > potBottom)).toBe(true)
-  })
-
-  test('windgepeitscht: das Laub steht auf einer Seite', () => {
-    const dots = bonsaiPlant(9, 162, 88, 'windswept').dots
-    const pot = dots.filter(d => d.part === 'pot')
-    const middle = (Math.min(...pot.map(d => d.x)) + Math.max(...pot.map(d => d.x))) / 2
-    const leaves = dots.filter(d => d.part === 'leaf')
-    const right = leaves.filter(d => d.x > middle).length
-    expect(Math.max(right, leaves.length - right) / leaves.length).toBeGreaterThan(0.8)
+  test('der Topf steht ab dem ersten Bild ganz unten', () => {
+    const dots = bonsaiPlant(4, 162, 88).dots
+    const lowest = Math.max(...dots.map(d => d.y))
+    expect(dots.filter(d => d.y === lowest).every(d => d.part === 'pot')).toBe(true)
+    expect(dots.filter(d => d.part === 'pot').every(d => d.at === 0)).toBe(true)
   })
 
   test('Holz und Laub vorhanden, kein Punkt doppelt, Zeiten von 0 bis 1', () => {
-    for (const form of BONSAI_FORMS) {
-      const { dots } = bonsaiPlant(11, 162, 88, form)
-      expect(dots.some(d => d.part === 'wood') && dots.some(d => d.part === 'leaf')).toBe(true)
-      expect(new Set(dots.map(d => `${d.x},${d.y}`)).size).toBe(dots.length)
-      expect(dots.every(d => d.at >= 0 && d.at <= 1)).toBe(true)
-    }
+    const { dots } = bonsaiPlant(11, 162, 88)
+    expect(dots.some(d => d.part === 'wood') && dots.some(d => d.part === 'leaf')).toBe(true)
+    expect(new Set(dots.map(d => `${d.x},${d.y}`)).size).toBe(dots.length)
+    expect(dots.every(d => d.at >= 0 && d.at <= 1)).toBe(true)
   })
-  test('Phasen nach der Zeit', () => {
-    expect([0, 1100, 1700, 2000].map(introPhase)).toEqual(['grow', 'hold', 'handoff', 'done'])
+  test('Phasen nach der Zeit: wachsen, dann stehen bis zum Ende', () => {
+    expect([0, 1100, 1700, 1999, 2000].map(introPhase)).toEqual(['grow', 'hold', 'hold', 'hold', 'done'])
   })
 
   test('der Topf steht ab dem ersten Bild, die erste Bewegung kommt vor 166 ms', () => {
@@ -92,13 +77,11 @@ describe('Bonsai', () => {
     expect(shown.size).toBe(dots.length)
   })
 
-  test('die Übergabe leert das Bild, der Topf geht zuletzt', () => {
+  test('nach dem Wachsen bleibt der Baum aufrecht stehen, nichts wird abgebaut', () => {
     const { dots } = bonsaiPlant(7, 162, 88)
-    expect(visibleDots(dots, 1700).length).toBe(dots.length)
-    const late = visibleDots(dots, 1999)
-    expect(late.length).toBeLessThan(dots.length)
-    expect(late.every(d => d.part === 'pot')).toBe(true)
-    expect(visibleDots(dots, 2000)).toEqual([])
+    for (let ms = GROW_TO; ms < INTRO_MS; ms += 40) expect(visibleDots(dots, ms)).toEqual(dots)
+    expect(visibleDots(dots, INTRO_MS - 1)).toEqual(dots)
+    expect(visibleDots(dots, INTRO_MS)).toEqual(dots)
   })
   test('Zeilen des Intros: Braille in voller Breite, Teile je Zelle, neu gerechnet für eine kleinere Leiste', () => {
     const big = bonsaiPlant(7, 162, 88)
@@ -123,17 +106,16 @@ describe('Bonsai', () => {
     expect(introLines({}, WORDS.en)).toEqual([])
   })
   test('die Pflanze wird nie beschnitten und füllt die ganze Wachstumszeit', () => {
-    for (const form of BONSAI_FORMS)
-      for (const [wide, high] of [[162, 88], [80, 32], [280, 32], [80, 800], [400, 120]] as const)
-        for (let seed = 1; seed <= 12; seed++) {
-          const plant = bonsaiPlant(seed, wide, high, form)
-          expect(plant.clipped).toBe(0)
-          expect(Math.max(...plant.dots.map(d => d.at))).toBe(1)
-        }
+    for (const [wide, high] of [[162, 88], [80, 32], [280, 32], [80, 800], [400, 120]] as const)
+      for (let seed = 1; seed <= 12; seed++) {
+        const plant = bonsaiPlant(seed, wide, high)
+        expect(plant.clipped).toBe(0)
+        expect(Math.max(...plant.dots.map(d => d.at))).toBe(1)
+      }
   })
 
   test('Startzeilen und Titel passen in die Breite', () => {
-    const look = { palette: PALETTES.original, leaf: PALETTES.original.done, lang: 'de' as const, seed: 3, form: 'upright' as const, info: { limits: '5 h 35 % · Woche 8 % · Budget 12 %', subAgents: 'Sonnet · XHigh' } }
+    const look = { palette: PALETTES.original, leaf: PALETTES.original.done, lang: 'de' as const, seed: 3, info: { limits: '5 h 35 % · Woche 8 % · Budget 12 %', subAgents: 'Sonnet · XHigh' } }
     const frame = introFrame(40, 20, 1600, look)
     expect(frame).toBeDefined()
     expect([frame?.title ?? '', ...(frame?.lines ?? [])].every(line => [...line].length <= 40)).toBe(true)

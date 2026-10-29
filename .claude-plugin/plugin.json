@@ -53,11 +53,10 @@
       "default": "auto"
     },
     "intro": {
-      "type": "string",
+      "type": "boolean",
       "title": "Start intro",
       "description": "A bonsai grows in the pane when a session starts; click or type to skip",
-      "options": ["upright", "cascade", "windswept", "off"],
-      "default": "upright"
+      "default": true
     },
     "autoUpdate": {
       "type": "boolean",

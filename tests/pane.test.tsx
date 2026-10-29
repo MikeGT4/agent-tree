@@ -147,7 +147,7 @@ const pane = (bodyColumns: number, bodyRows = 60) =>
     },
   }) as const
 
-const de = { options: { language: 'de', intro: 'off' } }
+const de = { options: { language: 'de', intro: false } }
 
 async function screen(ui: { drawn: () => Promise<unknown> }): Promise<string> {
   return JSON.stringify(await ui.drawn())
@@ -691,7 +691,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('die Limits auf Englisch', { options: { language: 'en', intro: 'off' } }, async ($, on) => {
+  test('die Limits auf Englisch', { options: { language: 'en', intro: false } }, async ($, on) => {
     engine(on)
     await startSession($)
     await measureLimits($, limitWindows)
@@ -744,7 +744,7 @@ describe('Agent Tree', () => {
     expect(seen.toasts.filter(t => /gespeicherte Wahl/.test(t))).toHaveLength(1)
   })
 
-  const introOn = { options: { language: 'de', intro: 'upright' } }
+  const introOn = { options: { language: 'de', intro: true } }
   const plantDots = /[⠁-⣿]/
   const introStart = async ($: Engine, on: On, saved: Record<string, unknown> = {}) => {
     const clock = mock.clock(on, { now: 1_000_000 })
@@ -784,7 +784,9 @@ describe('Agent Tree', () => {
     const ui = await $.ui.mount(pane(90))
     await clock.advance(1200)
     await ui.redraw()
-    expect(await screen(ui)).toMatch(/AGENT TREE/)
+    const shown = await screen(ui)
+    expect(shown).toMatch(plantDots)
+    expect(shown).not.toMatch(/Sitzungsprotokoll/)
     await ui.unmount()
   })
 
@@ -805,7 +807,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('ohne Bewegung kein Intro', { options: { language: 'de', intro: 'upright', animate: false } }, async ($, on) => {
+  test('ohne Bewegung kein Intro', { options: { language: 'de', intro: true, animate: false } }, async ($, on) => {
     await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(90))
@@ -886,38 +888,57 @@ describe('Agent Tree', () => {
   const runCommand = ($: Engine, args: string) =>
     $.command.run({ command: 'agent-tree', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
 
-  test('/agent-tree intro spielt das Intro in der gewählten Form', de, async ($, on) => {
+  const brailleCount = (text: string) => [...text].filter(c => c >= '⠁' && c <= '⣿').length
+
+  test('/agent-tree intro spielt das Intro, auch bei ausgeschalteter Option', de, async ($, on) => {
     const { clock } = await introStart($, on)
     await startSession($)
-    expect((await runCommand($, 'intro cascade')).text).toMatch(/Kaskade/)
+    expect((await runCommand($, 'intro')).text).toMatch(/Intro läuft/)
     const ui = await $.ui.mount(pane(90))
     await clock.advance(1200)
     await ui.redraw()
-    expect(await screen(ui)).toMatch(/AGENT TREE/)
+    expect(await screen(ui)).toMatch(plantDots)
+    expect(await screen(ui)).not.toMatch(/Sitzungsprotokoll/)
     await clock.advance(1000)
     await ui.redraw()
     expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
     await ui.unmount()
   })
 
-  test('/agent-tree intro mit unbekannter Form nennt die gültigen', de, async ($, on) => {
+  test('/agent-tree intro mit Zusatz gibt es nicht und spielt nichts', de, async ($, on) => {
     await introStart($, on)
     await startSession($)
-    expect((await runCommand($, 'intro palme')).text).toMatch(/aufrecht, Kaskade, windgepeitscht/)
+    const answer = (await runCommand($, 'intro kaskade')).text
+    expect(answer).toMatch(/gibt es nicht/)
+    expect(answer).toMatch(/intro,/)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
   })
 
-  test('/agent-tree intro versteht die deutschen Namen', de, async ($, on) => {
-    await introStart($, on)
-    await startSession($)
-    expect((await runCommand($, 'intro kaskade')).text).toMatch(/Kaskade/)
-  })
-
-  const brailleCount = (text: string) => [...text].filter(c => c >= '⠁' && c <= '⣿').length
-
-  test('das Intro zeichnet sich von selbst neu, auch ohne Bewegung', { options: { language: 'de', intro: 'off', animate: false } }, async ($, on) => {
+  test('am Ende bleibt der Bonsai aufrecht stehen, bis die Leiste übernimmt', introOn, async ($, on) => {
     const { clock } = await introStart($, on)
     await startSession($)
-    await runCommand($, 'intro upright')
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(1100)
+    await ui.redraw()
+    const grown = brailleCount(await screen(ui))
+    expect(grown).toBeGreaterThan(50)
+    for (let ms = 1100; ms < 1960; ms += 40) {
+      await clock.advance(40)
+      await ui.redraw()
+      expect(brailleCount(await screen(ui))).toBe(grown)
+    }
+    await clock.advance(100)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('das Intro zeichnet sich von selbst neu, auch ohne Bewegung', { options: { language: 'de', intro: false, animate: false } }, async ($, on) => {
+    const { clock } = await introStart($, on)
+    await startSession($)
+    await runCommand($, 'intro')
     const ui = await $.ui.mount(pane(90))
     const first = brailleCount(await screen(ui))
     for (let i = 0; i < 15; i++) await clock.advance(40)
@@ -934,7 +955,7 @@ describe('Agent Tree', () => {
     )
     await startSession($)
     for (const [cols, rows] of [[90, 14], [90, 20], [40, 20]] as const) {
-      await runCommand($, 'intro upright')
+      await runCommand($, 'intro')
       const ui = await $.ui.mount(pane(cols, rows))
       await clock.advance(1500)
       await ui.redraw()
@@ -974,7 +995,7 @@ describe('Agent Tree', () => {
     await startSession($)
     const ui = await $.ui.mount(pane(90))
     await clock.advance(1200)
-    await runCommand($, 'intro windswept')
+    await runCommand($, 'intro')
     await clock.advance(40)
     await ui.redraw()
     expect(await screen(ui)).not.toMatch(/AGENT TREE/)
@@ -1033,7 +1054,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('englische Beschriftung, wenn die Sprache Englisch ist', { options: { language: 'en', intro: 'off' } }, async ($, on) => {
+  test('englische Beschriftung, wenn die Sprache Englisch ist', { options: { language: 'en', intro: false } }, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))

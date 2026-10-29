@@ -79,9 +79,7 @@ export type Words = {
   introAdvisor: (advisor: string) => string
   introSubAgents: (choice: string) => string
   introLimits: (limits: string) => string
-  introForm: Record<string, string>
-  introPlaying: (form: string) => string
-  introUnknown: (name: string, choices: string) => string
+  introPlaying: string
   send: string
   correctionFrame: (text: string, tool: string) => string
   mainNote: (agent: string, text: string) => string
@@ -209,9 +207,7 @@ export const WORDS: Record<Lang, Words> = {
     introAdvisor: advisor => `Berater ${advisor}`,
     introSubAgents: choice => `Unteragenten ${choice}`,
     introLimits: limits => `Limits ${limits}`,
-    introForm: { upright: 'aufrecht', cascade: 'Kaskade', windswept: 'windgepeitscht' },
-    introPlaying: form => `Intro läuft: ${form}`,
-    introUnknown: (name, choices) => `Unbekannte Form „${name}“, möglich: ${choices}`,
+    introPlaying: 'Intro läuft',
     send: 'senden',
     correctionFrame: (text, tool) =>
       `Nachricht des Nutzers über Agent Tree: ${text}\n\nSie gilt ab jetzt für deinen Auftrag. Berücksichtige sie bei der weiteren Arbeit und in deinem Bericht über ${tool}.`,
@@ -243,8 +239,8 @@ export const WORDS: Record<Lang, Words> = {
     lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
     lookUnknown: (name, row, options) => `Agent Tree: ${name ? `„${name}“ gibt es nicht. ` : ''}${row}: ${options}`,
     commandDescription: 'Agentenbaum der Sitzung als Kästen (stop, clear, intro, stil, farben, licht)',
-    commandHint: '[stop|clear|intro [form]|stil <name>|farben <name>|licht <name>|aussehen zurück]',
-    commandUnknown: arg => `Agent Tree: „${arg}“ gibt es nicht. Möglich: stop, clear, intro [Form], stil <Name>, farben <Name>, licht <Name>, aussehen zurück`,
+    commandHint: '[stop|clear|intro|stil <name>|farben <name>|licht <name>|aussehen zurück]',
+    commandUnknown: arg => `Agent Tree: „${arg}“ gibt es nicht. Möglich: stop, clear, intro, stil <Name>, farben <Name>, licht <Name>, aussehen zurück`,
     lookResetDone: 'Agent Tree · Aussehen zurück auf Standard',
     opened: n => `Agent Tree geöffnet · ${n} ${n === 1 ? 'Agent' : 'Agenten'} bisher · /agent-tree stop schließt`,
     closedText: 'Agent Tree geschlossen',
@@ -345,9 +341,7 @@ export const WORDS: Record<Lang, Words> = {
     introAdvisor: advisor => `advisor ${advisor}`,
     introSubAgents: choice => `sub-agents ${choice}`,
     introLimits: limits => `limits ${limits}`,
-    introForm: { upright: 'upright', cascade: 'cascade', windswept: 'windswept' },
-    introPlaying: form => `Intro playing: ${form}`,
-    introUnknown: (name, choices) => `Unknown form "${name}", choose ${choices}`,
+    introPlaying: 'Intro playing',
     send: 'send',
     correctionFrame: (text, tool) =>
       `Message from the user via Agent Tree: ${text}\n\nIt applies to your task from now on. Take it into account in your remaining work and in your report via ${tool}.`,
@@ -378,8 +372,8 @@ export const WORDS: Record<Lang, Words> = {
     lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
     lookUnknown: (name, row, options) => `Agent Tree: ${name ? `"${name}" is not a choice. ` : ''}${row}: ${options}`,
     commandDescription: "The session's agent tree as boxes (stop, clear, intro, style, colors, glow)",
-    commandHint: '[stop|clear|intro [form]|style <name>|colors <name>|glow <name>|look reset]',
-    commandUnknown: arg => `Agent Tree: "${arg}" is not a command. Try: stop, clear, intro [form], style <name>, colors <name>, glow <name>, look reset`,
+    commandHint: '[stop|clear|intro|style <name>|colors <name>|glow <name>|look reset]',
+    commandUnknown: arg => `Agent Tree: "${arg}" is not a command. Try: stop, clear, intro, style <name>, colors <name>, glow <name>, look reset`,
     lookResetDone: 'Agent Tree · look back to default',
     opened: n => `Agent Tree opened · ${n} ${n === 1 ? 'agent' : 'agents'} so far · /agent-tree stop closes`,
     closedText: 'Agent Tree closed',
@@ -425,13 +419,6 @@ const fold = (text: string) => text.toLowerCase().replaceAll('ß', 'ss')
 
 export function lookOptionLabel(w: Words, row: LookRow, id: string): string {
   return (w.lookOption[row] as Record<string, string>)[id] ?? id
-}
-
-export function introFormFrom(name: string): string | undefined {
-  const wanted = fold(name)
-  return Object.keys(WORDS.en.introForm).find(id =>
-    [id, WORDS.de.introForm[id] ?? '', WORDS.en.introForm[id] ?? ''].some(label => fold(label) === wanted),
-  )
 }
 
 export function lookChoice(word: string, name: string): { row: LookRow; id?: string } | undefined {

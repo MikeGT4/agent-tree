@@ -28,8 +28,6 @@ export function brailleRows(cols: number, rows: number, dots: Iterable<readonly 
 
 export type Part = 'pot' | 'wood' | 'leaf'
 export type Dot = { x: number; y: number; at: number; part: Part }
-export type BonsaiForm = 'upright' | 'cascade' | 'windswept'
-export const BONSAI_FORMS: readonly BonsaiForm[] = ['upright', 'cascade', 'windswept']
 export type Plant = { dots: Dot[]; branches: number; clipped: number }
 
 type Point = { x: number; y: number }
@@ -44,6 +42,8 @@ const BAYER = [
 ]
 const FIT_TRIES = 6
 const FIT_SHRINK = 0.88
+const BRANCH_FROM = 0.32
+const BRANCH_TO = 0.9
 
 function mulberry32(seed: number): () => number {
   let state = seed >>> 0
@@ -111,13 +111,13 @@ function sketch(wide: number, high: number) {
         for (let dx = -reach; dx <= reach; dx++) if (dx * dx + dy * dy <= radius * radius + 0.25) put(p.x + dx, p.y + dy, when, 'wood')
     }
   }
-  const pad = (rand: () => number, center: Point, width: number, at: number, stretch: number) => {
+  const pad = (rand: () => number, center: Point, width: number, at: number) => {
     const height = width * (0.45 + 0.15 * rand())
     const count = 3 + Math.floor(rand() * 3)
     const lobes = Array.from({ length: count }, (_, j) => ({
-      x: center.x + (count === 1 ? 0 : (j / (count - 1) - 0.5) * width * 0.6 * stretch) + (rand() - 0.5) * width * 0.1,
+      x: center.x + (count === 1 ? 0 : (j / (count - 1) - 0.5) * width * 0.6) + (rand() - 0.5) * width * 0.1,
       y: center.y + (rand() - 0.5) * height * 0.3,
-      rx: width * (0.22 + 0.1 * rand()) * stretch,
+      rx: width * (0.22 + 0.1 * rand()),
       ry: height * (0.4 + 0.15 * rand()),
     }))
     const inside = (x: number, y: number) => lobes.some(l => ((x - l.x) / l.rx) ** 2 + ((y - l.y) / l.ry) ** 2 <= 1)
@@ -154,58 +154,51 @@ function sketch(wide: number, high: number) {
   return { put, stroke, pad, pot, cells, outside: () => outside }
 }
 
-function growPlant(seed: number, wide: number, high: number, form: BonsaiForm, size: number) {
+function growPlant(seed: number, wide: number, high: number, size: number) {
   const rand = mulberry32(seed)
   const between = (lo: number, hi: number) => lo + (hi - lo) * rand()
   const canvas = sketch(wide, high)
   const side = rand() < 0.5 ? -1 : 1
   const potWidth = between(0.45, 0.6) * size
   const potHeight = Math.max(3, between(0.08, 0.12) * size)
-  const trunkBase = form === 'upright' ? Math.min(12, Math.max(4, Math.round(size / 10))) : Math.min(9, Math.max(3, Math.round(size / 14)))
-  const centerX = form === 'cascade' ? wide / 2 - side * 0.2 * size : form === 'windswept' ? wide / 2 - side * 0.15 * size : wide / 2
-  const potTop = form === 'cascade' ? Math.round(high * 0.42) : Math.round(high - 2 - potHeight)
+  const trunkBase = Math.min(12, Math.max(4, Math.round(size / 10)))
+  const centerX = wide / 2
+  const potTop = Math.round(high - 2 - potHeight)
   canvas.pot(centerX, potTop, potWidth, potHeight)
   const base = { x: centerX, y: potTop - 1 }
-  const height = (form === 'windswept' ? between(0.48, 0.56) : between(0.5, 0.62)) * size
+  const height = between(0.5, 0.62) * size
   const sway = between(0.12, 0.2) * size * side
-  const trunk =
-    form === 'cascade'
-      ? cubic(base, { x: centerX, y: potTop - 0.3 * size }, { x: centerX + side * 0.5 * size, y: potTop - 0.32 * size }, { x: centerX + side * 0.55 * size, y: potTop + 0.48 * size })
-      : form === 'windswept'
-        ? cubic(base, { x: centerX + side * 0.04 * size, y: potTop - height * 0.4 }, { x: centerX + side * 0.34 * size, y: potTop - height * 0.55 }, { x: centerX + side * 0.55 * size, y: potTop - height * 0.82 })
-        : cubic(base, { x: centerX + sway, y: potTop - height * 0.35 }, { x: centerX - sway * 0.8, y: potTop - height * 0.7 }, { x: centerX + sway * 0.3, y: potTop - height })
+  const trunk = cubic(base, { x: centerX + sway, y: potTop - height * 0.35 }, { x: centerX - sway * 0.8, y: potTop - height * 0.7 }, { x: centerX + sway * 0.3, y: potTop - height })
   const trunkAt = (t: number) => 0.08 + 0.37 * t
   const trunkWidth = (t: number) => trunkBase + (trunkBase / 3 - trunkBase) * t
   canvas.stroke(trunk, trunkBase, trunkBase / 3, 0.08, 0.37)
   const count = size < 60 ? 3 : 3 + Math.floor(rand() * 3)
-  const [from, to] = form === 'cascade' ? [0.4, 0.95] : [0.32, 0.9]
-  let length = between(0.32, 0.45) * size * (form === 'cascade' ? 0.6 : 1)
-  const padWidth = (form === 'upright' ? 0.19 : form === 'windswept' ? 0.17 : 0.15) * size
+  let length = between(0.32, 0.45) * size
+  const padWidth = 0.19 * size
   for (let i = 0; i < count; i++) {
-    const t = from + ((to - from) * (i + between(0.2, 0.8))) / count
+    const t = BRANCH_FROM + ((BRANCH_TO - BRANCH_FROM) * (i + between(0.2, 0.8))) / count
     const anchor = trunk(t)
-    const towards = form === 'windswept' ? side : i % 2 === 0 ? -side : side
-    const rise = form === 'windswept' ? between(0.02, 0.18) : form === 'cascade' ? between(-0.3, 0.1) : between(0.15, 0.45)
+    const towards = i % 2 === 0 ? -side : side
+    const rise = between(0.15, 0.45)
     const norm = Math.hypot(1, rise)
     const end = { x: anchor.x + (towards * length) / norm, y: anchor.y - (rise * length) / norm }
     const bend = { x: (anchor.x + end.x) / 2, y: (anchor.y + end.y) / 2 - length * between(0.08, 0.18) }
     const start = trunkAt(t) + 0.02
     const duration = between(0.15, 0.25)
     canvas.stroke(quadratic(anchor, bend, end), Math.max(2, trunkWidth(t) * 0.55), 1, start, duration)
-    canvas.pad(rand, { x: end.x + towards * padWidth * 0.15, y: end.y - padWidth * 0.2 }, padWidth * between(0.85, 1.15), start + duration - 0.03, form === 'windswept' ? 1.35 : 1)
+    canvas.pad(rand, { x: end.x + towards * padWidth * 0.15, y: end.y - padWidth * 0.2 }, padWidth * between(0.85, 1.15), start + duration - 0.03)
     length *= between(0.75, 0.85)
   }
-  const crown = form === 'cascade' ? trunk(0.3) : trunk(1)
-  canvas.pad(rand, { x: crown.x, y: crown.y - padWidth * 0.25 }, padWidth * 1.3, 0.42, form === 'windswept' ? 1.35 : 1)
-  if (form === 'cascade') canvas.pad(rand, trunk(1), padWidth * 0.9, 0.42, 1)
+  const crown = trunk(1)
+  canvas.pad(rand, { x: crown.x, y: crown.y - padWidth * 0.25 }, padWidth * 1.3, 0.42)
   return { canvas, branches: count }
 }
 
-export function bonsaiPlant(seed: number, dotsWide: number, dotsHigh: number, form: BonsaiForm = 'upright'): Plant {
+export function bonsaiPlant(seed: number, dotsWide: number, dotsHigh: number): Plant {
   const fullSize = Math.min(0.9 * dotsHigh, 0.65 * dotsWide)
-  let grown = growPlant(seed, dotsWide, dotsHigh, form, fullSize)
+  let grown = growPlant(seed, dotsWide, dotsHigh, fullSize)
   for (let attempt = 1; attempt < FIT_TRIES && grown.canvas.outside() > 0; attempt++)
-    grown = growPlant(seed, dotsWide, dotsHigh, form, fullSize * FIT_SHRINK ** attempt)
+    grown = growPlant(seed, dotsWide, dotsHigh, fullSize * FIT_SHRINK ** attempt)
   const dots = [...grown.canvas.cells.values()]
   const latest = dots.reduce((most, d) => Math.max(most, d.at), 0)
   return {
@@ -218,19 +211,13 @@ export function bonsaiPlant(seed: number, dotsWide: number, dotsHigh: number, fo
 export const INTRO_MS = 2000
 export const GROW_FROM = 0
 export const GROW_TO = 1000
-export const HOLD_TO = 1700
-export type IntroPhase = 'grow' | 'hold' | 'handoff' | 'done'
+export type IntroPhase = 'grow' | 'hold' | 'done'
 
 export function introPhase(ms: number): IntroPhase {
-  return ms >= INTRO_MS ? 'done' : ms >= HOLD_TO ? 'handoff' : ms >= GROW_TO ? 'hold' : 'grow'
+  return ms >= INTRO_MS ? 'done' : ms >= GROW_TO ? 'hold' : 'grow'
 }
 
 export function visibleDots(dots: readonly Dot[], ms: number): Dot[] {
-  const phase = introPhase(ms)
-  if (phase === 'done') return []
-  const limit =
-    phase === 'handoff'
-      ? 1 - ((ms - HOLD_TO) / (INTRO_MS - HOLD_TO)) ** 2
-      : Math.min(1, Math.max(0, (ms - GROW_FROM) / (GROW_TO - GROW_FROM)))
+  const limit = Math.min(1, Math.max(0, (ms - GROW_FROM) / (GROW_TO - GROW_FROM)))
   return dots.filter(d => d.at <= limit)
 }

@@ -3,8 +3,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentTreeState } from '../types'
-import { BONSAI_FORMS, INTRO_MS } from './bonsai.ts'
-import type { BonsaiForm } from './bonsai.ts'
+import { INTRO_MS } from './bonsai.ts'
 import { drawIntro } from './intro.tsx'
 import { introInfo } from './intro-model.ts'
 import type { IntroInfo } from './intro-model.ts'
@@ -61,7 +60,7 @@ import {
 } from './model.ts'
 import { drawTree, inputKey, pressKey, statusText } from './view.tsx'
 import type { TreeActions } from './view.tsx'
-import { familyOr, introFormFrom, lookChoice, lookOptionLabel, resolveLang, wordsFor } from './words.ts'
+import { familyOr, lookChoice, lookOptionLabel, resolveLang, wordsFor } from './words.ts'
 import type { Lang } from './words.ts'
 
 const PANE = 'agent-tree'
@@ -87,7 +86,7 @@ const appearance = atom({ plugin: 'agent-tree', key: 'look' } as const, DEFAULT_
 const unreadTexts = atom({ plugin: 'agent-tree', key: 'unread' } as const, {} as Record<string, string[]>)
 
 let ticker: Timer | undefined
-let introForm: BonsaiForm | undefined
+let introOn = true
 let introTicker: Timer | undefined
 let introOpenedAt: number | undefined
 let introStartedAt: number | undefined
@@ -149,7 +148,7 @@ async function introTick($: EngineInterface, run: number): Promise<void> {
 async function maybeStartIntro($: EngineInterface, interactive: boolean): Promise<void> {
   if (await read($, introDone)) return
   await update($, introDone, () => true)
-  if (!introForm || !animate || !interactive) return
+  if (!introOn || !animate || !interactive) return
   if ((await $.settings.read({ key: 'prefersReducedMotion' }).catch(() => undefined)) === true) return
   if ((await read($, tree)).agents.length > 0) return
   const model = await $.session.model().catch(() => undefined)
@@ -157,10 +156,9 @@ async function maybeStartIntro($: EngineInterface, interactive: boolean): Promis
   startIntro($, await clock($))
 }
 
-async function replayIntro($: EngineInterface, form: BonsaiForm): Promise<void> {
+async function replayIntro($: EngineInterface): Promise<void> {
   introTicker?.cancel()
   introTicker = undefined
-  introForm = form
   startIntro($, await clock($))
 }
 
@@ -444,7 +442,7 @@ export const register: Register = (on, options) => {
   const keep = agentLimit(options.maxAgents)
   const openOnStart = options.openOnStart === true
   animate = options.animate !== false
-  introForm = BONSAI_FORMS.find(form => form === options.intro)
+  introOn = options.intro !== false
   lang = resolveLang(options.language, undefined)
 
   on('session.start', async ($, e, next) => {
@@ -497,13 +495,10 @@ export const register: Register = (on, options) => {
       await resetLook($)
       return { text: w.lookResetDone }
     }
-    if (word === 'intro') {
-      const id = names.length ? introFormFrom(names.join(' ')) : (introForm ?? 'upright')
-      const form = BONSAI_FORMS.find(f => f === id)
-      if (!form) return { text: w.introUnknown(names.join(' '), BONSAI_FORMS.map(f => w.introForm[f] ?? f).join(', ')) }
-      await replayIntro($, form)
+    if (arg === 'intro') {
+      await replayIntro($)
       await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
-      return { text: w.introPlaying(w.introForm[form] ?? form) }
+      return { text: w.introPlaying }
     }
     const now = await clock($)
     if (arg === 'clear') {
@@ -693,7 +688,7 @@ export const register: Register = (on, options) => {
     const s = await read($, tree)
     const tick = animate ? await read($, frame) : 0
     const now = await clock($)
-    if (introTicker && introForm) {
+    if (introTicker) {
       await read($, frame)
       introStartedAt ??= now
       introShown ??= introInfo(s, wordsFor(lang), introModelSetting)
@@ -705,7 +700,7 @@ export const register: Register = (on, options) => {
         e.props.bodyColumns,
         e.props.placement === 'inline' ? Math.min(rows ?? INTRO_INLINE_ROWS, INTRO_INLINE_ROWS) : rows,
         now - introStartedAt,
-        { palette, leaf: palette.done, lang, info: introShown, seed: introSeed, form: introForm },
+        { palette, leaf: palette.done, lang, info: introShown, seed: introSeed },
         () => void endIntro($).catch(() => undefined),
       )
       if (intro) return intro
