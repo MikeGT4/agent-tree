@@ -36,7 +36,7 @@ export function drawIntro(ui: IntroUi, width: number, height: number | undefined
           {line || ' '}
         </Text>
       ))}
-      <Box key="intro-skip-row" flexDirection="column" alignItems="center" width={width}>
+      <Box key="intro-skip-row" flexDirection="row" justifyContent="center" width={width}>
         <Button key="intro:skip" plain dimColor label={frame.skip} onPress={onSkip} />
       </Box>
     </Box>
