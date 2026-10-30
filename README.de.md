@@ -6,7 +6,7 @@ Seitenleiste für Claude Code, die die Agenten einer Sitzung als lebenden Baum z
 
 Die Denkstufe der Hauptsitzung einstellen, laufende Unteragenten stoppen und korrigieren, ihr Modell und ihre Denkstufe wechseln, das Aussehen ändern, 5-Stunden- und Wochenlimit im Blick behalten.
 
-![Agent Tree](https://github.com/MikeGT4/agent-tree/releases/download/v0.4.1/agent-tree-opener.gif)
+![Agent-Tree-Leiste mit Agenten-Kästen](https://github.com/MikeGT4/agent-tree/releases/download/v0.5.4/readme-agent-tree.gif)
 
 ## Installation
 
@@ -20,7 +20,7 @@ Danach Claude Code starten, die Leiste öffnet sich von selbst.
 
 In einer laufenden Sitzung: `/plugin install agent-tree --marketplace MikeGT4/agent-tree`
 
-Braucht Claude Code 2.1.292 oder neuer, getestet mit 2.1.312.
+Braucht Claude Code 2.1.292 oder neuer, getestet mit 2.1.314.
 
 ## Was es ausführt
 
