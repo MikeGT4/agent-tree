@@ -6,7 +6,7 @@ A side pane for Claude Code that shows a session's agents as a live tree.
 
 Set the main session's effort, stop and correct running sub-agents, switch their model and effort, change the look, watch 5-hour and weekly limits.
 
-<img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.5.4/readme-agent-tree-3.gif" width="560" alt="Agent Tree pane with sub-agent boxes">
+<img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.5.4/readme-agent-tree-4.gif" width="560" alt="Agent Tree pane with sub-agent boxes">
 
 ## Install
 
