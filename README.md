@@ -6,11 +6,11 @@ A side pane for Claude Code that shows a session's agents as a live tree.
 
 Set the main session's effort, stop and correct running sub-agents, switch their model and effort, change the look, watch 5-hour and weekly limits.
 
-![Agent Tree pane with sub-agent boxes](https://github.com/MikeGT4/agent-tree/releases/download/v0.5.4/readme-agent-tree.gif)
+<img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.5.4/readme-agent-tree-2.gif" width="560" alt="Agent Tree pane with sub-agent boxes">
 
 ## Install
 
-In your terminal (not inside Claude Code):
+In your terminal:
 
 ```bash
 claude plugin install agent-tree --marketplace MikeGT4/agent-tree
@@ -20,7 +20,7 @@ Then start Claude Code; the pane opens.
 
 Inside a session: `/plugin install agent-tree --marketplace MikeGT4/agent-tree`
 
-Needs Claude Code 2.1.292 or later, tested with 2.1.314.
+Needs Claude Code 2.1.292 or later, tested with 2.1.316.
 
 ## What it runs
 
