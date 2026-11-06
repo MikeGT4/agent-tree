@@ -831,8 +831,8 @@ describe('Aussehen', () => {
   })
 
   test('die Hilfezeile zeigt nur ganze Einträge, die wichtigsten zuerst', () => {
-    expect(helpLine(WORDS.de.help, 77)).toBe('ctrl+x tab: Leiste · Typ: Details · ■: stoppen · m: Modell · a: Aussehen')
-    expect(helpLine(WORDS.en.help, 77)).toBe('ctrl+x tab: pane · type: details · ■: stop · m: model · a: look · Tab: move')
+    expect(helpLine(WORDS.de.help, 77)).toBe('ctrl+x tab: Leiste · Kasten: wählen · s: stoppen · e: Denkstufe · m: Modell')
+    expect(helpLine(WORDS.en.help, 77)).toBe('ctrl+x tab: pane · box: select · s: stop · e: effort · m: model · a: look')
     expect(helpLine(WORDS.de.help, 30)).toBe('ctrl+x tab: Leiste')
     expect(helpLine(WORDS.de.help, 10)).toBe('ctrl+x tab: Leiste')
   })
