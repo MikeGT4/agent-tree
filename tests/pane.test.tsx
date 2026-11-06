@@ -6,6 +6,7 @@ import type { On } from 'claude-code'
 import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES } from '../hooks/looks.ts'
 import { LOGO_COLORS, LOGO_EMPTY, LOGO_FLASH } from '../hooks/logo.ts'
 import { createTree } from '../hooks/model.ts'
+import type { AgentTreeState } from '../types'
 
 const usage = { input_tokens: 2000, output_tokens: 40, cache_read_input_tokens: 30000, cache_creation_input_tokens: 0 }
 const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<string, string>)[model] ?? model
@@ -105,9 +106,12 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
     const real = await next(e)
     return refuse.clearResets && newSession && key && !written.has(key) ? ({ value: { value: undefined, version: 0 } } as never) : real
   })
+  let lastTree = createTree(0)
   on('state.set', async (_, e, next) => {
     const key = ownKey(e)
     if (key && newSession) written.add(key)
+    const held = (e as { value?: { shape?: string; value?: AgentTreeState } }).value
+    if (key === 'tree' && held?.value) lastTree = held.shape !== undefined ? held.value : (held as AgentTreeState)
     return next(e)
   })
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
@@ -147,7 +151,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   const storeGetFails = () => {
     storeBroken = true
   }
-  return { status, spawnModels, stepModels, stepEfforts, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts, storeGetFails, sessionReplaced }
+  return { status, spawnModels, stepModels, stepEfforts, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts, storeGetFails, sessionReplaced, tree: () => lastTree }
 }
 
 async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[]; noEffort?: boolean } = {}) {
@@ -2793,3 +2797,63 @@ describe('Wahlen und Stopps laufender Agenten über /clear', () => {
   })
 })
 
+
+async function twoAgents($: Engine) {
+  await startSession($)
+  await $.turn.start({ text: 'Bau das', turnId: 't1' })
+  await step($)
+  await $.agent.spawn({ prompt: 'A', description: 'Agent A', subagentType: 'general-purpose' } as never)
+  await $.agent.spawn({ prompt: 'B', description: 'Agent B', subagentType: 'general-purpose' } as never)
+  await step($, { agentId: 'sub-1' })
+  await step($, { agentId: 'sub-2' })
+}
+
+const clashOf = (s: AgentTreeState, id: string) => s.agents.find(n => n.id === id)?.clash
+
+describe('Gleiche Datei', () => {
+  test('gleicher Name in zwei Ordnern warnt nicht', de, async ($, on) => {
+    const { tree } = engine(on)
+    await twoAgents($)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/index.ts', agentId: 'sub-1' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/test/index.ts', agentId: 'sub-2' } as never)
+    const s = tree()
+    expect([clashOf(s, 'sub-1'), clashOf(s, 'sub-2')]).toEqual([undefined, undefined])
+  })
+
+  test('dieselbe Datei warnt beide laufenden Agenten', de, async ($, on) => {
+    const { tree } = engine(on)
+    await twoAgents($)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/api.ts', agentId: 'sub-1' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/api.ts', agentId: 'sub-2' } as never)
+    const s = tree()
+    expect(clashOf(s, 'sub-1')).toEqual({ file: 'api.ts', with: 'sub-2' })
+    expect(clashOf(s, 'sub-2')).toEqual({ file: 'api.ts', with: 'sub-1' })
+  })
+
+  test('Hauptsitzung und Agent an derselben Datei', de, async ($, on) => {
+    const { tree } = engine(on)
+    await twoAgents($)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/api.ts' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/api.ts', agentId: 'sub-1' } as never)
+    expect(clashOf(tree(), 'sub-1')).toEqual({ file: 'api.ts', with: 'main' })
+  })
+
+  test('endet einer, verschwindet die Warnung beim anderen', de, async ($, on) => {
+    const { tree } = engine(on)
+    await twoAgents($)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/api.ts', agentId: 'sub-1' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/api.ts', agentId: 'sub-2' } as never)
+    await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-2', reason: 'answer' })
+    expect(clashOf(tree(), 'sub-1')).toBeUndefined()
+  })
+
+  test('kein Pfad im Zustand', de, async ($, on) => {
+    const { tree } = engine(on)
+    await twoAgents($)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/geheim/api.ts', agentId: 'sub-1' } as never)
+    await $.tool.call({ tool: 'Read', file_path: '/p/geheim/b.ts', agentId: 'sub-2' } as never)
+    const text = JSON.stringify(tree())
+    expect(text).toContain('api.ts')
+    expect(text.includes('geheim')).toBe(false)
+  })
+})

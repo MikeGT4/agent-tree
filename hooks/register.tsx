@@ -17,6 +17,8 @@ import {
   agentByPrefix,
   choicesOf,
   chosen,
+  clashed,
+  clashesCleared,
   closed,
   completed,
   correctionFailed,
@@ -34,12 +36,15 @@ import {
   effortLabel,
   freshTree,
   familyFrom,
+  fileNameOf,
   isStopping,
   lookOpened,
   limitsFrom,
   MAIN,
   mainStepEffort,
   measured,
+  pathKey,
+  pathOf,
   pendingCorrection,
   phaseOf,
   pickerOpened,
@@ -55,6 +60,7 @@ import {
   stopRequested,
   stopSent,
   synced,
+  toolKind,
   toolLabel,
   toolRan,
   trimmed,
@@ -98,6 +104,7 @@ let introOn = true
 let introTicker: Timer | undefined
 let introOpenedAt: number | undefined
 let introStartedAt: number | undefined
+const changers: Map<string, Set<string>> = new Map()
 let introRun = 0
 let introShown: IntroInfo | undefined
 let introModelSetting: string | undefined
@@ -152,6 +159,31 @@ async function handOver($: EngineInterface, from: Carried): Promise<void> {
     return
   }
   if (carried === from) carried = undefined
+}
+
+async function noteChange($: EngineInterface, who: string, path: string) {
+  const key = pathKey(path)
+  const set: Set<string> = changers.get(key) ?? new Set()
+  set.add(who)
+  changers.set(key, set)
+  const others = [...set].filter(id => id !== who)
+  if (!others.length) return
+  const file = fileNameOf({ file_path: path }) ?? ''
+  await change($, s => {
+    const running = (id: string) => id === MAIN || s.agents.some(n => n.id === id && n.status === 'running')
+    const other = others.find(running)
+    if (!other) return s
+    const mine = who === MAIN ? s : clashed(s, who, { file, with: other })
+    return other === MAIN ? mine : clashed(mine, other, { file, with: who })
+  })
+}
+
+async function dropChanger($: EngineInterface, who: string) {
+  for (const [key, set] of changers) {
+    set.delete(who)
+    if (!set.size) changers.delete(key)
+  }
+  await change($, s => clashesCleared(s, who))
 }
 
 async function latest($: EngineInterface): Promise<AgentTreeState> {
@@ -784,7 +816,13 @@ export const register: Register = (on, options) => {
   on('tool.call', async ($, e, next) => {
     await takeOver($).catch(() => undefined)
     const agentId = e.agentId
-    if (!agentId) return next(e)
+    const input = e as unknown as Record<string, unknown>
+    const kind = toolKind(String(e.tool))
+    const path = kind === 'change' ? pathOf(input) : undefined
+    if (!agentId) {
+      if (path) await noteChange($, MAIN, path).catch(() => undefined)
+      return next(e)
+    }
     const stopping = stoppingIds.has(agentId)
     if (stopping) {
       if (String(e.tool) !== HANDBACK) {
@@ -801,12 +839,14 @@ export const register: Register = (on, options) => {
         return { deny: wordsFor(lang).correctionWaiting(HANDBACK) }
       }
     }
-    const label = toolLabel(String(e.tool), e as unknown as Record<string, unknown>)
+    const label = toolLabel(String(e.tool), input)
+    const file = fileNameOf(input)
     const noted = (async () => {
       const known = (await latest($)).agents.some(n => n.id === agentId)
       if (!known) return
       const now = await clock($)
-      await change($, s => toolRan(s, { agentId, label }, now))
+      await change($, s => toolRan(s, { agentId, label, kind, file }, now))
+      if (path) await noteChange($, agentId, path)
     })().catch(() => undefined)
     const result = await next(e)
     await noted
@@ -822,6 +862,7 @@ export const register: Register = (on, options) => {
     ).catch(() => undefined)
     if (e.agentId && after) await settleUnread($, after, e.agentId, now).catch(() => undefined)
     if (!e.agentId) await catchUp($, now, keep).catch(() => undefined)
+    await dropChanger($, e.agentId ?? MAIN).catch(() => undefined)
     return result
   })
 

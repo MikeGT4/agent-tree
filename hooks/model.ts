@@ -612,9 +612,38 @@ function lastSegment(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
 }
 
-export function fileNameOf(input: Record<string, unknown>): string | undefined {
+export function pathOf(input: Record<string, unknown>): string | undefined {
   const path = typeof input.file_path === 'string' ? input.file_path : typeof input.notebook_path === 'string' ? input.notebook_path : ''
-  return lastSegment(path) || undefined
+  return path || undefined
+}
+
+export function fileNameOf(input: Record<string, unknown>): string | undefined {
+  return lastSegment(pathOf(input) ?? '') || undefined
+}
+
+export function pathKey(path: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < path.length; i++) {
+    hash ^= path.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash.toString(16)
+}
+
+export function clashed(s: AgentTreeState, agentId: string, clash: { file: string; with: string } | undefined): AgentTreeState {
+  if (!findAgent(s, agentId)) return s
+  return withAgent(s, agentId, n => {
+    const next = { ...n }
+    if (clash) next.clash = clash
+    else delete next.clash
+    return next
+  })
+}
+
+export function clashesCleared(s: AgentTreeState, who: string): AgentTreeState {
+  return s.agents
+    .filter(n => n.clash && (n.id === who || n.clash.with === who))
+    .reduce((acc, n) => clashed(acc, n.id, undefined), s)
 }
 
 function remembered(list: readonly string[] | undefined, name: string): string[] {
