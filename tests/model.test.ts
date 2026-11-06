@@ -350,6 +350,7 @@ describe('Datenmodell', () => {
   test('Knöpfe der Leiste wirken über ihren Schlüssel', () => {
     const calls: string[] = []
     const actions = {
+      select: (target: string) => void calls.push(`select ${target}`),
       pick: (target: string) => void calls.push(`pick ${target}`),
       choose: (target: string, family: string | undefined) => void calls.push(`choose ${target} ${family ?? '-'}`),
       effort: (target: string, effort: string | undefined) => void calls.push(`effort ${target} ${effort ?? '-'}`),
@@ -363,9 +364,9 @@ describe('Datenmodell', () => {
       restyleDefault: () => undefined,
       write: () => undefined,
     }
-    const keys = ['pick:new', 'pick:a1', 'choose:new:default', 'choose:a1:sonnet', 'picker:close', 'detail:a1', 'detail:close', 'stop:a1', 'choose:sonnet', 'choose:a1:', 'picker', 'pickX', 'fremd:x']
-    expect(keys.map(key => pressKey(actions, key))).toEqual([true, true, true, true, true, true, true, true, false, false, false, false, false])
-    expect(calls).toEqual(['pick new', 'pick a1', 'choose new -', 'choose a1 sonnet', 'close', 'detail a1', 'close', 'stop a1'])
+    const keys = ['pick:new', 'pick:a1', 'choose:new:default', 'choose:a1:sonnet', 'picker:close', 'detail:a1', 'detail:close', 'stop:a1', 'select:a1', 'choose:sonnet', 'choose:a1:', 'picker', 'pickX', 'fremd:x']
+    expect(keys.map(key => pressKey(actions, key))).toEqual([true, true, true, true, true, true, true, true, true, false, false, false, false, false])
+    expect(calls).toEqual(['pick new', 'pick a1', 'choose new -', 'choose a1 sonnet', 'close', 'detail a1', 'close', 'stop a1', 'select a1'])
   })
 
   test('Modellwahl: gesehene Kennung der Familie, sonst ihr Alias', () => {
@@ -712,7 +713,7 @@ describe('Korrekturen', () => {
 describe('Textfeld', () => {
   test('inputKey schickt nur bei submit', () => {
     const said: [string, string][] = []
-    const actions = { pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: () => {}, say: (id: string, value: string) => void said.push([id, value]), advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, write: () => {} }
+    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: () => {}, say: (id: string, value: string) => void said.push([id, value]), advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, write: () => {} }
     expect(inputKey(actions, 'say:sub-1:0', 'submit', 'x')).toBe(true)
     expect(said).toEqual([['sub-1', 'x']])
     expect(inputKey(actions, 'say:sub-1:0', 'change', 'y')).toBe(false)
@@ -724,7 +725,7 @@ describe('Textfeld', () => {
 describe('Stopp am Kasten', () => {
   test('pressKey kennt halt', () => {
     const stopped: string[] = []
-    const actions = { pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), say: () => {}, advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, write: () => {} }
+    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), say: () => {}, advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, write: () => {} }
     expect(pressKey(actions, 'halt:sub-1')).toBe(true)
     expect(stopped).toEqual(['sub-1'])
   })
@@ -844,7 +845,7 @@ describe('Aussehen', () => {
     const ui = { Box: 'Box', Text: 'Text', Button: 'Button' } as never
     const s = detailOpened(spawned(createTree(0), spawn('sub-1'), 1), 'sub-1')
     const noop = () => {}
-    const actions = { pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, say: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop }
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, say: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop }
     const text = JSON.stringify(drawTree(ui, s, 90, 60, { frame: 0, animate: false, now: 5000, actions }))
     expect(text).not.toMatch(/say:sub-1/)
   })

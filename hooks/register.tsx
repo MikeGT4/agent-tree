@@ -51,6 +51,7 @@ import {
   runningIds,
   isNewInput,
   restoredChoices,
+  selectedSet,
   shortId,
   spawned,
   stepEffortFor,
@@ -513,6 +514,7 @@ async function settleUnread($: EngineInterface, s: AgentTreeState, agentId: stri
 function actionsFor($: EngineInterface): TreeActions {
   const ignore = () => undefined
   return {
+    select: target => void change($, t => selectedSet(t, t.selected === target ? undefined : target)).catch(ignore),
     pick: target => void change($, t => pickerOpened(t, target)).catch(ignore),
     choose: (target, family) => void chooseModel($, target, family).catch(ignore),
     effort: (target, effort) => void chooseEffort($, target, effort).catch(ignore),

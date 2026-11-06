@@ -111,6 +111,23 @@ export type Words = {
     webSearch: string
     agent: string
   }
+  actionHint: string
+  stopButton: string
+  writeButton: string
+  detailsButton: string
+  alsoChanges: (file: string, other: string) => string
+  feedback: {
+    modelPending: (x: string) => string
+    modelDone: (x: string) => string
+    effortPending: (x: string) => string
+    effortDone: (x: string) => string
+    mainEffortPending: (x: string) => string
+    writePending: string
+    writeDone: string
+    writeFailed: string
+    stopPending: string
+    stopDone: string
+  }
   subModel: string
   advisorOn: string
   advisorOff: string
@@ -263,6 +280,23 @@ export const WORDS: Record<Lang, Words> = {
       web: x => `liest im Netz ${x}`,
       webSearch: 'sucht im Netz',
       agent: 'startet einen Agenten',
+    },
+    actionHint: 'Kasten anklicken, dann steuern: stoppen, schreiben, Modell, Denkstufe',
+    stopButton: 'Stoppen',
+    writeButton: 'Schreiben',
+    detailsButton: 'Details',
+    alsoChanges: (file, other) => `⚠ ${file} ändert auch: ${other}`,
+    feedback: {
+      modelPending: x => `✓ Modell auf ${x} gestellt, gilt ab seinem nächsten Schritt`,
+      modelDone: x => `✓ läuft jetzt mit ${x}`,
+      effortPending: x => `✓ Denkstufe ${x} gewählt, wirkt ab seiner nächsten Nachricht`,
+      effortDone: x => `✓ arbeitet jetzt mit Denkstufe ${x}`,
+      mainEffortPending: x => `✓ Denkstufe ${x} gewählt, wirkt ab deiner nächsten Nachricht`,
+      writePending: '✎ Nachricht angekommen',
+      writeDone: '✎ Nachricht gelesen',
+      writeFailed: '✎ Nachricht nicht angekommen',
+      stopPending: '■ Agent wird gestoppt',
+      stopDone: '■ gestoppt',
     },
     subModel: 'Unteragenten-Modell',
     advisorOn: 'einschalten',
@@ -419,6 +453,23 @@ export const WORDS: Record<Lang, Words> = {
       web: x => `browses ${x}`,
       webSearch: 'searches the web',
       agent: 'starts an agent',
+    },
+    actionHint: 'Click a box to steer it: stop, write, model, effort',
+    stopButton: 'Stop',
+    writeButton: 'Write',
+    detailsButton: 'Details',
+    alsoChanges: (file, other) => `⚠ ${other} edits ${file} too`,
+    feedback: {
+      modelPending: x => `✓ Model set to ${x}, applies from its next step`,
+      modelDone: x => `✓ now running on ${x}`,
+      effortPending: x => `✓ Effort ${x} chosen, applies from its next message`,
+      effortDone: x => `✓ now working at effort ${x}`,
+      mainEffortPending: x => `✓ Effort ${x} chosen, applies from your next message`,
+      writePending: '✎ Message delivered',
+      writeDone: '✎ Message read',
+      writeFailed: '✎ Message not delivered',
+      stopPending: '■ Stopping agent',
+      stopDone: '■ Stopped',
     },
     subModel: 'Sub-agent model',
     advisorOn: 'turn on',

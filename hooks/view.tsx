@@ -14,7 +14,12 @@ import type {
 } from '../types'
 import {
   EFFORT_LEVELS,
+  WORKFLOW_PREFIX,
   contextLevel,
+  familyOf,
+  feedbackFor,
+  mainFeedback,
+  selectionOf,
   contextPercent,
   windowOf,
   MAIN,
@@ -35,6 +40,7 @@ import {
   resetTime,
   typeLabel,
 } from './model.ts'
+import type { Feedback } from './model.ts'
 import { LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, lightColor, lookFrom, restyleLine } from './looks.ts'
 import type { Glyphs, LookRow, Palette } from './looks.ts'
 import { WORDS, activityText, familyOr, logLine, lookOptionLabel, toolText, wordsFor } from './words.ts'
@@ -98,6 +104,7 @@ function sourceColor(palette: Palette, source: AgentTreeLogSource): string {
 }
 
 export type TreeActions = {
+  select: (target: string) => void
   pick: (target: string) => void
   choose: (target: string, family: string | undefined) => void
   effort: (target: string, effort: string | undefined) => void
@@ -130,6 +137,7 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   if (key === 'picker:close' || key === 'detail:close' || key === 'look:close') actions.close()
   else if (key === 'advisor:toggle') actions.advisor()
   else if (kind === 'look') return lookKey(actions, rest)
+  else if (kind === 'select') actions.select(rest)
   else if (kind === 'pick') actions.pick(rest)
   else if (kind === 'choose') return targetKey(rest, (target, value) => actions.choose(target, value))
   else if (kind === 'detail') actions.detail(rest)
@@ -216,6 +224,8 @@ export type RowPlanInput = {
   helpRows?: number
   labelRows?: number
   limitRows?: number
+  actionRows?: number
+  hintRows?: number
 }
 
 export type RowPlan = { shown: number; logRows: number }
@@ -265,7 +275,7 @@ function usedRows(o: RowPlanInput, shown: number, logRows: number): number {
   const header = (o.tight ? 1 : 3) + (o.pickerRows ?? 0)
   const tree = treeRows(o, shown)
   const body = o.wide ? Math.max(o.advisorRows, tree) : o.advisorRows + tree
-  return header + 1 + body + (o.detailRows ?? 0) + 4 + logRows + (o.limitRows ?? 0) + (o.helpRows ?? 0)
+  return header + 1 + body + (o.actionRows ?? 0) + (o.detailRows ?? 0) + 4 + logRows + (o.limitRows ?? 0) + (o.helpRows ?? 0)
 }
 
 export function planRows(o: RowPlanInput): RowPlan {
@@ -278,7 +288,7 @@ export function planRows(o: RowPlanInput): RowPlan {
       break
     }
   }
-  const logRows = Math.max(1, Math.min(LOG_ROWS, o.height - usedRows(o, shown, 0)))
+  const logRows = Math.max(1, Math.min(LOG_ROWS, o.height - usedRows(o, shown, 0) - (o.hintRows ?? 0)))
   return { shown, logRows }
 }
 
@@ -521,6 +531,55 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const detailNode = detail ? s.agents.find(n => n.id === detail.agentId) : undefined
   const agentEffort =
     mostCommon(s.agents.filter(n => n.status === 'running').map(n => n.effort)) ?? mostCommon(s.agents.map(n => n.effort))
+  const modelText = (n: AgentTreeNode) => {
+    const pending = choices.agents[n.id]
+    return pending && pending !== familyOf(n.model) ? `${modelLabel(n.model) || w.model} → ${familyLabel(pending)}` : modelLabel(n.model) || ' '
+  }
+  const feedbackText = (f: Feedback | undefined, main = false): string | undefined => {
+    if (!f) return undefined
+    const t = w.feedback
+    if (f.kind === 'stop') return f.phase === 'done' ? t.stopDone : t.stopPending
+    if (f.kind === 'write') return f.phase === 'done' ? t.writeDone : f.phase === 'failed' ? t.writeFailed : t.writePending
+    if (f.kind === 'model') return f.phase === 'done' ? t.modelDone(familyLabel(f.value)) : t.modelPending(familyLabel(f.value))
+    const level = effortLabel(f.value ?? '')
+    if (main) return t.mainEffortPending(level)
+    return f.phase === 'done' ? t.effortDone(level) : t.effortPending(level)
+  }
+  const selection = actions ? selectionOf(s) : undefined
+  const barNode = selection?.kind === 'agent' ? selection.node : undefined
+  const barRunning = barNode?.status === 'running'
+  const barStopping = barNode !== undefined && (s.stopping ?? []).includes(barNode.id)
+  const barButtons =
+    barNode && actions
+      ? [
+          ...(barRunning && !barStopping ? [{ key: `halt:${barNode.id}`, label: `■ ${w.stopButton}`, press: () => actions.stop(barNode.id) }] : []),
+          { key: `write:${barNode.id}`, label: `✎ ${w.writeButton}`, press: () => actions.write(barNode.id) },
+          ...(barRunning ? [{ key: `pick:${barNode.id}`, label: `${w.model}: ${modelText(barNode).trim() || w.model} ▾`, press: () => actions.pick(barNode.id) }] : []),
+          { key: `detail:${barNode.id}`, label: w.detailsButton, press: () => actions.detail(barNode.id) },
+        ]
+      : []
+  const barFeedback = barNode ? feedbackFor(s, barNode.id, now) : selection === undefined ? mainFeedback(s) : undefined
+  const barFeedbackText = feedbackText(barFeedback, barNode === undefined)
+  const barClashWith = barNode?.clash
+    ? barNode.clash.with === MAIN
+      ? w.main
+      : s.agents.find(n => n.id === barNode.clash?.with)?.description || barNode.clash.with
+    : undefined
+  const barClash = barNode?.clash && barClashWith ? w.alsoChanges(barNode.clash.file, barClashWith) : undefined
+  const barWorkflow =
+    selection?.kind === 'workflow'
+      ? (() => {
+          const members = s.agents.filter(n => n.workflowRunId === selection.runId)
+          const busy = members.filter(n => n.status === 'running').length
+          return `Workflow · ${members.length} · ${w.running(busy)}`
+        })()
+      : undefined
+  const actionRows = actions
+    ? selection
+      ? 2 + (barButtons.length ? wrappedLines(barButtons.map(b => `[ ${b.label} ]`), width, 1) : 0) + (barFeedbackText ? 1 : 0) + (barClash ? 1 : 0)
+      : 0
+    : 0
+  const hintRows = actions && !selection ? 1 + (barFeedbackText ? 1 : 0) : 0
   const plan = planRows({
     height,
     wide,
@@ -534,6 +593,8 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     detailRows: detailNode && actions ? DETAIL_ROWS : 0,
     helpRows: tight ? 0 : 1,
     limitRows: s.main.limits?.length ? 1 : 0,
+    actionRows,
+    hintRows,
     labelRows: actions
       ? wrappedLines(
           [
@@ -619,7 +680,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const typeButton = (n: AgentTreeNode, running: boolean) =>
     actions ? (
       <Box key={`type-row:${n.id}`} width={AGENT_WIDTH - 2} flexDirection="row" justifyContent="center">
-        <Button key={`detail:${n.id}`} plain label={clip(typeLabel(n.type), AGENT_WIDTH - 2)} onPress={() => actions.detail(n.id)} />
+        <Button key={`select:${n.id}`} plain label={clip(`${s.selected === n.id ? '▸ ' : ''}${typeLabel(n.type)}`, AGENT_WIDTH - 2)} onPress={() => actions.select(n.id)} />
       </Box>
     ) : (
       <Text bold size={SIZE.title} color={running ? palette.agent : undefined} wrap="truncate-end">
@@ -629,12 +690,23 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const agentBox = (g: AgentTreeGroup, marginLeft: number) => {
     if (g.kind === 'workflow') {
-      const color = g.running > 0 ? palette.agent : g.failed > 0 ? palette.failed : palette.dim
+      const wfTarget = `${WORKFLOW_PREFIX}${g.runId}`
+      const wfClash = s.agents.some(n => n.workflowRunId === g.runId && n.clash)
+      const color = s.selected === wfTarget ? palette.main : g.running > 0 ? palette.agent : g.failed > 0 ? palette.failed : palette.dim
       return (
         <Box key={`wf:${g.runId}`} width={AGENT_WIDTH} marginLeft={marginLeft} {...frameProps(color)} flexDirection="column" alignItems="center">
-          <Text bold size={SIZE.title} color={g.running > 0 ? palette.agent : undefined} wrap="truncate-end">
-            {`Workflow · ${g.size}`}
-          </Text>
+          {actions ? (
+            <Button
+              key={`select:${wfTarget}`}
+              plain
+              label={clip(`${s.selected === wfTarget ? '▸ ' : ''}Workflow · ${g.size}${wfClash ? ' ⚠' : ''}`, AGENT_WIDTH - 2)}
+              onPress={() => actions.select(wfTarget)}
+            />
+          ) : (
+            <Text bold size={SIZE.title} color={g.running > 0 ? palette.agent : undefined} wrap="truncate-end">
+              {`Workflow · ${g.size}`}
+            </Text>
+          )}
           <Text size={SIZE.detail} color={palette.agent} wrap="truncate-end">
             {`${spin} ${w.running(g.running)}`}
           </Text>
@@ -655,7 +727,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     const running = n.status === 'running'
     const nested = parentOf(s, n)
     const stopping = (s.stopping ?? []).includes(n.id)
-    const mark = correctionGlyph(s, n.id)
+    const mark = `${correctionGlyph(s, n.id)}${n.clash ? '⚠' : ''}`
     const inner = AGENT_WIDTH - 2
     const filledShare = running ? contextPercent(n.contextTokens, windowOf(s, n)) : undefined
     const statusLine =
@@ -675,33 +747,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         : n.status === 'done' && n.endedAt !== undefined
           ? statusWithMark(`${glyphs.marks.done} ${w.status.done}`, mark, ` · ${fmtShortDuration(n.endedAt - n.startedAt)}`, inner)
           : statusWithMark(`${statusMark(glyphs, n.status)} ${w.status[n.status]}`, mark, '', inner)
-    const edge = running ? palette.agent : n.status === 'failed' ? palette.failed : palette.dim
+    const edge = s.selected === n.id ? palette.main : running ? palette.agent : n.status === 'failed' ? palette.failed : palette.dim
     return (
       <Box key={`ag:${n.id}`} width={AGENT_WIDTH} marginLeft={marginLeft} {...frameProps(edge)} flexDirection="column" alignItems="center">
         {typeButton(n, running)}
-        {running && actions ? (
-          <Box key={`pick-row:${n.id}`} width={AGENT_WIDTH - 2} flexDirection="row" justifyContent="center" columnGap={1}>
-            <Button
-              key={`pick:${n.id}`}
-              plain
-              label={clip(`${choices.agents[n.id] ? `→ ${familyLabel(choices.agents[n.id])}` : modelLabel(n.model) || w.model} ▾`, AGENT_WIDTH - 7)}
-              onPress={() => actions.pick(n.id)}
-            />
-            <Button key={`write:${n.id}`} plain label="✎" onPress={() => actions.write(n.id)} />
-            {stopping ? null : <Button key={`halt:${n.id}`} plain label="■" onPress={() => actions.stop(n.id)} />}
-          </Box>
-        ) : actions ? (
-          <Box key={`write-row:${n.id}`} width={AGENT_WIDTH - 2} flexDirection="row" justifyContent="center" columnGap={1}>
-            <Text color={palette.dim} wrap="truncate-end">
-              {clip(modelLabel(n.model) || ' ', AGENT_WIDTH - 5)}
-            </Text>
-            <Button key={`write:${n.id}`} plain label="✎" onPress={() => actions.write(n.id)} />
-          </Box>
-        ) : (
-          <Text color={running ? undefined : palette.dim} wrap="truncate-end">
-            {modelLabel(n.model) || ' '}
-          </Text>
-        )}
+        <Text color={running ? undefined : palette.dim} wrap="truncate-end">
+          {clip(modelText(n), AGENT_WIDTH - 2)}
+        </Text>
         <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
           {running && n.effort !== undefined && choices.efforts?.[n.id] && choices.efforts[n.id] !== n.effort
             ? `${n.effort} → ${choices.efforts[n.id]}`
@@ -735,11 +787,16 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             : g.done > 0
               ? `${glyphs.marks.done} ${w.done}`
               : `${glyphs.marks.stopped} ${w.status.stopped}`
+      const wfTarget = `${WORKFLOW_PREFIX}${g.runId}`
       return (
         <Box key={`wf:${g.runId}`} width={treeWidth}>
-          <Text color={color} wrap="truncate-end">
-            {`${state} · Workflow · ${g.size}`}
-          </Text>
+          {actions ? (
+            <Button key={`select:${wfTarget}`} plain label={clip(`${s.selected === wfTarget ? '▸ ' : ''}${state} · Workflow · ${g.size}`, treeWidth - 2)} onPress={() => actions.select(wfTarget)} />
+          ) : (
+            <Text color={color} wrap="truncate-end">
+              {`${state} · Workflow · ${g.size}`}
+            </Text>
+          )}
         </Box>
       )
     }
@@ -747,20 +804,17 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     const indent = parentOf(s, n) ? '↳ ' : ''
     const share = n.status === 'running' ? contextPercent(n.contextTokens, windowOf(s, n)) : undefined
     const size = share !== undefined ? ` · ${w.percent(share)}` : n.status === 'running' && n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''
-    const mark = correctionGlyph(s, n.id)
-    const text = `${indent}${n.status === 'running' ? spin : statusMark(glyphs, n.status)} ${n.status === 'running' && (s.stopping ?? []).includes(n.id) ? w.stopping : w.status[n.status]}${mark ? ` ${mark}` : ''} · ${typeLabel(n.type)} · ${n.description}${size}`
-    const halt = n.status === 'running' && actions && !(s.stopping ?? []).includes(n.id)
+    const mark = `${correctionGlyph(s, n.id)}${n.clash ? '⚠' : ''}`
+    const text = `${s.selected === n.id ? '▸ ' : ''}${indent}${n.status === 'running' ? spin : statusMark(glyphs, n.status)} ${n.status === 'running' && (s.stopping ?? []).includes(n.id) ? w.stopping : w.status[n.status]}${mark ? ` ${mark}` : ''} · ${typeLabel(n.type)} · ${n.description}${size}`
     return (
       <Box key={`ag:${n.id}`} width={treeWidth} flexDirection="row" columnGap={1}>
         {actions ? (
-          <Button key={`detail:${n.id}`} plain label={clip(text, treeWidth - (halt ? 4 : 2))} onPress={() => actions.detail(n.id)} />
+          <Button key={`select:${n.id}`} plain label={clip(text, treeWidth - 2)} onPress={() => actions.select(n.id)} />
         ) : (
           <Text color={statusColor(palette, n.status)} wrap="truncate-end">
             {text}
           </Text>
         )}
-        {actions ? <Button key={`write:${n.id}`} plain label="✎" onPress={() => actions.write(n.id)} /> : null}
-        {halt ? <Button key={`halt:${n.id}`} plain label="■" onPress={() => actions.stop(n.id)} /> : null}
       </Box>
     )
   }
@@ -1196,6 +1250,41 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     </Box>
   )
 
+  const actionBar = actions ? (
+    <Box key="actions" flexDirection="column" width={width} marginTop={selection ? 1 : 0}>
+      {barNode ? (
+        <Text key="actions-name" bold color={palette.main} wrap="truncate-end">
+          {`${typeLabel(barNode.type)} · ${barNode.description}`}
+        </Text>
+      ) : barWorkflow ? (
+        <Text key="actions-name" bold color={palette.main} wrap="truncate-end">
+          {barWorkflow}
+        </Text>
+      ) : (
+        <Text key="actions-hint" color={palette.dim} wrap="truncate-end">
+          {w.actionHint}
+        </Text>
+      )}
+      {barButtons.length ? (
+        <Box key="actions-buttons" flexDirection="row" flexWrap="wrap" columnGap={1} width={width}>
+          {barButtons.map(b => (
+            <Button key={b.key} label={b.label} onPress={b.press} />
+          ))}
+        </Box>
+      ) : null}
+      {barFeedbackText ? (
+        <Text key="actions-feedback" color={barFeedback?.phase === 'failed' ? palette.failed : palette.done} wrap="truncate-end">
+          {barFeedbackText}
+        </Text>
+      ) : null}
+      {barClash ? (
+        <Text key="actions-clash" color={palette.warn} wrap="truncate-end">
+          {barClash}
+        </Text>
+      ) : null}
+    </Box>
+  ) : null
+
   const limits = s.main.limits ?? []
   const limitTexts = limitSegments(limits, w, glyphs, width)
   const limitRow = limits.length ? (
@@ -1254,6 +1343,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           {tree}
         </Box>
       )}
+      {actionBar}
       {detailBox}
       {logBox}
       {limitRow}
