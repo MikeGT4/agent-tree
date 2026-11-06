@@ -3058,6 +3058,22 @@ describe('Platz und Hebel in der Leiste', () => {
     await ui.unmount()
   })
 
+  test('Details stehen kompakt unter der Aktionszeile, ohne Limits und Hilfezeile', de, async ($, on) => {
+    engine(on)
+    await agents($, 3)
+    await $.tool.call({ tool: 'Read', file_path: '/p/src/auth.ts', agentId: 'sub-1' } as never)
+    const ui = await $.ui.mount(pane(67, 46))
+    await ui.press({ key: 'select:sub-1' })
+    await ui.press({ key: 'detail:sub-1' })
+    const text = await screen(ui)
+    expect(text.split('general-purpose · Agent 1').length - 1).toBe(1)
+    expect(has(text, 'detail:close')).toBe(true)
+    expect(text.includes('ctrl+x tab')).toBe(false)
+    await ui.press({ key: 'detail:close' })
+    expect(await screen(ui)).toContain('ctrl+x tab')
+    await ui.unmount()
+  })
+
   test('Modellwechsel passt in den Kasten', de, async ($, on) => {
     engine(on)
     await agents($, 1)

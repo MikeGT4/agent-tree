@@ -68,7 +68,7 @@ export const ADVISOR_BASE_ROWS = 15
 export const ADVISOR_COMPACT_ROWS = 4
 export const LEGEND_EFFORT_FROM = 60
 export const BAR_WIDTH = 15
-export const DETAIL_ROWS = 11
+export const DETAIL_ROWS = 7
 export const LIGHT_SAMPLE = 9
 
 const SIZE = { title: 'heading', detail: 'footnote', note: 'caption' } as const
@@ -272,7 +272,8 @@ function usedRows(o: RowPlanInput, shown: number, logRows: number | undefined, a
   const side = advisor ? o.advisorRows : 0
   const body = o.wide ? Math.max(side, tree) : side + tree
   const log = logRows === undefined ? 0 : LOG_FRAME_ROWS + logRows
-  return header + 1 + body + (o.actionRows ?? 0) + (o.hintRows ?? 0) + (o.detailRows ?? 0) + log + (o.limitRows ?? 0) + (o.helpRows ?? 0)
+  const foot = o.detailRows ? 0 : (o.limitRows ?? 0) + (o.helpRows ?? 0)
+  return header + 1 + body + (o.actionRows ?? 0) + (o.hintRows ?? 0) + (o.detailRows ?? 0) + log + foot
 }
 
 function leanest(o: RowPlanInput, cap: number): number {
@@ -1209,28 +1210,21 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const missing = (value: string | undefined, empty: string) =>
     detail?.state === 'loading' ? w.loading : value || (detail?.state === 'denied' ? w.noAccess : empty)
   const detailRunning = detailNode?.status === 'running'
-  const detailStopping = detailNode !== undefined && (s.stopping ?? []).includes(detailNode.id)
   const detailCorrection = detailNode ? s.corrections?.[detailNode.id] : undefined
   const detailBox =
     detail && detailNode && actions ? (
-      <Box key="detail" width={width} {...frameProps(palette.agent)} flexDirection="column" marginTop={1}>
-        <Box key="detail-head" flexDirection="row" justifyContent="space-between">
-          <Box key="detail-title" flexShrink={1}>
-            <Text bold size={SIZE.title} color={palette.agent} wrap="truncate-end">
-              {`${typeLabel(detailNode.type)} · ${detailNode.description}`}
-            </Text>
+      <Box key="detail" width={width} flexDirection="column">
+        <Box key="detail-head" flexDirection="row" justifyContent="space-between" columnGap={1}>
+          <Box key="detail-task" flexShrink={1}>
+            <Text wrap="truncate-end">{`${w.task}: ${missing(detailNode.task, '?')}`}</Text>
           </Box>
-          <Box key="detail-buttons" flexDirection="row" columnGap={1} flexShrink={0}>
-            {detailStopping ? <Text color={palette.dim}>{w.stopping}</Text> : null}
-            <Button key="detail:close" plain hotkey="x" label={w.close} onPress={() => actions.close()} />
-          </Box>
+          <Button key="detail:close" plain hotkey="x" label={w.close} onPress={() => actions.close()} />
         </Box>
         {detailCorrection ? (
           <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
             {`${w.correctionLabel}: ${w.correction[detailCorrection.state]} · ${clockTime(detailCorrection.at)}${detailCorrection.text ? ` · „${detailCorrection.text}“` : ''}`}
           </Text>
         ) : null}
-        <Text wrap="truncate-end">{`${w.task}: ${missing(detailNode.task, '?')}`}</Text>
         <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
           {`${w.tools}: ${detailNode.toolCount}${detailNode.tools?.length ? ` · ${detailNode.tools.map(t => activityText(t, lang)).join(' · ')}` : ''}`}
         </Text>
@@ -1244,7 +1238,6 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
           {`${modelLabel(detailNode.model) || w.model} · ${w.status[detailNode.status]} · ${fmtShortDuration((detailNode.endedAt ?? now) - detailNode.startedAt)}`}
         </Text>
-        {frameParts('detail', width, palette.agent)}
       </Box>
     ) : null
 
@@ -1371,8 +1364,8 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       {actionBar}
       {agentPicker ? pickerRow : null}
       {detailBox ?? (plan.logRows > 0 ? logBox : null)}
-      {limitRow}
-      {tight ? null : (
+      {detailBox ? null : limitRow}
+      {tight || detailBox ? null : (
         <Text key="help" size={SIZE.note} color={palette.dim} wrap="truncate-end">
           {helpLine(w.help, width)}
         </Text>

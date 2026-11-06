@@ -1246,6 +1246,10 @@ describe('Zeilenplan bei wenig Höhe', () => {
     expect(planRows({ ...narrow, height: 60, detailRows: 11 })).toEqual({ shown: 3, logRows: 0 })
   })
 
+  test('mit offenen Details zählen Limits und Hilfezeile nicht', () => {
+    expect(planRows({ ...narrow, height: 48, detailRows: 7 })).toEqual({ shown: 3, logRows: 0 })
+  })
+
   test('reicht es dann noch nicht, weicht der Beraterkasten', () => {
     expect(planRows({ ...narrow, height: 50, detailRows: 11 })).toEqual({ shown: 3, logRows: 0, advisor: false })
   })
