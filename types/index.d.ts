@@ -20,6 +20,8 @@ export type AgentTreeNode = {
   toolCount: number
   lastTool?: string
   tools?: string[]
+  read?: string[]
+  changed?: string[]
   task?: string
   answer?: string
   answerTokens?: number

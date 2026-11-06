@@ -19,6 +19,7 @@ export const DESCRIPTION_LIMIT = 80
 export const LABEL_LIMIT = 40
 export const ADVISOR_CALLS_KEPT = 20
 export const TOOLS_KEPT = 5
+export const FILES_KEPT = 50
 export const DETAIL_LIMIT = 160
 
 export type AdvisorUse = { id: string; startedAt: number; endedAt?: number }
@@ -587,13 +588,49 @@ export function spawned(s: AgentTreeState, input: SpawnInput, now: number): Agen
   return logged(next, 'agent', 'agentEnded', ended, orphan.at)
 }
 
-export function toolRan(s: AgentTreeState, input: { agentId?: string; label: string }, now: number): AgentTreeState {
+export type ToolKind = 'read' | 'change' | 'search' | 'run' | 'web' | 'agent' | 'other'
+
+const TOOL_KINDS: Record<string, ToolKind> = {
+  Read: 'read',
+  Edit: 'change',
+  Write: 'change',
+  NotebookEdit: 'change',
+  Grep: 'search',
+  Glob: 'search',
+  Bash: 'run',
+  WebFetch: 'web',
+  WebSearch: 'web',
+  Agent: 'agent',
+  Task: 'agent',
+}
+
+export function toolKind(tool: string): ToolKind {
+  return TOOL_KINDS[tool] ?? 'other'
+}
+
+function lastSegment(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
+}
+
+export function fileNameOf(input: Record<string, unknown>): string | undefined {
+  const path = typeof input.file_path === 'string' ? input.file_path : typeof input.notebook_path === 'string' ? input.notebook_path : ''
+  return lastSegment(path) || undefined
+}
+
+function remembered(list: readonly string[] | undefined, name: string): string[] {
+  return [...(list ?? []).filter(n => n !== name), name].slice(-FILES_KEPT)
+}
+
+export function toolRan(s: AgentTreeState, input: { agentId?: string; label: string; kind?: ToolKind; file?: string }, now: number): AgentTreeState {
   if (input.agentId === undefined || !findAgent(s, input.agentId)) return s
+  const name = input.file === undefined ? '' : lastSegment(input.file)
   return withAgent(s, input.agentId, n => ({
     ...n,
     toolCount: n.toolCount + 1,
     lastTool: input.label,
     tools: [...(n.tools ?? []), input.label].slice(-TOOLS_KEPT),
+    ...(name && input.kind === 'read' ? { read: remembered(n.read, name) } : {}),
+    ...(name && input.kind === 'change' ? { changed: remembered(n.changed, name) } : {}),
   }))
 }
 

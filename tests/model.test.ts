@@ -50,6 +50,9 @@ import {
   synced,
   toolLabel,
   toolRan,
+  toolKind,
+  fileNameOf,
+  FILES_KEPT,
   trimmed,
   turnStarted,
   typeLabel,
@@ -992,3 +995,46 @@ describe('Namen mit Bindestrich und Pfade', () => {
   })
 })
 
+
+describe('Dateien und Tätigkeit je Agent', () => {
+  test('toolKind ordnet die Werkzeuge zu', () => {
+    expect(toolKind('Read')).toBe('read')
+    for (const t of ['Edit', 'Write', 'NotebookEdit']) expect(toolKind(t)).toBe('change')
+    for (const t of ['Grep', 'Glob']) expect(toolKind(t)).toBe('search')
+    expect(toolKind('Bash')).toBe('run')
+    for (const t of ['WebFetch', 'WebSearch']) expect(toolKind(t)).toBe('web')
+    for (const t of ['Agent', 'Task']) expect(toolKind(t)).toBe('agent')
+    expect(toolKind('TodoWrite')).toBe('other')
+  })
+
+  test('fileNameOf nimmt nur den Namen', () => {
+    expect(fileNameOf({ file_path: '/a/b/auth.ts' })).toBe('auth.ts')
+    expect(fileNameOf({ notebook_path: 'C:\\x\\n.ipynb' })).toBe('n.ipynb')
+    expect(fileNameOf({})).toBeUndefined()
+  })
+
+  test('toolRan führt gelesene Dateien ohne Doppel, der jüngste Name steht hinten', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = toolRan(s, { agentId: 'a1', label: 'Read auth.ts', kind: 'read', file: 'auth.ts' }, 2)
+    s = toolRan(s, { agentId: 'a1', label: 'Read api.ts', kind: 'read', file: 'api.ts' }, 3)
+    s = toolRan(s, { agentId: 'a1', label: 'Read auth.ts', kind: 'read', file: 'auth.ts' }, 4)
+    expect(s.agents[0]?.read).toEqual(['api.ts', 'auth.ts'])
+    expect(s.agents[0]?.changed).toBeUndefined()
+  })
+
+  test('toolRan behält höchstens FILES_KEPT geänderte Dateien', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    for (let i = 0; i <= FILES_KEPT; i++) s = toolRan(s, { agentId: 'a1', label: `Edit f${i}.ts`, kind: 'change', file: `f${i}.ts` }, 2 + i)
+    expect(s.agents[0]?.changed?.length).toBe(FILES_KEPT)
+    expect(s.agents[0]?.changed?.[0]).toBe('f1.ts')
+  })
+
+  test('toolRan speichert keinen Pfad', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = toolRan(s, { agentId: 'a1', label: 'Edit api.ts', kind: 'change', file: '/home/x/src/api.ts' }, 2)
+    s = toolRan(s, { agentId: 'a1', label: 'Read b.ts', kind: 'read', file: 'C:\\y\\b.ts' }, 3)
+    const names = [...(s.agents[0]?.read ?? []), ...(s.agents[0]?.changed ?? [])]
+    expect(names).toEqual(['b.ts', 'api.ts'])
+    expect(names.some(n => n.includes('/') || n.includes('\\'))).toBe(false)
+  })
+})
