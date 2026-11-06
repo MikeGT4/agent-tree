@@ -530,6 +530,7 @@ export function stepped(s: AgentTreeState, input: StepInput, now: number): Agent
         ...n,
         model: input.model,
         effort: nextEffort,
+        effortless: input.effortless ? true : effort !== undefined ? false : n.effortless,
         contextTokens: input.contextTokens ?? n.contextTokens,
         answer: input.answer ? excerpt(input.answer) : n.answer,
         ...(input.model !== n.model ? { modelSince: now } : {}),
@@ -622,7 +623,7 @@ export function toolKind(tool: string): ToolKind {
 }
 
 function lastSegment(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
+  return oneLine(path).split(/[\\/]/).filter(Boolean).at(-1)?.trim() ?? ''
 }
 
 export type Selection = { kind: 'agent'; node: AgentTreeNode } | { kind: 'main' } | { kind: 'new' } | { kind: 'workflow'; runId: string }
@@ -631,6 +632,10 @@ export const WORKFLOW_PREFIX = 'wf:'
 
 export function deselected(s: AgentTreeState): AgentTreeState {
   return selectedSet(closed(s), undefined)
+}
+
+export function selectionToggled(s: AgentTreeState, target: string): AgentTreeState {
+  return s.selected === target ? deselected(s) : selectedSet(closed(s), target)
 }
 
 export function selectedSet(s: AgentTreeState, target: string | undefined): AgentTreeState {
@@ -669,12 +674,12 @@ export function feedbackFor(s: AgentTreeState, agentId: string, now: number): Fe
   if (correction?.state === 'read' && recent(correction.readAt, now)) return { kind: 'write', phase: 'done' }
   if (correction?.state === 'failed' && recent(correction.at, now)) return { kind: 'write', phase: 'failed' }
   const chosenAt = s.choices?.chosenAt?.[agentId]
-  if (!chosenAt) return undefined
+  if (!chosenAt || node.status !== 'running') return undefined
+  const fresh = recent(chosenAt.at, now)
   const family = s.choices?.agents[agentId]
   if (family !== undefined && family !== familyOf(node.model)) return { kind: 'model', phase: 'pending', value: family }
   const effort = s.choices?.efforts?.[agentId]
-  if (effort !== undefined && effort !== node.effort) return { kind: 'effort', phase: 'pending', value: effort }
-  const fresh = recent(chosenAt.at, now)
+  if (effort !== undefined && effort !== node.effort && (!node.effortless || fresh)) return { kind: 'effort', phase: 'pending', value: effort }
   if (chosenAt.kind === 'model') {
     if (family === undefined) return fresh ? { kind: 'model', phase: 'pending', value: undefined } : undefined
     return fresh || confirmed(node.modelSince, chosenAt.at, now) ? { kind: 'model', phase: 'done', value: family } : undefined
@@ -691,8 +696,9 @@ export function mainFeedback(s: AgentTreeState, now: number): Feedback | undefin
   const chosenAt = s.choices?.chosenAt?.[MAIN]
   if (!chosenAt) return undefined
   const effort = s.choices?.mainEffort
-  if (effort !== undefined && effort !== s.main.effort) return { kind: 'effort', phase: 'pending', value: effort }
-  return recent(chosenAt.at, now) ? { kind: 'effort', phase: 'pending', value: effort } : undefined
+  const fresh = recent(chosenAt.at, now)
+  if (effort !== undefined && effort !== s.main.effort && (!s.main.effortless || fresh)) return { kind: 'effort', phase: 'pending', value: effort }
+  return fresh ? { kind: 'effort', phase: 'pending', value: effort } : undefined
 }
 
 export function windowOf(s: AgentTreeState, node: AgentTreeNode): number | undefined {
@@ -757,15 +763,19 @@ function remembered(list: readonly string[] | undefined, name: string): string[]
 
 export function toolRan(s: AgentTreeState, input: { agentId?: string; label: string; kind?: ToolKind; file?: string }, now: number): AgentTreeState {
   if (input.agentId === undefined || !findAgent(s, input.agentId)) return s
-  const name = input.file === undefined ? '' : lastSegment(input.file)
-  return withAgent(s, input.agentId, n => ({
+  const counted = withAgent(s, input.agentId, n => ({
     ...n,
     toolCount: n.toolCount + 1,
     lastTool: input.label,
     tools: [...(n.tools ?? []), input.label].slice(-TOOLS_KEPT),
-    ...(name && input.kind === 'read' ? { read: remembered(n.read, name) } : {}),
-    ...(name && input.kind === 'change' ? { changed: remembered(n.changed, name) } : {}),
   }))
+  return fileNoted(counted, input.agentId, input.kind, input.file)
+}
+
+export function fileNoted(s: AgentTreeState, agentId: string, kind: ToolKind | undefined, file: string | undefined): AgentTreeState {
+  const name = file === undefined ? '' : lastSegment(file)
+  if (!name || (kind !== 'read' && kind !== 'change') || !findAgent(s, agentId)) return s
+  return withAgent(s, agentId, n => (kind === 'read' ? { ...n, read: remembered(n.read, name) } : { ...n, changed: remembered(n.changed, name) }))
 }
 
 function statusOf(input: CompleteInput): AgentTreeStatus {

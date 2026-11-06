@@ -18,7 +18,7 @@ import {
   choicesOf,
   chosen,
   clashed,
-  clashesCleared,
+  fileNoted,
   closed,
   completed,
   correctionFailed,
@@ -51,7 +51,7 @@ import {
   runningIds,
   isNewInput,
   restoredChoices,
-  selectedSet,
+  selectionToggled,
   deselected,
   shortId,
   spawned,
@@ -106,7 +106,7 @@ let introOn = true
 let introTicker: Timer | undefined
 let introOpenedAt: number | undefined
 let introStartedAt: number | undefined
-const changers: Map<string, Set<string>> = new Map()
+const changers: Map<string, { file: string; ids: Set<string> }> = new Map()
 let introRun = 0
 let introShown: IntroInfo | undefined
 let introModelSetting: string | undefined
@@ -165,27 +165,44 @@ async function handOver($: EngineInterface, from: Carried): Promise<void> {
 
 async function noteChange($: EngineInterface, who: string, path: string) {
   const key = pathKey(path)
-  const set: Set<string> = changers.get(key) ?? new Set()
-  set.add(who)
-  changers.set(key, set)
-  const others = [...set].filter(id => id !== who)
-  if (!others.length) return
-  const file = fileNameOf({ file_path: path }) ?? ''
-  await change($, s => {
-    const running = (id: string) => id === MAIN || s.agents.some(n => n.id === id && n.status === 'running')
-    const other = others.find(running)
-    if (!other) return s
-    const mine = who === MAIN ? s : clashed(s, who, { file, with: other })
-    return other === MAIN ? mine : clashed(mine, other, { file, with: who })
-  })
+  const entry: { file: string; ids: Set<string> } = changers.get(key) ?? { file: fileNameOf({ file_path: path }) ?? '', ids: new Set() }
+  entry.ids.add(who)
+  changers.set(key, entry)
+  if (entry.ids.size > 1) await settleClashes($)
 }
 
 async function dropChanger($: EngineInterface, who: string) {
-  for (const [key, set] of changers) {
-    set.delete(who)
-    if (!set.size) changers.delete(key)
+  let touched = false
+  for (const [key, entry] of changers) {
+    touched = entry.ids.delete(who) || touched
+    if (!entry.ids.size) changers.delete(key)
   }
-  await change($, s => clashesCleared(s, who))
+  if (touched) await settleClashes($)
+}
+
+async function settleClashes($: EngineInterface) {
+  await change($, s => {
+    const active = (id: string) => id === MAIN || s.agents.some(n => n.id === id && n.status === 'running')
+    const wanted: Map<string, { file: string; with: string }> = new Map()
+    for (const entry of changers.values()) {
+      const ids = [...entry.ids].filter(active)
+      if (ids.length < 2) continue
+      for (const id of ids) {
+        const other = ids.find(o => o !== id)
+        if (id !== MAIN && other && !wanted.has(id)) wanted.set(id, { file: entry.file, with: other })
+      }
+    }
+    return s.agents.reduce((next, n) => {
+      const clash = wanted.get(n.id)
+      if (!clash) return n.clash ? clashed(next, n.id, undefined) : next
+      return n.clash?.file === clash.file && n.clash.with === clash.with ? next : clashed(next, n.id, clash)
+    }, s)
+  })
+}
+
+function succeeded(result: unknown): boolean {
+  const answer = result as { deny?: string; isError?: boolean } | undefined
+  return answer !== undefined && answer.deny === undefined && answer.isError !== true
 }
 
 async function latest($: EngineInterface): Promise<AgentTreeState> {
@@ -505,7 +522,7 @@ async function settleUnread($: EngineInterface, s: AgentTreeState, agentId: stri
 function actionsFor($: EngineInterface): TreeActions {
   const ignore = () => undefined
   return {
-    select: target => void change($, t => selectedSet(t, t.selected === target ? undefined : target)).catch(ignore),
+    select: target => void change($, t => selectionToggled(t, target)).catch(ignore),
     pick: target => void change($, t => pickerOpened(t, target)).catch(ignore),
     choose: (target, family) => void chooseModel($, target, family).catch(ignore),
     effort: (target, effort) => void chooseEffort($, target, effort).catch(ignore),
@@ -814,8 +831,9 @@ export const register: Register = (on, options) => {
     const kind = toolKind(String(e.tool))
     const path = kind === 'change' ? pathOf(input) : undefined
     if (!agentId) {
-      if (path) await noteChange($, MAIN, path).catch(() => undefined)
-      return next(e)
+      const result = await next(e)
+      if (path && succeeded(result)) await noteChange($, MAIN, path).catch(() => undefined)
+      return result
     }
     const stopping = stoppingIds.has(agentId)
     if (stopping) {
@@ -839,11 +857,14 @@ export const register: Register = (on, options) => {
       const known = (await latest($)).agents.some(n => n.id === agentId)
       if (!known) return
       const now = await clock($)
-      await change($, s => toolRan(s, { agentId, label, kind, file }, now))
-      if (path) await noteChange($, agentId, path)
+      await change($, s => toolRan(s, { agentId, label, kind }, now))
     })().catch(() => undefined)
     const result = await next(e)
     await noted
+    if (succeeded(result)) {
+      await change($, s => fileNoted(s, agentId, kind, file)).catch(() => undefined)
+      if (path) await noteChange($, agentId, path).catch(() => undefined)
+    }
     return result
   }).catch(($, e, next) => next(e))
 

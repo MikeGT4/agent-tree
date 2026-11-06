@@ -268,11 +268,10 @@ function treeRows(o: RowPlanInput, shown: number): number {
 
 const LOG_FRAME_ROWS = 4
 
-function usedRows(o: RowPlanInput, shown: number, logRows: number | undefined, advisor = true): number {
+function usedRows(o: RowPlanInput, shown: number, logRows: number | undefined): number {
   const header = (o.tight ? 1 : 3) + (o.pickerRows ?? 0)
   const tree = treeRows(o, shown)
-  const side = advisor ? o.advisorRows : 0
-  const body = o.wide ? Math.max(side, tree) : side + tree
+  const body = o.wide ? Math.max(o.advisorRows, tree) : o.advisorRows + tree
   const log = logRows === undefined ? 0 : LOG_FRAME_ROWS + logRows
   const foot = o.detailRows ? 0 : (o.limitRows ?? 0) + (o.helpRows ?? 0)
   return header + 1 + body + (o.actionRows ?? 0) + (o.hintRows ?? 0) + (o.detailRows ?? 0) + log + foot
@@ -439,7 +438,22 @@ export function pickerLines(name: string, width: number, lang: Lang = 'de', runn
   const w = wordsFor(lang)
   const models = wrappedLines([w.pickerFor(name), `[ ${w.standard} ]`, ...MODEL_FAMILIES.map(family => `[ ${familyLabel(family)} ]`), '[ × ]'], width)
   const efforts = wrappedLines([w.effortFor, `[ ${w.standard} ]`, ...EFFORT_LEVELS.map(level => `[ ${effortLabel(level)} ]`)], width)
-  return models + efforts + (running ? wrappedLines([w.effortNextMessage], width) : 0)
+  return models + efforts + (running ? textRows(w.effortNextMessage, width) : 0)
+}
+
+function textRows(text: string, width: number): number {
+  let rows = 1
+  let used = 0
+  for (const word of text.split(' ')) {
+    const size = [...word].length
+    if (used === 0) used = size
+    else if (used + 1 + size <= width) used += 1 + size
+    else {
+      rows += 1
+      used = size
+    }
+  }
+  return rows
 }
 
 export function mainPickerLines(width: number, lang: Lang = 'de'): number {
@@ -541,7 +555,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     mostCommon(s.agents.filter(n => n.status === 'running').map(n => n.effort)) ?? mostCommon(s.agents.map(n => n.effort))
   const modelText = (n: AgentTreeNode, room = Infinity) => {
     const pending = choices.agents[n.id]
-    if (!pending || pending === familyOf(n.model)) return modelLabel(n.model) || ' '
+    if (!pending || pending === familyOf(n.model) || n.status !== 'running') return modelLabel(n.model) || ' '
     const full = `${modelLabel(n.model) || w.model} → ${familyLabel(pending)}`
     if ([...full].length <= room) return full
     const from = familyOf(n.model)

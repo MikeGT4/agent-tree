@@ -60,6 +60,7 @@ import {
   NEW_AGENTS,
   selectedSet,
   deselected,
+  selectionToggled,
   selectionOf,
   FEEDBACK_MS,
   feedbackFor,
@@ -1271,5 +1272,49 @@ describe('Aktionszeile schließen', () => {
     const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop, deselect: () => void calls.push('deselect') }
     expect(pressKey(actions, 'actions:close')).toBe(true)
     expect(calls).toEqual(['deselect'])
+  })
+})
+
+describe('Dateinamen, Auswahlwechsel und offene Wahl', () => {
+  const running = () => stepped(spawned(createTree(0), spawn('a1'), 1), { agentId: 'a1', model: 'claude-haiku-5-5', effort: 'medium' }, 2)
+
+  test('Dateinamen tragen keine Steuerzeichen', () => {
+    const name = fileNameOf({ file_path: '/p/a\u001b[31mb\u0007c.ts' }) ?? ''
+    expect(/[\u0000-\u001f\u007f-\u009f]/.test(name)).toBe(false)
+    expect(name.endsWith('c.ts')).toBe(true)
+    const s = toolRan(running(), { agentId: 'a1', label: 'Edit x', kind: 'change', file: '/p/x\u0000y.ts' }, 3)
+    expect(/[\u0000-\u001f]/.test(s.agents[0]?.changed?.[0] ?? '')).toBe(false)
+  })
+
+  test('Auswahlwechsel schließt Details und Wahl des alten Agenten, zweiter Klick schließt alles', () => {
+    let s = spawned(running(), spawn('a2'), 3)
+    s = detailOpened(selectionToggled(s, 'a1'), 'a1')
+    s = selectionToggled(s, 'a2')
+    expect([s.selected, s.detail, s.choices?.picker]).toEqual(['a2', undefined, undefined])
+    s = pickerOpened(s, 'a2')
+    s = selectionToggled(s, 'a2')
+    expect([s.selected, s.detail, s.choices?.picker]).toEqual([undefined, undefined, undefined])
+  })
+
+  test('beendeter Agent: keine Rückmeldung zur Modellwahl mehr', () => {
+    let s = chosen(running(), 'a1', 'opus', 3)
+    s = completed(s, { agentId: 'a1', answer: 'fertig', reason: 'answer', isAborted: false, durationMs: 5 }, 5)
+    expect(feedbackFor(s, 'a1', 6)).toBeUndefined()
+  })
+
+  test('Denkstufe für ein Modell ohne Denkstufe hängt nicht', () => {
+    let s = stepped(spawned(createTree(0), spawn('a1'), 1), { agentId: 'a1', model: 'claude-haiku-5-5', effortless: true }, 2)
+    s = effortChosen(s, 'a1', 'high', 3)
+    expect(feedbackFor(s, 'a1', 4)?.phase).toBe('pending')
+    expect(feedbackFor(s, 'a1', 4 + FEEDBACK_MS)).toBeUndefined()
+    let m = stepped(createTree(0), { model: 'claude-haiku-5-5', effortless: true }, 1)
+    m = effortChosen(m, MAIN, 'high', 2)
+    expect(mainFeedback(m, 3)?.phase).toBe('pending')
+    expect(mainFeedback(m, 3 + FEEDBACK_MS)).toBeUndefined()
+  })
+
+  test('die Hinweiszeile der Wahl zählt ihre Umbrüche', () => {
+    expect(pickerLines('x', 60, 'de', true) - pickerLines('x', 60, 'de', false)).toBe(2)
+    expect(pickerLines('x', 200, 'de', true) - pickerLines('x', 200, 'de', false)).toBe(1)
   })
 })

@@ -13,7 +13,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; holdAppend?: Promise<void>; fillFails?: boolean } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; holdAppend?: Promise<void>; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -132,7 +132,12 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   })
   on('turn.start', async (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', async (_, e) => ({ text: e.answer }) as never)
-  on('tool.call', async () => ({ result: 'ok', text: 'ok' }) as never)
+  on('tool.call', async (_, e) => {
+    const edit = (e as { tool?: string }).tool === 'Edit'
+    if (edit && refuse.denyEdit) return { deny: 'User rejected' } as never
+    if (edit && refuse.failEdit) return { result: 'String to replace not found', isError: true } as never
+    return { result: 'ok', text: 'ok' } as never
+  })
   on('turn.step', async function* (_, e) {
     stepModels.push(e.model)
     stepEfforts.push(e.effort)
@@ -3090,6 +3095,64 @@ describe('Platz und Hebel in der Leiste', () => {
     await ui.press({ key: 'pick:sub-2' })
     await ui.press({ key: 'actions:close' })
     expect(has(await screen(ui), 'choose:sub-2:opus')).toBe(false)
+    await ui.unmount()
+  })
+
+  test('abgelehnte Änderung zählt nicht und warnt nicht', de, async ($, on) => {
+    const { tree } = engine(on, [], { denyEdit: true })
+    await twoAgents($)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/denyEdit/api.ts' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/denyEdit/api.ts', agentId: 'sub-1' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/denyEdit/api.ts', agentId: 'sub-2' } as never)
+    const s = tree()
+    expect([clashOf(s, 'sub-1'), clashOf(s, 'sub-2'), s.agents.find(n => n.id === 'sub-1')?.changed]).toEqual([undefined, undefined, undefined])
+  })
+
+  test('gescheiterte Änderung zählt nicht und warnt nicht', de, async ($, on) => {
+    const { tree } = engine(on, [], { failEdit: true })
+    await twoAgents($)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/failEdit/api.ts' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/failEdit/api.ts', agentId: 'sub-1' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/failEdit/api.ts', agentId: 'sub-2' } as never)
+    const s = tree()
+    expect([clashOf(s, 'sub-1'), clashOf(s, 'sub-2'), s.agents.find(n => n.id === 'sub-1')?.changed]).toEqual([undefined, undefined, undefined])
+  })
+
+
+  test('drei an einer Datei: endet die Hauptsitzung, warnen die beiden anderen weiter', de, async ($, on) => {
+    const { tree } = engine(on)
+    await twoAgents($)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/drei/x.ts' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/drei/x.ts', agentId: 'sub-1' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/drei/x.ts', agentId: 'sub-2' } as never)
+    await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+    const s = tree()
+    expect([clashOf(s, 'sub-1'), clashOf(s, 'sub-2')]).toEqual([{ file: 'x.ts', with: 'sub-2' }, { file: 'x.ts', with: 'sub-1' }])
+  })
+
+  test('Auswahlwechsel schließt die Details des alten Agenten', de, async ($, on) => {
+    engine(on)
+    await agents($, 2)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'select:sub-1' })
+    await ui.press({ key: 'detail:sub-1' })
+    await ui.press({ key: 'select:sub-2' })
+    const text = await screen(ui)
+    expect([has(text, 'detail:close'), has(text, 'halt:sub-2')]).toEqual([false, true])
+    await ui.unmount()
+  })
+
+  test('beendeter Agent: kein Pfeil und kein Hinweis zur Modellwahl', de, async ($, on) => {
+    engine(on)
+    await agents($, 1)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'select:sub-1' })
+    await ui.press({ key: 'pick:sub-1' })
+    await ui.press({ key: 'choose:sub-1:sonnet' })
+    await $.turn.complete({ answer: 'fertig', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' } as never)
+    await ui.redraw()
+    const text = await screen(ui)
+    expect([text.includes('→ Sonnet'), text.includes('nächsten Schritt')]).toEqual([false, false])
     await ui.unmount()
   })
 

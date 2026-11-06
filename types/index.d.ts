@@ -10,6 +10,7 @@ export type AgentTreeNode = {
   description: string
   model?: string
   effort?: string
+  effortless?: boolean
   background: boolean
   fork: boolean
   workflowRunId?: string
