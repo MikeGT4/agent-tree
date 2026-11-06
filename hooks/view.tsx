@@ -15,6 +15,7 @@ import type {
 import {
   EFFORT_LEVELS,
   WORKFLOW_PREFIX,
+  clashShown,
   contextLevel,
   familyOf,
   feedbackFor,
@@ -49,7 +50,7 @@ import type { Lang, Words } from './words.ts'
 export { WORDS, logLine, wordsFor }
 export type { Lang }
 
-type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'> & { Input?: Elements['terminal']['Input'] }
+type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
 
 export const WIDE_FROM = 84
 export const TIGHT_BELOW = 36
@@ -79,9 +80,11 @@ function correctionGlyph(s: AgentTreeState, agentId: string): string {
   return (state ? CORRECTION_MARK[state] : undefined) ?? ''
 }
 
-export function statusWithMark(head: string, mark: string, tail: string, width: number): string {
-  if (!mark) return head + tail
-  if ([...head].length + 1 + [...mark].length <= width) return `${head} ${mark}${tail}`
+export function statusWithMark(head: string, mark: string, tail: string, width: number, shortTail = tail): string {
+  const joined = (end: string) => (mark ? `${head} ${mark}${end}` : head + end)
+  if ([...joined(tail)].length <= width) return joined(tail)
+  if ([...joined(shortTail)].length <= width || !mark) return joined(shortTail)
+  if ([...head].length + 1 + [...mark].length <= width) return joined(shortTail)
   return `${clip(head, width - [...mark].length)}${mark}`
 }
 
@@ -111,7 +114,6 @@ export type TreeActions = {
   close: () => void
   detail: (agentId: string) => void
   stop: (agentId: string) => void
-  say: (agentId: string, text: string) => void
   write: (agentId: string) => void
   advisor: () => void
   look: () => void
@@ -138,7 +140,7 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   else if (key === 'advisor:toggle') actions.advisor()
   else if (kind === 'look') return lookKey(actions, rest)
   else if (kind === 'select') actions.select(rest)
-  else if (kind === 'pick') actions.pick(rest)
+  else if (kind === 'pick' || kind === 'level') actions.pick(rest)
   else if (kind === 'choose') return targetKey(rest, (target, value) => actions.choose(target, value))
   else if (kind === 'detail') actions.detail(rest)
   else if (kind === 'write') actions.write(rest)
@@ -148,15 +150,6 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   return true
 }
 
-
-export function inputKey(actions: TreeActions, element: string, kind: string, value: string): boolean {
-  if (kind !== 'submit' || !element.startsWith('say:')) return false
-  const rest = element.slice('say:'.length)
-  const colon = rest.lastIndexOf(':')
-  if (colon < 1) return false
-  actions.say(rest.slice(0, colon), value)
-  return true
-}
 
 function targetKey(rest: string, apply: (target: string, value: string | undefined) => void): boolean {
   const colon = rest.lastIndexOf(':')
@@ -228,7 +221,7 @@ export type RowPlanInput = {
   hintRows?: number
 }
 
-export type RowPlan = { shown: number; logRows: number }
+export type RowPlan = { shown: number; logRows: number; advisor?: false }
 
 export const LIMIT_BAR = 8
 export const CONTEXT_BAR = 3
@@ -271,24 +264,36 @@ function treeRows(o: RowPlanInput, shown: number): number {
   return top + 3 + label + (10 * boxRows - 1) + 1 + back
 }
 
-function usedRows(o: RowPlanInput, shown: number, logRows: number): number {
+const LOG_FRAME_ROWS = 4
+
+function usedRows(o: RowPlanInput, shown: number, logRows: number | undefined, advisor = true): number {
   const header = (o.tight ? 1 : 3) + (o.pickerRows ?? 0)
   const tree = treeRows(o, shown)
-  const body = o.wide ? Math.max(o.advisorRows, tree) : o.advisorRows + tree
-  return header + 1 + body + (o.actionRows ?? 0) + (o.detailRows ?? 0) + 4 + logRows + (o.limitRows ?? 0) + (o.helpRows ?? 0)
+  const side = advisor ? o.advisorRows : 0
+  const body = o.wide ? Math.max(side, tree) : side + tree
+  const log = logRows === undefined ? 0 : LOG_FRAME_ROWS + logRows
+  return header + 1 + body + (o.actionRows ?? 0) + (o.hintRows ?? 0) + (o.detailRows ?? 0) + log + (o.limitRows ?? 0) + (o.helpRows ?? 0)
+}
+
+function leanest(o: RowPlanInput, cap: number): number {
+  let best = cap
+  for (let candidate = cap - 1; candidate >= 1; candidate--) if (usedRows(o, candidate, undefined) < usedRows(o, best, undefined)) best = candidate
+  return best
 }
 
 export function planRows(o: RowPlanInput): RowPlan {
   const cap = Math.min(o.total, o.asRows ? MAX_ROWS : MAX_GROUPS)
   if (o.height === undefined) return { shown: cap, logRows: LOG_ROWS }
-  let shown = Math.min(1, cap)
-  for (let candidate = cap; candidate >= 1; candidate--) {
-    if (usedRows(o, candidate, MIN_LOG_ROWS) <= o.height) {
-      shown = candidate
-      break
-    }
+  const height = o.height
+  const withLog = !o.detailRows
+  let shown = 0
+  for (let candidate = cap; candidate >= 1 && !shown; candidate--) {
+    if (usedRows(o, candidate, withLog ? MIN_LOG_ROWS : undefined) <= height) shown = candidate
   }
-  const logRows = Math.max(1, Math.min(LOG_ROWS, o.height - usedRows(o, shown, 0) - (o.hintRows ?? 0)))
+  if (!shown) shown = leanest(o, cap)
+  const rest = height - usedRows(o, shown, undefined)
+  const logRows = withLog && rest > LOG_FRAME_ROWS ? Math.min(LOG_ROWS, rest - LOG_FRAME_ROWS) : 0
+  if (!o.wide && !logRows && usedRows(o, shown, undefined) > height) return { shown, logRows, advisor: false }
   return { shown, logRows }
 }
 
@@ -531,17 +536,22 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const detailNode = detail ? s.agents.find(n => n.id === detail.agentId) : undefined
   const agentEffort =
     mostCommon(s.agents.filter(n => n.status === 'running').map(n => n.effort)) ?? mostCommon(s.agents.map(n => n.effort))
-  const modelText = (n: AgentTreeNode) => {
+  const modelText = (n: AgentTreeNode, room = Infinity) => {
     const pending = choices.agents[n.id]
-    return pending && pending !== familyOf(n.model) ? `${modelLabel(n.model) || w.model} → ${familyLabel(pending)}` : modelLabel(n.model) || ' '
+    if (!pending || pending === familyOf(n.model)) return modelLabel(n.model) || ' '
+    const full = `${modelLabel(n.model) || w.model} → ${familyLabel(pending)}`
+    if ([...full].length <= room) return full
+    const from = familyOf(n.model)
+    return `${from ? familyLabel(from) : modelLabel(n.model) || w.model} → ${familyLabel(pending)}`
   }
   const feedbackText = (f: Feedback | undefined, main = false): string | undefined => {
     if (!f) return undefined
     const t = w.feedback
     if (f.kind === 'stop') return f.phase === 'done' ? t.stopDone : t.stopPending
     if (f.kind === 'write') return f.phase === 'done' ? t.writeDone : f.phase === 'failed' ? t.writeFailed : t.writePending
-    if (f.kind === 'model') return f.phase === 'done' ? t.modelDone(familyLabel(f.value)) : t.modelPending(familyLabel(f.value))
-    const level = effortLabel(f.value ?? '')
+    const named = f.value ? (f.kind === 'model' ? familyLabel(f.value) : effortLabel(f.value)) : w.standard
+    if (f.kind === 'model') return f.phase === 'done' ? t.modelDone(named) : t.modelPending(named)
+    const level = named
     if (main) return t.mainEffortPending(level)
     return f.phase === 'done' ? t.effortDone(level) : t.effortPending(level)
   }
@@ -555,23 +565,30 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const barNode = selection?.kind === 'agent' ? selection.node : undefined
   const barRunning = barNode?.status === 'running'
   const barStopping = barNode !== undefined && (s.stopping ?? []).includes(barNode.id)
+  const barLevel = (n: AgentTreeNode) => {
+    const now = n.effort ? effortLabel(n.effort) : w.standard
+    const next = choices.efforts?.[n.id]
+    return next && next !== n.effort ? `${now} → ${effortLabel(next)}` : now
+  }
   const barButtons =
     barNode && actions
       ? [
           ...(barRunning && !barStopping ? [{ key: `halt:${barNode.id}`, label: `■ ${w.stopButton}`, hotkey: 's', press: () => actions.stop(barNode.id) }] : []),
           { key: `write:${barNode.id}`, label: `✎ ${w.writeButton}`, press: () => actions.write(barNode.id) },
           ...(barRunning ? [{ key: `pick:${barNode.id}`, label: `${w.model}: ${modelText(barNode).trim() || w.model} ▾`, press: () => actions.pick(barNode.id) }] : []),
+          ...(barRunning ? [{ key: `level:${barNode.id}`, label: `${w.effortFor} ${barLevel(barNode)} ▾`, press: () => actions.pick(barNode.id) }] : []),
           { key: `detail:${barNode.id}`, label: w.detailsButton, press: () => actions.detail(barNode.id) },
         ]
       : []
-  const barFeedback = barNode ? feedbackFor(s, barNode.id, now) : selection === undefined ? mainFeedback(s) : undefined
+  const barFeedback = barNode ? feedbackFor(s, barNode.id, now) : selection === undefined ? mainFeedback(s, now) : undefined
   const barFeedbackText = feedbackText(barFeedback, barNode === undefined)
-  const barClashWith = barNode?.clash
-    ? barNode.clash.with === MAIN
+  const shownClash = barNode ? clashShown(s, barNode.id) : undefined
+  const barClashWith = shownClash
+    ? shownClash.with === MAIN
       ? w.main
-      : s.agents.find(n => n.id === barNode.clash?.with)?.description || barNode.clash.with
+      : s.agents.find(n => n.id === shownClash.with)?.description || shownClash.with
     : undefined
-  const barClash = barNode?.clash && barClashWith ? w.alsoChanges(barNode.clash.file, barClashWith) : undefined
+  const barClash = shownClash && barClashWith ? w.alsoChanges(shownClash.file, barClashWith) : undefined
   const barWorkflow =
     selection?.kind === 'workflow'
       ? (() => {
@@ -613,10 +630,16 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         )
       : 1,
   })
-  const detailAt = detail ? current.findIndex(g => g.kind === 'agent' && g.node.id === detail.agentId) : -1
+  const keepId = detail?.agentId ?? (selection?.kind === 'agent' ? selection.node.id : undefined)
+  const keepAt =
+    keepId !== undefined
+      ? current.findIndex(g => g.kind === 'agent' && g.node.id === keepId)
+      : selection?.kind === 'workflow'
+        ? current.findIndex(g => g.kind === 'workflow' && g.runId === selection.runId)
+        : -1
   const shown =
-    detailAt >= plan.shown && plan.shown > 0
-      ? [...current.slice(0, plan.shown - 1), current[detailAt] as AgentTreeGroup]
+    keepAt >= plan.shown && plan.shown > 0
+      ? [...current.slice(0, plan.shown - 1), current[keepAt] as AgentTreeGroup]
       : current.slice(0, plan.shown)
   const rest = current.filter(g => !shown.includes(g))
   const hiddenRunning = rest.filter(isRunning).length
@@ -697,7 +720,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const agentBox = (g: AgentTreeGroup, marginLeft: number) => {
     if (g.kind === 'workflow') {
       const wfTarget = `${WORKFLOW_PREFIX}${g.runId}`
-      const wfClash = s.agents.some(n => n.workflowRunId === g.runId && n.clash)
+      const wfClash = s.agents.some(n => n.workflowRunId === g.runId && clashShown(s, n.id))
       const color = s.selected === wfTarget ? palette.main : g.running > 0 ? palette.agent : g.failed > 0 ? palette.failed : palette.dim
       return (
         <Box key={`wf:${g.runId}`} width={AGENT_WIDTH} marginLeft={marginLeft} {...frameProps(color)} flexDirection="column" alignItems="center">
@@ -733,7 +756,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     const running = n.status === 'running'
     const nested = parentOf(s, n)
     const stopping = (s.stopping ?? []).includes(n.id)
-    const mark = `${correctionGlyph(s, n.id)}${n.clash ? '⚠' : ''}`
+    const mark = `${correctionGlyph(s, n.id)}${clashShown(s, n.id) ? '⚠' : ''}`
     const inner = AGENT_WIDTH - 2
     const filledShare = running ? contextPercent(n.contextTokens, windowOf(s, n)) : undefined
     const statusLine =
@@ -749,6 +772,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
                   ? ` · ${fmtTokens(n.contextTokens, w.decimal)}`
                   : '',
               inner,
+              filledShare !== undefined ? ` ${w.percent(filledShare)}` : undefined,
             )
         : n.status === 'done' && n.endedAt !== undefined
           ? statusWithMark(`${glyphs.marks.done} ${w.status.done}`, mark, ` · ${fmtShortDuration(n.endedAt - n.startedAt)}`, inner)
@@ -758,7 +782,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       <Box key={`ag:${n.id}`} width={AGENT_WIDTH} marginLeft={marginLeft} {...frameProps(edge)} flexDirection="column" alignItems="center">
         {typeButton(n, running)}
         <Text color={running ? undefined : palette.dim} wrap="truncate-end">
-          {clip(modelText(n), AGENT_WIDTH - 2)}
+          {clip(modelText(n, AGENT_WIDTH - 2), AGENT_WIDTH - 2)}
         </Text>
         <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
           {running && n.effort !== undefined && choices.efforts?.[n.id] && choices.efforts[n.id] !== n.effort
@@ -810,7 +834,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     const indent = parentOf(s, n) ? '↳ ' : ''
     const share = n.status === 'running' ? contextPercent(n.contextTokens, windowOf(s, n)) : undefined
     const size = share !== undefined ? ` · ${w.percent(share)}` : n.status === 'running' && n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''
-    const mark = `${correctionGlyph(s, n.id)}${n.clash ? '⚠' : ''}`
+    const mark = `${correctionGlyph(s, n.id)}${clashShown(s, n.id) ? '⚠' : ''}`
     const text = `${s.selected === n.id ? '▸ ' : ''}${indent}${n.status === 'running' ? spin : statusMark(glyphs, n.status)} ${n.status === 'running' && (s.stopping ?? []).includes(n.id) ? w.stopping : w.status[n.status]}${mark ? ` ${mark}` : ''} · ${typeLabel(n.type)} · ${n.description}${size}`
     return (
       <Box key={`ag:${n.id}`} width={treeWidth} flexDirection="row" columnGap={1}>
@@ -1145,6 +1169,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       </Box>
     ) : null
 
+  const agentPicker = pickerTarget !== undefined && pickerTarget !== MAIN && pickerTarget !== NEW_AGENTS
   const pickerRow =
     pickerTarget === MAIN ? mainPicker : pickerTarget && actions ? (
       <Box key="picker" flexDirection="column" width={width} marginTop={1}>
@@ -1172,7 +1197,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           ))}
         </Box>
         {pickerTarget !== NEW_AGENTS ? (
-          <Text key="picker-hint" color={palette.dim} wrap="truncate-end">
+          <Text key="picker-hint" color={palette.dim} wrap="wrap">
             {w.effortNextMessage}
           </Text>
         ) : null}
@@ -1330,7 +1355,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   return (
     <Box flexDirection="column" width={width}>
       {header}
-      {pickerRow}
+      {agentPicker ? null : pickerRow}
       {lookRow}
       {wide ? (
         <Box key="body" flexDirection="row" columnGap={2} marginTop={1}>
@@ -1339,13 +1364,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         </Box>
       ) : (
         <Box key="body" flexDirection="column" marginTop={1}>
-          {advisorCompact}
+          {plan.advisor === false ? null : advisorCompact}
           {tree}
         </Box>
       )}
       {actionBar}
-      {detailBox}
-      {logBox}
+      {agentPicker ? pickerRow : null}
+      {detailBox ?? (plan.logRows > 0 ? logBox : null)}
       {limitRow}
       {tight ? null : (
         <Text key="help" size={SIZE.note} color={palette.dim} wrap="truncate-end">

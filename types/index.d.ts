@@ -115,6 +115,7 @@ export type AgentTreeChoices = {
   efforts?: Record<string, string>
   restored?: boolean
   picker?: string
+  chosenAt?: Record<string, { kind: 'model' | 'effort'; at: number }>
 }
 
 export type AgentTreeDetail = {

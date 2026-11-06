@@ -5,6 +5,8 @@ import type { AgentTreeLogEntry } from '../types'
 import {
   adopted,
   chosen,
+  clashed,
+  restoredChoices,
   effortChosen,
   effortFrom,
   familyFrom,
@@ -70,7 +72,7 @@ import {
   typeLabel,
   wasStopSent,
 } from '../hooks/model.ts'
-import { AGENT_WIDTH, connector, drawTree, helpLine, inputKey, limitSegments, litCells, lookLines, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
+import { AGENT_WIDTH, connector, drawTree, helpLine, limitSegments, litCells, lookLines, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
 import { activityText, lookChoice, logLine, resolveLang, toolText, WORDS } from '../hooks/words.ts'
 import { contrast, DEFAULT_LOOK, frameEdges, isLookChoice, lightColor, lookFrom, LOOK_OPTIONS, PALETTES, restyleLine, STYLES } from '../hooks/looks.ts'
 
@@ -357,7 +359,6 @@ describe('Datenmodell', () => {
       close: () => void calls.push('close'),
       detail: (agentId: string) => void calls.push(`detail ${agentId}`),
       stop: (agentId: string) => void calls.push(`stop ${agentId}`),
-      say: () => undefined,
       advisor: () => undefined,
       look: () => undefined,
       restyle: () => undefined,
@@ -710,22 +711,10 @@ describe('Korrekturen', () => {
   })
 })
 
-describe('Textfeld', () => {
-  test('inputKey schickt nur bei submit', () => {
-    const said: [string, string][] = []
-    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: () => {}, say: (id: string, value: string) => void said.push([id, value]), advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, write: () => {} }
-    expect(inputKey(actions, 'say:sub-1:0', 'submit', 'x')).toBe(true)
-    expect(said).toEqual([['sub-1', 'x']])
-    expect(inputKey(actions, 'say:sub-1:0', 'change', 'y')).toBe(false)
-    expect(inputKey(actions, 'other:sub-1', 'submit', 'z')).toBe(false)
-    expect(said.length).toBe(1)
-  })
-})
-
 describe('Stopp am Kasten', () => {
   test('pressKey kennt halt', () => {
     const stopped: string[] = []
-    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), say: () => {}, advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, write: () => {} }
+    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, write: () => {} }
     expect(pressKey(actions, 'halt:sub-1')).toBe(true)
     expect(stopped).toEqual(['sub-1'])
   })
@@ -845,7 +834,7 @@ describe('Aussehen', () => {
     const ui = { Box: 'Box', Text: 'Text', Button: 'Button' } as never
     const s = detailOpened(spawned(createTree(0), spawn('sub-1'), 1), 'sub-1')
     const noop = () => {}
-    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, say: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop }
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop }
     const text = JSON.stringify(drawTree(ui, s, 90, 60, { frame: 0, animate: false, now: 5000, actions }))
     expect(text).not.toMatch(/say:sub-1/)
   })
@@ -1175,9 +1164,9 @@ describe('Rückmeldung', () => {
 
   test('Denkstufe der Hauptsitzung gewählt: wartet auf die nächste Nachricht', () => {
     let s = stepped(createTree(0), { model: 'claude-opus-5-5', effort: 'high' }, 1)
-    expect(mainFeedback(s)).toBeUndefined()
+    expect(mainFeedback(s, 2)).toBeUndefined()
     s = effortChosen(s, MAIN, 'max', 2)
-    expect(mainFeedback(s)).toEqual({ kind: 'effort', phase: 'pending', value: 'max' })
+    expect(mainFeedback(s, 3)).toEqual({ kind: 'effort', phase: 'pending', value: 'max' })
   })
 })
 
@@ -1185,5 +1174,79 @@ describe('Hinweis der Aktionszeile', () => {
   test('passt in eine schmale Leiste', () => {
     expect([...WORDS.de.actionHint].length).toBeLessThanOrEqual(56)
     expect([...WORDS.en.actionHint].length).toBeLessThanOrEqual(56)
+  })
+})
+
+describe('Rückmeldung nur nach einer Wahl', () => {
+  const running = () => stepped(spawned(createTree(0), spawn('a1'), 1), { agentId: 'a1', model: 'claude-haiku-5-5', effort: 'medium' }, 2)
+  const late = 2 + FEEDBACK_MS
+
+  test('Standard gewählt: Rückmeldung mit Standard, danach still', () => {
+    const s = chosen(chosen(running(), 'a1', 'opus', late), 'a1', undefined, late + 1)
+    expect(feedbackFor(s, 'a1', late + 2)).toEqual({ kind: 'model', phase: 'pending', value: undefined })
+    expect(feedbackFor(s, 'a1', late + 1 + FEEDBACK_MS)).toBeUndefined()
+  })
+
+  test('dasselbe Modell gewählt: sofort bestätigt', () => {
+    const s = chosen(running(), 'a1', 'haiku', late)
+    expect(feedbackFor(s, 'a1', late + 1)).toEqual({ kind: 'model', phase: 'done', value: 'haiku' })
+  })
+
+  test('Denkstufe Standard oder dieselbe Stufe: Rückmeldung', () => {
+    expect(feedbackFor(effortChosen(running(), 'a1', undefined, late), 'a1', late + 1)).toEqual({ kind: 'effort', phase: 'pending', value: undefined })
+    expect(feedbackFor(effortChosen(running(), 'a1', 'medium', late), 'a1', late + 1)).toEqual({ kind: 'effort', phase: 'done', value: 'medium' })
+  })
+
+  test('ohne Wahl an diesem Agenten keine Rückmeldung, auch nicht mit der Stufe für neue Agenten', () => {
+    let s = spawned(createTree(0), spawn('a1', { effort: 'low' }), 1)
+    s = stepped(s, { agentId: 'a1', model: 'claude-haiku-5-5', effort: 'low' }, 2)
+    expect(feedbackFor(s, 'a1', 3)).toBeUndefined()
+  })
+
+  test('Hauptsitzung: gespeicherte Stufe ohne Wahl in dieser Sitzung meldet nichts', () => {
+    expect(mainFeedback(restoredChoices(createTree(0), undefined, undefined, 'high'), 1)).toBeUndefined()
+  })
+
+  test('Hauptsitzung: Standard gewählt meldet sich', () => {
+    let s = stepped(createTree(0), { model: 'claude-opus-5-5', effort: 'high' }, 1)
+    s = effortChosen(s, MAIN, undefined, 2)
+    expect(mainFeedback(s, 3)).toEqual({ kind: 'effort', phase: 'pending', value: undefined })
+  })
+})
+
+describe('Warnzeichen bei gleicher Datei', () => {
+  test('stoppt das Gegenüber, verschwindet das Warnzeichen', () => {
+    let s = spawned(spawned(createTree(0), spawn('a1'), 1), spawn('a2'), 1)
+    s = stepped(stepped(s, { agentId: 'a1', model: 'claude-haiku-5-5' }, 2), { agentId: 'a2', model: 'claude-haiku-5-5' }, 2)
+    s = clashed(clashed(s, 'a1', { file: 'api.ts', with: 'a2' }), 'a2', { file: 'api.ts', with: 'a1' })
+    const ui = { Box: 'Box', Text: 'Text', Button: 'Button' } as never
+    const draw = (t: typeof s) => JSON.stringify(drawTree(ui, t, 90, 60, { frame: 0, animate: false, now: 5000 }))
+    expect(draw(s)).toContain('⚠')
+    s = completed(s, { agentId: 'a2', answer: '', reason: 'aborted', isAborted: true, durationMs: 5 }, 8)
+    expect(draw(s).includes('⚠')).toBe(false)
+  })
+})
+
+describe('Statuszeile im Kasten', () => {
+  test('mit Warnzeichen oder langem Wort bleibt die Prozentzahl sichtbar', () => {
+    expect(statusWithMark('◐ läuft', '⚠', ' ░░░ 16 %', AGENT_WIDTH - 2, ' 16 %')).toBe('◐ läuft ⚠ 16 %')
+    expect(statusWithMark('◐ running', '', ' ███ 100%', AGENT_WIDTH - 2, ' 100%')).toBe('◐ running 100%')
+    expect(statusWithMark('◐ läuft', '⚠', ' ░░░ 8 %', AGENT_WIDTH - 2, ' 8 %')).toBe('◐ läuft ⚠ ░░░ 8 %')
+  })
+})
+
+describe('Zeilenplan bei wenig Höhe', () => {
+  const narrow = { wide: false, tight: false, asRows: false, perRow: 3, advisorRows: 4, earlier: false, total: 3, actionRows: 5, helpRows: 1, limitRows: 1 }
+
+  test('passt nichts, bleibt die erste Reihe ganz und das Protokoll weicht', () => {
+    expect(planRows({ ...narrow, height: 47 })).toEqual({ shown: 3, logRows: 0 })
+  })
+
+  test('Details stehen anstelle des Protokolls', () => {
+    expect(planRows({ ...narrow, height: 60, detailRows: 11 })).toEqual({ shown: 3, logRows: 0 })
+  })
+
+  test('reicht es dann noch nicht, weicht der Beraterkasten', () => {
+    expect(planRows({ ...narrow, height: 50, detailRows: 11 })).toEqual({ shown: 3, logRows: 0, advisor: false })
   })
 })

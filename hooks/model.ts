@@ -259,7 +259,8 @@ export function effortChosen(s: AgentTreeState, target: string, effort: string |
   let who = ''
   if (target === MAIN) {
     const picker = current.picker === MAIN ? undefined : current.picker
-    return logged({ ...s, choices: { ...current, mainEffort: effort, picker } }, 'session', 'effort', { who, main: 1, effort: effort ?? '' }, now)
+    const chosenAt = { ...(current.chosenAt ?? {}), [MAIN]: { kind: 'effort' as const, at: now } }
+    return logged({ ...s, choices: { ...current, mainEffort: effort, picker, chosenAt } }, 'session', 'effort', { who, main: 1, effort: effort ?? '' }, now)
   }
   if (target === NEW_AGENTS) {
     choices = { ...current, newEffort: effort, efforts }
@@ -268,7 +269,7 @@ export function effortChosen(s: AgentTreeState, target: string, effort: string |
     if (!node) return s
     if (effort === undefined) delete efforts[target]
     else efforts[target] = effort
-    choices = { ...current, efforts }
+    choices = { ...current, efforts, chosenAt: { ...(current.chosenAt ?? {}), [target]: { kind: 'effort', at: now } } }
     who = node.type
   }
   return logged({ ...s, choices }, 'session', 'effort', { who, effort: effort ?? '' }, now)
@@ -330,7 +331,7 @@ export function chosen(s: AgentTreeState, target: string, family: string | undef
     if (!node) return s
     if (family === undefined) delete agents[target]
     else agents[target] = family
-    choices = { ...current, agents, picker }
+    choices = { ...current, agents, picker, chosenAt: { ...(current.chosenAt ?? {}), [target]: { kind: 'model', at: now } } }
     who = node.type
   }
   return logged({ ...s, choices }, 'session', 'choice', { who, family: family ?? '' }, now)
@@ -663,18 +664,31 @@ export function feedbackFor(s: AgentTreeState, agentId: string, now: number): Fe
   if (correction?.state === 'sent') return { kind: 'write', phase: 'pending' }
   if (correction?.state === 'read' && recent(correction.readAt, now)) return { kind: 'write', phase: 'done' }
   if (correction?.state === 'failed' && recent(correction.at, now)) return { kind: 'write', phase: 'failed' }
+  const chosenAt = s.choices?.chosenAt?.[agentId]
+  if (!chosenAt) return undefined
   const family = s.choices?.agents[agentId]
   if (family !== undefined && family !== familyOf(node.model)) return { kind: 'model', phase: 'pending', value: family }
-  if (family !== undefined && recent(node.modelSince, now)) return { kind: 'model', phase: 'done', value: family }
   const effort = s.choices?.efforts?.[agentId]
   if (effort !== undefined && effort !== node.effort) return { kind: 'effort', phase: 'pending', value: effort }
-  if (effort !== undefined && recent(node.effortSince, now)) return { kind: 'effort', phase: 'done', value: effort }
-  return undefined
+  const fresh = recent(chosenAt.at, now)
+  if (chosenAt.kind === 'model') {
+    if (family === undefined) return fresh ? { kind: 'model', phase: 'pending', value: undefined } : undefined
+    return fresh || confirmed(node.modelSince, chosenAt.at, now) ? { kind: 'model', phase: 'done', value: family } : undefined
+  }
+  if (effort === undefined) return fresh ? { kind: 'effort', phase: 'pending', value: undefined } : undefined
+  return fresh || confirmed(node.effortSince, chosenAt.at, now) ? { kind: 'effort', phase: 'done', value: effort } : undefined
 }
 
-export function mainFeedback(s: AgentTreeState): Feedback | undefined {
+function confirmed(since: number | undefined, chosen: number, now: number): boolean {
+  return since !== undefined && since >= chosen && recent(since, now)
+}
+
+export function mainFeedback(s: AgentTreeState, now: number): Feedback | undefined {
+  const chosenAt = s.choices?.chosenAt?.[MAIN]
+  if (!chosenAt) return undefined
   const effort = s.choices?.mainEffort
-  return effort !== undefined && effort !== s.main.effort ? { kind: 'effort', phase: 'pending', value: effort } : undefined
+  if (effort !== undefined && effort !== s.main.effort) return { kind: 'effort', phase: 'pending', value: effort }
+  return recent(chosenAt.at, now) ? { kind: 'effort', phase: 'pending', value: effort } : undefined
 }
 
 export function windowOf(s: AgentTreeState, node: AgentTreeNode): number | undefined {
@@ -717,6 +731,14 @@ export function clashed(s: AgentTreeState, agentId: string, clash: { file: strin
     else delete next.clash
     return next
   })
+}
+
+export function clashShown(s: AgentTreeState, agentId: string): AgentTreeNode['clash'] {
+  const node = findAgent(s, agentId)
+  const clash = node?.clash
+  if (!node || !clash || node.status !== 'running') return undefined
+  if (clash.with === MAIN) return clash
+  return s.agents.some(n => n.id === clash.with && n.status === 'running') ? clash : undefined
 }
 
 export function clashesCleared(s: AgentTreeState, who: string): AgentTreeState {
@@ -828,7 +850,7 @@ export function freshTree(from: AgentTreeState, now: number): AgentTreeState {
   const fresh: AgentTreeState = {
     ...base,
     agents: running,
-    choices: { ...choicesOf(base), agents: { ...old.agents }, efforts: { ...(old.efforts ?? {}) } },
+    choices: { ...choicesOf(base), agents: { ...old.agents }, efforts: { ...(old.efforts ?? {}) }, ...(old.chosenAt ? { chosenAt: { ...old.chosenAt } } : {}) },
     ...(from.stopping ? { stopping: from.stopping.filter(id => alive.has(id)) } : {}),
     ...(from.stopSent ? { stopSent: from.stopSent.filter(id => alive.has(id)) } : {}),
     ...(from.corrections ? { corrections: without(from.corrections, gone) } : {}),
@@ -909,6 +931,7 @@ export function trimmed(s: AgentTreeState, maxAgents: number): AgentTreeState {
     ...s.choices,
     agents: without(s.choices.agents, gone),
     ...(s.choices.efforts ? { efforts: without(s.choices.efforts, gone) } : {}),
+    ...(s.choices.chosenAt ? { chosenAt: without(s.choices.chosenAt, gone) } : {}),
     picker: s.choices.picker && dropped.has(s.choices.picker) ? undefined : s.choices.picker,
   }
   const next: AgentTreeState = {

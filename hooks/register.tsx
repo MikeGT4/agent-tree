@@ -71,7 +71,7 @@ import {
   withAdvisorModel,
   withLimits,
 } from './model.ts'
-import { drawTree, inputKey, pressKey, statusText } from './view.tsx'
+import { drawTree, pressKey, statusText } from './view.tsx'
 import type { TreeActions } from './view.tsx'
 import { familyOr, lookChoice, lookOptionLabel, resolveLang, wordsFor } from './words.ts'
 import type { Lang } from './words.ts'
@@ -391,17 +391,8 @@ function summarize(rows: unknown): Found {
   return { task, answer }
 }
 
-function sayKey(s: AgentTreeState, agentId: string): string {
-  return `say:${agentId}:${s.corrections?.[agentId]?.count ?? 0}`
-}
-
-function focusField($: EngineInterface, s: AgentTreeState, agentId: string): void {
-  if (s.detail?.agentId === agentId) void $.ui.focus({ requestId: PANE, key: sayKey(s, agentId) }).catch(() => undefined)
-}
-
 async function openDetail($: EngineInterface, agentId: string): Promise<void> {
   const s = await change($, t => detailOpened(t, agentId))
-  focusField($, s, agentId)
   if (s.detail?.agentId !== agentId || s.detail.state !== 'loading') return
   const rows = await $.session.messages({ agentId }).catch(() => undefined)
   await change($, t => detailLoaded(t, agentId, summarize(rows)))
@@ -443,7 +434,6 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
     }
     await change($, t => correctionCounted(t, agentId))
   }
-  focusField($, await latest($), agentId)
   const note = w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text)
   await appendRow($, note)
   const parent = node.parentId ? current.agents.find(n => n.id === node.parentId) : undefined
@@ -526,7 +516,6 @@ function actionsFor($: EngineInterface): TreeActions {
         .then(now => change($, t => stopRequested(t, agentId, now)))
         .catch(ignore)
     },
-    say: (agentId, text) => void sayTo($, agentId, text).catch(ignore),
     write: agentId => void startWrite($, agentId).catch(ignore),
     advisor: () => void toggleAdvisor($).catch(ignore),
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
@@ -599,6 +588,7 @@ export const register: Register = (on, options) => {
     seen.clear()
     starting.clear()
     standing.clear()
+    changers.clear()
     const result = await next(e)
     if (options.language !== 'de' && options.language !== 'en') {
       lang = resolveLang(options.language, await $.settings.read({ key: 'language' }).catch(() => undefined))
@@ -915,7 +905,6 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
     const { Box, Text, Button } = elements
-    const Input = 'Input' in elements ? elements.Input : undefined
     const draft = carried
     const now = await clock($)
     const stored = await read($, tree)
@@ -939,7 +928,7 @@ export const register: Register = (on, options) => {
       )
       if (intro) return intro
     }
-    return drawTree({ Box, Text, Button, Input } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {
+    return drawTree({ Box, Text, Button } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {
       frame: tick,
       animate,
       now,
@@ -963,14 +952,5 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     if (introTicker) void endIntro($).catch(() => undefined)
     return result
-  })
-
-  on('ui.input', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
-    await takeOver($).catch(() => undefined)
-    let work: Promise<unknown> | undefined
-    const actions = { ...actionsFor($), say: (agentId: string, text: string) => void (work = sayTo($, agentId, text)) }
-    if (!inputKey(actions, e.element, e.kind, e.value)) return next(e)
-    await work?.catch(() => undefined)
-    return { element: e.element, value: e.value }
   })
 }

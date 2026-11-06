@@ -68,11 +68,8 @@ export type Words = {
   decimal: string
   percent: (p: number) => string
   latest: string
-  stop: string
   stopping: string
   stopAnswer: (tools: number) => string
-  sayPlaceholder: string
-  sayLabel: string
   writeWord: string
   writeHint: (label: string) => string
   writeSent: (label: string) => string
@@ -91,7 +88,6 @@ export type Words = {
   introLimits: (limits: string) => string
   introPlaying: string
   introSkip: string
-  send: string
   correctionFrame: (text: string, tool: string) => string
   mainNote: (agent: string, text: string) => string
   mainNoteLost: (agent: string) => string
@@ -237,11 +233,8 @@ export const WORDS: Record<Lang, Words> = {
     decimal: ',',
     percent: p => `${p} %`,
     latest: 'Zuletzt',
-    stop: 'stoppen',
     stopping: 'hält an …',
     stopAnswer: n => `Im Agent Tree vom Nutzer gestoppt, nach ${n} ${n === 1 ? 'Werkzeugaufruf' : 'Werkzeugaufrufen'}.`,
-    sayPlaceholder: 'hier klicken und tippen, Enter sendet · Esc: zurück',
-    sayLabel: 'Nachricht',
     writeWord: 'an',
     writeHint: label => `Agent Tree: Nachricht an ${label} eintippen, Enter schickt sie`,
     writeSent: label => `Nachricht an ${label} geschickt`,
@@ -260,7 +253,6 @@ export const WORDS: Record<Lang, Words> = {
     introLimits: limits => `Limits ${limits}`,
     introPlaying: 'Intro läuft',
     introSkip: 'überspringen',
-    send: 'senden',
     correctionFrame: (text, tool) =>
       `Nachricht des Nutzers über Agent Tree: ${text}\n\nSie gilt ab jetzt für deinen Auftrag. Berücksichtige sie bei der weiteren Arbeit und in deinem Bericht über ${tool}.`,
     mainNote: (agent, text) =>
@@ -413,11 +405,8 @@ export const WORDS: Record<Lang, Words> = {
     decimal: '.',
     percent: p => `${p}%`,
     latest: 'Latest',
-    stop: 'stop',
     stopping: 'stopping …',
     stopAnswer: n => `Stopped by the user in Agent Tree after ${n} tool ${n === 1 ? 'call' : 'calls'}.`,
-    sayPlaceholder: 'click here and type, Enter sends · Esc: back',
-    sayLabel: 'Message',
     writeWord: 'to',
     writeHint: label => `Agent Tree: type the message to ${label}, Enter sends it`,
     writeSent: label => `Message sent to ${label}`,
@@ -436,7 +425,6 @@ export const WORDS: Record<Lang, Words> = {
     introLimits: limits => `limits ${limits}`,
     introPlaying: 'Intro playing',
     introSkip: 'skip',
-    send: 'send',
     correctionFrame: (text, tool) =>
       `Message from the user via Agent Tree: ${text}\n\nIt applies to your task from now on. Take it into account in your remaining work and in your report via ${tool}.`,
     mainNote: (agent, text) =>
