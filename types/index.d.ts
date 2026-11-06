@@ -128,6 +128,7 @@ export type AgentTreeState = {
   stopSent?: string[]
   corrections?: Record<string, AgentTreeCorrection>
   lookOpen?: boolean
+  selected?: string
   orphans?: Record<string, AgentTreeOrphanEnd>
   main: AgentTreeMain
   agents: AgentTreeNode[]

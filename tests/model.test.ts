@@ -54,6 +54,10 @@ import {
   fileNameOf,
   FILES_KEPT,
   CONTEXT_ALERT,
+  MAIN,
+  NEW_AGENTS,
+  selectedSet,
+  selectionOf,
   CONTEXT_WARN,
   contextLevel,
   contextPercent,
@@ -1082,5 +1086,45 @@ describe('Tätigkeit in Worten', () => {
     expect(activityText('Agent', 'en')).toBe('starts an agent')
     expect(activityText('TodoWrite', 'de')).toBe(toolText('TodoWrite', 'de'))
     expect(activityText(undefined, 'de')).toBeUndefined()
+  })
+})
+
+describe('Auswahl', () => {
+  test('ein laufender Agent ist wählbar', () => {
+    const sel = selectionOf(selectedSet(spawned(createTree(0), spawn('a1'), 1), 'a1'))
+    expect(sel?.kind).toBe('agent')
+    expect(sel?.kind === 'agent' ? sel.node.id : undefined).toBe('a1')
+  })
+
+  test('Hauptsitzung und Verteiler sind wählbar', () => {
+    expect(selectionOf(selectedSet(createTree(0), MAIN))).toEqual({ kind: 'main' })
+    expect(selectionOf(selectedSet(createTree(0), NEW_AGENTS))).toEqual({ kind: 'new' })
+  })
+
+  test('ein Workflow ist wählbar', () => {
+    const s = spawned(createTree(0), spawn('a1', { workflowRunId: 'r1' }), 1)
+    expect(selectionOf(selectedSet(s, 'wf:r1'))).toEqual({ kind: 'workflow', runId: 'r1' })
+  })
+
+  test('ohne Auswahl, nach Abwahl und bei unbekanntem Ziel gibt es keine', () => {
+    expect(selectionOf(createTree(0))).toBeUndefined()
+    expect(selectionOf(selectedSet(selectedSet(createTree(0), MAIN), undefined))).toBeUndefined()
+    expect(selectionOf(selectedSet(createTree(0), 'gibt-es-nicht'))).toBeUndefined()
+  })
+
+  test('ein gekürzter Agent fällt aus der Auswahl', () => {
+    let s = spawned(spawned(createTree(0), spawn('a1'), 1), spawn('a2'), 2)
+    s = completed(s, done('a1'), 3)
+    s = trimmed(selectedSet(s, 'a1'), 1)
+    expect(s.selected).toBeUndefined()
+    expect(selectionOf(s)).toBeUndefined()
+  })
+
+  test('nach /clear bleibt nur eine Auswahl auf laufende Agenten', () => {
+    let s = spawned(spawned(createTree(0), spawn('a1'), 1), spawn('a2'), 2)
+    s = completed(s, done('a1'), 3)
+    expect(freshTree(selectedSet(s, 'a1'), 4).selected).toBeUndefined()
+    expect(freshTree(selectedSet(s, 'a2'), 4).selected).toBe('a2')
+    expect(freshTree(selectedSet(s, MAIN), 4).selected).toBe(MAIN)
   })
 })

@@ -614,6 +614,30 @@ function lastSegment(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
 }
 
+export type Selection = { kind: 'agent'; node: AgentTreeNode } | { kind: 'main' } | { kind: 'new' } | { kind: 'workflow'; runId: string }
+
+export const WORKFLOW_PREFIX = 'wf:'
+
+export function selectedSet(s: AgentTreeState, target: string | undefined): AgentTreeState {
+  const next = { ...s }
+  if (target === undefined) delete next.selected
+  else next.selected = target
+  return next
+}
+
+export function selectionOf(s: AgentTreeState): Selection | undefined {
+  const target = s.selected
+  if (target === undefined) return undefined
+  if (target === MAIN) return { kind: 'main' }
+  if (target === NEW_AGENTS) return { kind: 'new' }
+  if (target.startsWith(WORKFLOW_PREFIX)) {
+    const runId = target.slice(WORKFLOW_PREFIX.length)
+    return s.agents.some(n => n.workflowRunId === runId) ? { kind: 'workflow', runId } : undefined
+  }
+  const node = findAgent(s, target)
+  return node ? { kind: 'agent', node } : undefined
+}
+
 export function windowOf(s: AgentTreeState, node: AgentTreeNode): number | undefined {
   return node.model !== undefined && node.model === s.main.model ? s.main.window : undefined
 }
@@ -769,6 +793,7 @@ export function freshTree(from: AgentTreeState, now: number): AgentTreeState {
     ...(from.stopping ? { stopping: from.stopping.filter(id => alive.has(id)) } : {}),
     ...(from.stopSent ? { stopSent: from.stopSent.filter(id => alive.has(id)) } : {}),
     ...(from.corrections ? { corrections: without(from.corrections, gone) } : {}),
+    ...(from.selected === MAIN || from.selected === NEW_AGENTS || (from.selected !== undefined && alive.has(from.selected)) ? { selected: from.selected } : {}),
   }
   return from.main.limits ? withLimits(fresh, from.main.limits) : fresh
 }
@@ -847,13 +872,15 @@ export function trimmed(s: AgentTreeState, maxAgents: number): AgentTreeState {
     ...(s.choices.efforts ? { efforts: without(s.choices.efforts, gone) } : {}),
     picker: s.choices.picker && dropped.has(s.choices.picker) ? undefined : s.choices.picker,
   }
-  return {
+  const next: AgentTreeState = {
     ...s,
     choices,
     detail: s.detail && dropped.has(s.detail.agentId) ? undefined : s.detail,
     corrections: s.corrections && without(s.corrections, gone),
     agents: s.agents.filter(n => !dropped.has(n.id)),
   }
+  if (next.selected !== undefined && dropped.has(next.selected)) delete next.selected
+  return next
 }
 
 export function groups(s: AgentTreeState): AgentTreeGroup[] {
