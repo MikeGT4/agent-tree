@@ -20,6 +20,8 @@ export const LABEL_LIMIT = 40
 export const ADVISOR_CALLS_KEPT = 20
 export const TOOLS_KEPT = 5
 export const FILES_KEPT = 50
+export const CONTEXT_WARN = 70
+export const CONTEXT_ALERT = 85
 export const DETAIL_LIMIT = 160
 
 export type AdvisorUse = { id: string; startedAt: number; endedAt?: number }
@@ -610,6 +612,20 @@ export function toolKind(tool: string): ToolKind {
 
 function lastSegment(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
+}
+
+export function windowOf(s: AgentTreeState, node: AgentTreeNode): number | undefined {
+  return node.model !== undefined && node.model === s.main.model ? s.main.window : undefined
+}
+
+export function contextPercent(tokens: number | undefined, window: number | undefined): number | undefined {
+  if (tokens === undefined || !window) return undefined
+  return Math.min(100, Math.max(0, Math.round((tokens / window) * 100)))
+}
+
+export function contextLevel(percent: number | undefined): 'ok' | 'warn' | 'alert' {
+  if (percent === undefined || percent < CONTEXT_WARN) return 'ok'
+  return percent < CONTEXT_ALERT ? 'warn' : 'alert'
 }
 
 export function pathOf(input: Record<string, unknown>): string | undefined {

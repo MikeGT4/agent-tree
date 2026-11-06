@@ -1,7 +1,7 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import type { AgentTreeColors, AgentTreeLight, AgentTreeLook, AgentTreeStyle } from '../types'
 
-export type Palette = { main: string; agent: string; advisor: string; done: string; dim: string; failed: string }
+export type Palette = { main: string; agent: string; advisor: string; done: string; dim: string; failed: string; warn: string }
 
 export type FrameGlyphs = {
   tl: string
@@ -46,10 +46,10 @@ export function isLookChoice(row: string, id: string): row is LookRow {
 }
 
 export const PALETTES: Record<AgentTreeColors, Palette> = {
-  original: { main: '#E6845D', agent: '#7CAAE8', advisor: '#B1A7E6', done: '#7BE396', dim: '#8E8E9A', failed: 'error' },
-  light: { main: '#BC4C00', agent: '#0969DA', advisor: '#8250DF', done: '#1A7F37', dim: '#59636E', failed: '#D1242F' },
-  retro: { main: '#B8C76F', agent: '#70A4B2', advisor: '#8C80D6', done: '#9AD284', dim: '#959595', failed: '#B08070' },
-  mono: { main: '#F2F2F5', agent: '#D2D2D8', advisor: '#B8B8C0', done: '#A3A3AC', dim: '#8E8E9A', failed: 'error' },
+  original: { main: '#E6845D', agent: '#7CAAE8', advisor: '#B1A7E6', done: '#7BE396', dim: '#8E8E9A', failed: 'error', warn: 'warning' },
+  light: { main: '#BC4C00', agent: '#0969DA', advisor: '#8250DF', done: '#1A7F37', dim: '#59636E', failed: '#D1242F', warn: '#9A6700' },
+  retro: { main: '#B8C76F', agent: '#70A4B2', advisor: '#8C80D6', done: '#9AD284', dim: '#959595', failed: '#B08070', warn: '#E2D86F' },
+  mono: { main: '#F2F2F5', agent: '#D2D2D8', advisor: '#B8B8C0', done: '#A3A3AC', dim: '#8E8E9A', failed: 'error', warn: 'warning' },
 }
 
 export const LIGHTS: Record<AgentTreeLight, string | undefined> = {

@@ -53,6 +53,11 @@ import {
   toolKind,
   fileNameOf,
   FILES_KEPT,
+  CONTEXT_ALERT,
+  CONTEXT_WARN,
+  contextLevel,
+  contextPercent,
+  windowOf,
   trimmed,
   turnStarted,
   typeLabel,
@@ -735,7 +740,7 @@ describe('Aussehen', () => {
   })
 
   test('Original entspricht den ursprünglichen Farben', () => {
-    expect(PALETTES.original).toEqual({ main: '#E6845D', agent: '#7CAAE8', advisor: '#B1A7E6', done: '#7BE396', dim: '#8E8E9A', failed: 'error' })
+    expect(PALETTES.original).toEqual({ main: '#E6845D', agent: '#7CAAE8', advisor: '#B1A7E6', done: '#7BE396', dim: '#8E8E9A', failed: 'error', warn: 'warning' })
   })
 
   test('lookFrom übernimmt gültige Felder und füllt den Rest mit Standard', () => {
@@ -1036,5 +1041,32 @@ describe('Dateien und Tätigkeit je Agent', () => {
     const names = [...(s.agents[0]?.read ?? []), ...(s.agents[0]?.changed ?? [])]
     expect(names).toEqual(['b.ts', 'api.ts'])
     expect(names.some(n => n.includes('/') || n.includes('\\'))).toBe(false)
+  })
+})
+
+describe('Kontext je Agent', () => {
+  test('contextPercent rechnet ganze Prozent und begrenzt auf 100', () => {
+    expect(contextPercent(140_000, 200_000)).toBe(70)
+    expect(contextPercent(250_000, 200_000)).toBe(100)
+    expect(contextPercent(undefined, 200_000)).toBeUndefined()
+    expect(contextPercent(10, undefined)).toBeUndefined()
+  })
+
+  test('contextLevel setzt die Schwellen 70 und 85', () => {
+    expect(contextLevel(69)).toBe('ok')
+    expect(contextLevel(CONTEXT_WARN)).toBe('warn')
+    expect(contextLevel(84)).toBe('warn')
+    expect(contextLevel(CONTEXT_ALERT)).toBe('alert')
+    expect(contextLevel(undefined)).toBe('ok')
+  })
+
+  test('windowOf gibt nur bei gleicher Kennung wie die Hauptsitzung ein Fenster', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = measured(s, { tokens: 100_000, window: 1_000_000, percent: 10 })
+    s = stepped(s, { model: 'claude-opus-5-5' }, 2)
+    s = stepped(s, { agentId: 'a1', model: 'claude-opus-5-5', contextTokens: 75_000 }, 3)
+    expect(windowOf(s, s.agents[0]!)).toBe(1_000_000)
+    s = stepped(s, { agentId: 'a1', model: 'claude-haiku-5-5', contextTokens: 75_000 }, 4)
+    expect(windowOf(s, s.agents[0]!)).toBeUndefined()
   })
 })

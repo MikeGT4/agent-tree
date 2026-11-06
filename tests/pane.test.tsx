@@ -154,11 +154,11 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   return { status, spawnModels, stepModels, stepEfforts, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts, storeGetFails, sessionReplaced, tree: () => lastTree }
 }
 
-async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[]; noEffort?: boolean } = {}) {
+async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[]; noEffort?: boolean; model?: string } = {}) {
   const stream = $.turn.step({
     turnId: 't1',
     index: 0,
-    model: options.agentId ? 'claude-haiku-4-5-20251001' : 'claude-opus-5-5',
+    model: options.model ?? (options.agentId ? 'claude-haiku-4-5-20251001' : 'claude-opus-5-5'),
     ...(options.noEffort ? {} : { effort: options.agentId ? ('medium' as const) : ('high' as const) }),
     messageCount: options.advisor ? 99 : 3,
     ...(options.agentId ? { agentId: options.agentId } : {}),
@@ -2855,5 +2855,40 @@ describe('Gleiche Datei', () => {
     const text = JSON.stringify(tree())
     expect(text).toContain('api.ts')
     expect(text.includes('geheim')).toBe(false)
+  })
+})
+
+async function agentWithModel($: Engine, model: string) {
+  await startSession($)
+  await $.turn.start({ text: 'Bau das', turnId: 't1' })
+  await step($)
+  await $.session.measure({ context: { window: 200000, tokens: 50000, percent: 25 }, rateLimits: [], cost: { usd: 1.5 }, changed: ['context'] } as never)
+  await $.agent.spawn({ prompt: 'A', description: 'Agent A', subagentType: 'general-purpose' } as never)
+  await step($, { agentId: 'sub-1', model })
+}
+
+describe('Kontext je Agent in der Leiste', () => {
+  test('gleiches Modell wie die Hauptsitzung: Prozent statt Tokenzahl', de, async ($, on) => {
+    engine(on)
+    await agentWithModel($, 'claude-opus-5-5')
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    expect(text).toContain('16 %')
+    expect(text.includes('läuft · 32k')).toBe(false)
+    await ui.unmount()
+  })
+
+  test('anderes Modell: Tokenzahl wie bisher', de, async ($, on) => {
+    engine(on)
+    await agentWithModel($, 'claude-haiku-5-5')
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    expect(text).toContain('läuft · 32k')
+    expect(text.includes('16 %')).toBe(false)
+    await ui.unmount()
+  })
+
+  test('jedes Farbschema hat eine Warnfarbe', () => {
+    for (const palette of Object.values(PALETTES)) expect(typeof (palette as { warn?: string }).warn).toBe('string')
   })
 })

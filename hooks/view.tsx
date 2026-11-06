@@ -14,6 +14,9 @@ import type {
 } from '../types'
 import {
   EFFORT_LEVELS,
+  contextLevel,
+  contextPercent,
+  windowOf,
   MAIN,
   MODEL_FAMILIES,
   NEW_AGENTS,
@@ -218,11 +221,21 @@ export type RowPlanInput = {
 export type RowPlan = { shown: number; logRows: number }
 
 export const LIMIT_BAR = 8
+export const CONTEXT_BAR = 3
 export const LIMIT_WARN = 80
 
+function cellBar(percent: number, cells: Glyphs['bar'], size: number): string {
+  const filled = Math.round((Math.min(100, Math.max(0, percent)) / 100) * size)
+  return cells.full.repeat(filled) + cells.empty.repeat(size - filled)
+}
+
 function limitBar(percent: number, cells: Glyphs['bar']): string {
-  const filled = Math.round((Math.min(100, Math.max(0, percent)) / 100) * LIMIT_BAR)
-  return cells.full.repeat(filled) + cells.empty.repeat(LIMIT_BAR - filled)
+  return cellBar(percent, cells, LIMIT_BAR)
+}
+
+function levelColor(palette: Palette, percent: number | undefined, otherwise: string): string {
+  const level = contextLevel(percent)
+  return level === 'alert' ? palette.failed : level === 'warn' ? palette.warn : otherwise
 }
 
 export function limitSegments(limits: readonly AgentTreeLimit[], w: Words, glyphs: Glyphs, width: number): string[] {
@@ -644,11 +657,21 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     const stopping = (s.stopping ?? []).includes(n.id)
     const mark = correctionGlyph(s, n.id)
     const inner = AGENT_WIDTH - 2
+    const filledShare = running ? contextPercent(n.contextTokens, windowOf(s, n)) : undefined
     const statusLine =
       n.status === 'running'
         ? stopping
           ? statusWithMark(`${spin} ${w.stopping}`, mark, '', inner)
-          : statusWithMark(`${spin} ${w.status.running}`, mark, n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : '', inner)
+          : statusWithMark(
+              `${spin} ${w.status.running}`,
+              mark,
+              filledShare !== undefined
+                ? ` ${cellBar(filledShare, glyphs.bar, CONTEXT_BAR)} ${w.percent(filledShare)}`
+                : n.contextTokens
+                  ? ` · ${fmtTokens(n.contextTokens, w.decimal)}`
+                  : '',
+              inner,
+            )
         : n.status === 'done' && n.endedAt !== undefined
           ? statusWithMark(`${glyphs.marks.done} ${w.status.done}`, mark, ` · ${fmtShortDuration(n.endedAt - n.startedAt)}`, inner)
           : statusWithMark(`${statusMark(glyphs, n.status)} ${w.status[n.status]}`, mark, '', inner)
@@ -692,7 +715,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
           {toolText(n.lastTool, lang) ?? `${w.tools}: ${n.toolCount}`}
         </Text>
-        <Text size={SIZE.detail} color={statusColor(palette, n.status)} wrap="truncate-end">
+        <Text size={SIZE.detail} color={levelColor(palette, filledShare, statusColor(palette, n.status))} wrap="truncate-end">
           {statusLine}
         </Text>
         {barLine(bar(g), statusColor(palette, n.status), running && look.animate)}
@@ -722,7 +745,8 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     }
     const n = g.node
     const indent = parentOf(s, n) ? '↳ ' : ''
-    const size = n.status === 'running' && n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''
+    const share = n.status === 'running' ? contextPercent(n.contextTokens, windowOf(s, n)) : undefined
+    const size = share !== undefined ? ` · ${w.percent(share)}` : n.status === 'running' && n.contextTokens ? ` · ${fmtTokens(n.contextTokens, w.decimal)}` : ''
     const mark = correctionGlyph(s, n.id)
     const text = `${indent}${n.status === 'running' ? spin : statusMark(glyphs, n.status)} ${n.status === 'running' && (s.stopping ?? []).includes(n.id) ? w.stopping : w.status[n.status]}${mark ? ` ${mark}` : ''} · ${typeLabel(n.type)} · ${n.description}${size}`
     const halt = n.status === 'running' && actions && !(s.stopping ?? []).includes(n.id)
@@ -829,7 +853,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           {s.main.effort ? `Effort ${s.main.effort}` : w.effortNone}
         </Text>
       )}
-      <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
+      <Text size={SIZE.detail} color={levelColor(palette, s.main.percent, palette.dim)} wrap="truncate-end">
         {contextLine(s, w)}
       </Text>
       <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
