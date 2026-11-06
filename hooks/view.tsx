@@ -119,6 +119,7 @@ export type TreeActions = {
   look: () => void
   restyle: (row: LookRow, id: string) => void
   restyleDefault: () => void
+  deselect: () => void
 }
 
 export type TreeLook = {
@@ -138,6 +139,7 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   const rest = key.slice(colon + 1)
   if (key === 'picker:close' || key === 'detail:close' || key === 'look:close') actions.close()
   else if (key === 'advisor:toggle') actions.advisor()
+  else if (key === 'actions:close') actions.deselect()
   else if (kind === 'look') return lookKey(actions, rest)
   else if (kind === 'select') actions.select(rest)
   else if (kind === 'pick' || kind === 'level') actions.pick(rest)
@@ -1270,14 +1272,15 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const actionBar = actions ? (
     <Box key="actions" flexDirection="column" width={width} marginTop={selection ? 1 : 0}>
-      {barNode ? (
-        <Text key="actions-name" bold color={palette.main} wrap="truncate-end">
-          {`${typeLabel(barNode.type)} · ${barNode.description}`}
-        </Text>
-      ) : barWorkflow ? (
-        <Text key="actions-name" bold color={palette.main} wrap="truncate-end">
-          {barWorkflow}
-        </Text>
+      {barNode || barWorkflow ? (
+        <Box key="actions-head" flexDirection="row" justifyContent="space-between" columnGap={1} width={width}>
+          <Box key="actions-title" flexShrink={1}>
+            <Text key="actions-name" bold color={palette.main} wrap="truncate-end">
+              {barNode ? `${typeLabel(barNode.type)} · ${barNode.description}` : barWorkflow}
+            </Text>
+          </Box>
+          <Button key="actions:close" label="×" onPress={() => actions.deselect()} />
+        </Box>
       ) : (
         <Text key="actions-hint" color={palette.dim} wrap="truncate-end">
           {w.actionHint}

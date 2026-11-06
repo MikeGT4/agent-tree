@@ -629,6 +629,10 @@ export type Selection = { kind: 'agent'; node: AgentTreeNode } | { kind: 'main' 
 
 export const WORKFLOW_PREFIX = 'wf:'
 
+export function deselected(s: AgentTreeState): AgentTreeState {
+  return selectedSet(closed(s), undefined)
+}
+
 export function selectedSet(s: AgentTreeState, target: string | undefined): AgentTreeState {
   const next = { ...s }
   if (target === undefined) delete next.selected

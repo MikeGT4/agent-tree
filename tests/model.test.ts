@@ -59,6 +59,7 @@ import {
   MAIN,
   NEW_AGENTS,
   selectedSet,
+  deselected,
   selectionOf,
   FEEDBACK_MS,
   feedbackFor,
@@ -363,6 +364,7 @@ describe('Datenmodell', () => {
       look: () => undefined,
       restyle: () => undefined,
       restyleDefault: () => undefined,
+      deselect: () => void calls.push('deselect'),
       write: () => undefined,
     }
     const keys = ['pick:new', 'pick:a1', 'choose:new:default', 'choose:a1:sonnet', 'picker:close', 'detail:a1', 'detail:close', 'stop:a1', 'select:a1', 'choose:sonnet', 'choose:a1:', 'picker', 'pickX', 'fremd:x']
@@ -714,7 +716,7 @@ describe('Korrekturen', () => {
 describe('Stopp am Kasten', () => {
   test('pressKey kennt halt', () => {
     const stopped: string[] = []
-    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, write: () => {} }
+    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, deselect: () => {}, write: () => {} }
     expect(pressKey(actions, 'halt:sub-1')).toBe(true)
     expect(stopped).toEqual(['sub-1'])
   })
@@ -834,7 +836,7 @@ describe('Aussehen', () => {
     const ui = { Box: 'Box', Text: 'Text', Button: 'Button' } as never
     const s = detailOpened(spawned(createTree(0), spawn('sub-1'), 1), 'sub-1')
     const noop = () => {}
-    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop }
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, deselect: noop, write: noop }
     const text = JSON.stringify(drawTree(ui, s, 90, 60, { frame: 0, animate: false, now: 5000, actions }))
     expect(text).not.toMatch(/say:sub-1/)
   })
@@ -1252,5 +1254,22 @@ describe('Zeilenplan bei wenig Höhe', () => {
 
   test('reicht es dann noch nicht, weicht der Beraterkasten', () => {
     expect(planRows({ ...narrow, height: 50, detailRows: 11 })).toEqual({ shown: 3, logRows: 0, advisor: false })
+  })
+})
+
+describe('Aktionszeile schließen', () => {
+  test('deselected hebt Auswahl, Wahl und Details auf', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = pickerOpened(selectedSet(detailOpened(s, 'a1'), 'a1'), 'a1')
+    const t = deselected(s)
+    expect([t.selected, t.detail, t.choices?.picker]).toEqual([undefined, undefined, undefined])
+  })
+
+  test('pressKey kennt das Schließen der Aktionszeile', () => {
+    const calls: string[] = []
+    const noop = () => {}
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop, deselect: () => void calls.push('deselect') }
+    expect(pressKey(actions, 'actions:close')).toBe(true)
+    expect(calls).toEqual(['deselect'])
   })
 })

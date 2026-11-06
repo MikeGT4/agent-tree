@@ -3074,6 +3074,25 @@ describe('Platz und Hebel in der Leiste', () => {
     await ui.unmount()
   })
 
+  test('× in der Titelzeile schließt Auswahl, Wahl und Details', de, async ($, on) => {
+    engine(on)
+    await agents($, 2)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'select:sub-1' })
+    await ui.press({ key: 'detail:sub-1' })
+    let text = await screen(ui)
+    expect(has(text, 'actions:close')).toBe(true)
+    await ui.press({ key: 'actions:close' })
+    text = await screen(ui)
+    expect([has(text, 'actions-name'), has(text, 'detail:close'), has(text, 'halt:sub-1')]).toEqual([false, false, false])
+    expect(text).toContain('Kasten anklicken')
+    await ui.press({ key: 'select:sub-2' })
+    await ui.press({ key: 'pick:sub-2' })
+    await ui.press({ key: 'actions:close' })
+    expect(has(await screen(ui), 'choose:sub-2:opus')).toBe(false)
+    await ui.unmount()
+  })
+
   test('Modellwechsel passt in den Kasten', de, async ($, on) => {
     engine(on)
     await agents($, 1)
