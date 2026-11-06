@@ -2,7 +2,7 @@
   "name": "agent-tree",
   "displayName": "Agent Tree",
   "version": "0.6.0",
-  "description": "Terminal side pane that shows a session's agents as a live tree: stop a sub-agent, send it new instructions mid-task, switch its model and effort, change the look.",
+  "description": "Terminal side pane that shows a session's agents as a live tree: what each one does, how full its context is, which file two of them change. Stop one, send it new instructions, switch its model and effort.",
   "author": {
     "name": "Mike Pollow, Digitalroots"
   },
@@ -13,8 +13,23 @@
   "privacyPolicyUrl": "https://github.com/MikeGT4/agent-tree/blob/main/PRIVACY.md",
   "repository": "https://github.com/MikeGT4/agent-tree",
   "license": "MIT",
-  "keywords": ["agents", "sub-agents", "multi-agent", "agent-monitoring", "observability", "visualization", "agentic-coding", "coding-agents", "developer-tools", "terminal", "tui", "sidebar", "themes",
-    "usage-monitor"],
+  "keywords": [
+    "agents",
+    "sub-agents",
+    "multi-agent",
+    "agent-monitoring",
+    "observability",
+    "visualization",
+    "agentic-coding",
+    "coding-agents",
+    "developer-tools",
+    "terminal",
+    "tui",
+    "sidebar",
+    "themes",
+    "usage-monitor",
+    "context-window"
+  ],
   "types": "./types/index.d.ts",
   "userConfig": {
     "columns": {
