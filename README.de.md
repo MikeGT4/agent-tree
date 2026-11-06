@@ -20,7 +20,7 @@ Danach Claude Code starten, die Leiste öffnet sich.
 
 In einer laufenden Sitzung: `/plugin install agent-tree --marketplace MikeGT4/agent-tree`
 
-Braucht Claude Code 2.1.292+, getestet mit 2.1.316.
+Braucht Claude Code 2.1.292+, getestet mit 2.1.319.
 
 ## Was es ausführt
 
@@ -28,6 +28,6 @@ Einmal am Tag, in Sitzungen mit Bedienung, ruft es Claude Codes `plugin list --j
 
 Seine Hooks greifen nur, wenn du in der Leiste handelst; Tippen in der Eingabe beendet nur das Start-Intro.
 
-Anleitung (englisch): [docs/GUIDE.md](docs/GUIDE.md)
+Anleitung: [docs/GUIDE.de.md](docs/GUIDE.de.md)
 
 MIT, © 2026 Mike Pollow, Digitalroots

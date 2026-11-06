@@ -1,12 +1,37 @@
 # Agent Tree guide
 
-1. In your terminal, then start Claude Code:
-   `claude plugin install agent-tree --marketplace MikeGT4/agent-tree`
-2. The pane opens with the logo (click or type to skip); `/agent-tree` reopens it, ctrl+x tab focuses it.
-3. The main box shows effort (e sets it), context and cost; sub-agents get boxes; the bottom line, 5-hour and weekly limits.
-4. Click a running agent's model (or Tab, Enter): pick effort, then model (0 to 4). "Sub-agent model" (m) sets both for new sub-agents and keeps them.
-5. ✎ on a box puts `/agent-tree to <id>` into your prompt: type, press Enter; the agent reads it at its next step. Its type opens its details.
-6. ■ on a box stops an agent.
-7. a opens the look: style, colors, glow.
-8. The advisor box switches your default advisor.
-9. `/agent-tree stop` closes the pane, `/agent-tree clear` drops finished agents.
+Agent Tree shows your Claude Code agents as a live tree beside the chat, with a lever for each.
+
+## What you see
+
+![Tree](https://github.com/MikeGT4/agent-tree/releases/download/v0.6.0/guide-1.png)
+
+Main session: model, effort, context, cost.
+
+One box per sub-agent: its task, what it does right now and how full its context is, yellow from 70 %, red from 85 %.
+
+![Boxes](https://github.com/MikeGT4/agent-tree/releases/download/v0.6.0/guide-2.png)
+
+⚠: two running agents change the same file.
+
+## What you can do
+
+![Action bar](https://github.com/MikeGT4/agent-tree/releases/download/v0.6.0/guide-3.png)
+
+Click a box, or ctrl+x tab, Tab, Enter: Stop (s), Write, Model, Effort, Details.
+
+Write fills your prompt, the agent reads it at its next step, and every action answers in the bar.
+
+![Choice](https://github.com/MikeGT4/agent-tree/releases/download/v0.6.0/guide-4.png)
+
+e: main session effort · m: new sub-agents · a: look.
+
+## What it gives you
+
+![Details](https://github.com/MikeGT4/agent-tree/releases/download/v0.6.0/guide-5.png)
+
+Stop one agent instead of the whole session.
+
+Move a running agent to a cheaper model.
+
+Details: files read and changed, last message.
