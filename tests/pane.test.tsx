@@ -3032,9 +3032,9 @@ describe('Platz und Hebel in der Leiste', () => {
     await agents($, 3)
     for (const rows of [40, 44, 47]) {
       const ui = await $.ui.mount(pane(67, rows))
-      if (!has(await screen(ui), 'actions-name')) await ui.press({ key: 'select:sub-3' })
+      if (!has(await screen(ui), 'actions:close')) await ui.press({ key: 'select:sub-3' })
       const text = await screen(ui)
-      expect([rows, ...['sub-1', 'sub-2', 'sub-3'].map(id => has(text, `select:${id}`))]).toEqual([rows, true, true, true])
+      expect([rows, has(text, 'actions:close'), ...['sub-1', 'sub-2', 'sub-3'].map(id => has(text, `select:${id}`))]).toEqual([rows, true, true, true, true])
       await ui.unmount()
     }
   })
@@ -3067,10 +3067,18 @@ describe('Platz und Hebel in der Leiste', () => {
     engine(on)
     await agents($, 3)
     await $.tool.call({ tool: 'Read', file_path: '/p/src/auth.ts', agentId: 'sub-1' } as never)
+    await $.session.measure({
+      context: { window: 200000, tokens: 50000, percent: 25 },
+      rateLimits: [{ kind: 'seven_day', percentUsed: 30, resetsAt: new Date(2026, 10, 11, 22, 0).toISOString() }],
+      cost: { usd: 1.5 },
+      changed: ['context', 'rateLimits'],
+    } as never)
     const ui = await $.ui.mount(pane(67, 46))
     await ui.press({ key: 'select:sub-1' })
+    expect(await screen(ui)).toContain('Woche')
     await ui.press({ key: 'detail:sub-1' })
     const text = await screen(ui)
+    expect(text.includes('Woche')).toBe(false)
     expect(text.split('general-purpose · Agent 1').length - 1).toBe(1)
     expect(has(text, 'detail:close')).toBe(true)
     expect(text.includes('ctrl+x tab')).toBe(false)
@@ -3089,7 +3097,7 @@ describe('Platz und Hebel in der Leiste', () => {
     expect(has(text, 'actions:close')).toBe(true)
     await ui.press({ key: 'actions:close' })
     text = await screen(ui)
-    expect([has(text, 'actions-name'), has(text, 'detail:close'), has(text, 'halt:sub-1')]).toEqual([false, false, false])
+    expect([has(text, 'actions:close'), has(text, 'detail:close'), has(text, 'halt:sub-1')]).toEqual([false, false, false])
     expect(text).toContain('Kasten anklicken')
     await ui.press({ key: 'select:sub-2' })
     await ui.press({ key: 'pick:sub-2' })
