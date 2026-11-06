@@ -1180,3 +1180,10 @@ describe('Rückmeldung', () => {
     expect(mainFeedback(s)).toEqual({ kind: 'effort', phase: 'pending', value: 'max' })
   })
 })
+
+describe('Hinweis der Aktionszeile', () => {
+  test('passt in eine schmale Leiste', () => {
+    expect([...WORDS.de.actionHint].length).toBeLessThanOrEqual(56)
+    expect([...WORDS.en.actionHint].length).toBeLessThanOrEqual(56)
+  })
+})

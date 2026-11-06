@@ -545,7 +545,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     if (main) return t.mainEffortPending(level)
     return f.phase === 'done' ? t.effortDone(level) : t.effortPending(level)
   }
-  const selection = actions ? selectionOf(s) : undefined
+  const chosenOne = actions ? selectionOf(s) : undefined
+  const selection =
+    chosenOne?.kind === 'agent' && !current.some(g => g.kind === 'agent' && g.node.id === chosenOne.node.id)
+      ? undefined
+      : chosenOne?.kind === 'workflow' && !current.some(g => g.kind === 'workflow' && g.runId === chosenOne.runId)
+        ? undefined
+        : chosenOne
   const barNode = selection?.kind === 'agent' ? selection.node : undefined
   const barRunning = barNode?.status === 'running'
   const barStopping = barNode !== undefined && (s.stopping ?? []).includes(barNode.id)

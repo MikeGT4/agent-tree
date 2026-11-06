@@ -2991,3 +2991,21 @@ describe('Detailkasten', () => {
     await ui.unmount()
   })
 })
+
+describe('Auswahl über Runden', () => {
+  test('ein gewählter Agent aus einer früheren Runde fällt auf den Hinweis zurück', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'select:sub-1' })
+    expect(has(await screen(ui), 'detail:sub-1')).toBe(true)
+    await $.turn.complete({ answer: 'fertig', durationMs: 900, isAborted: false, turnId: 't1', reason: 'answer' })
+    await $.turn.start({ text: 'Nächste Runde', turnId: 't2' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(has(text, 'detail:sub-1')).toBe(false)
+    expect(text).toContain('Kasten anklicken')
+    await ui.unmount()
+  })
+})
