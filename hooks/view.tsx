@@ -37,7 +37,7 @@ import {
 } from './model.ts'
 import { LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, lightColor, lookFrom, restyleLine } from './looks.ts'
 import type { Glyphs, LookRow, Palette } from './looks.ts'
-import { WORDS, familyOr, logLine, lookOptionLabel, toolText, wordsFor } from './words.ts'
+import { WORDS, activityText, familyOr, logLine, lookOptionLabel, toolText, wordsFor } from './words.ts'
 import type { Lang, Words } from './words.ts'
 
 export { WORDS, logLine, wordsFor }
@@ -713,7 +713,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           {n.description || ' '}
         </Text>
         <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
-          {toolText(n.lastTool, lang) ?? `${w.tools}: ${n.toolCount}`}
+          {activityText(n.lastTool, lang) ?? `${w.tools}: ${n.toolCount}`}
         </Text>
         <Text size={SIZE.detail} color={levelColor(palette, filledShare, statusColor(palette, n.status))} wrap="truncate-end">
           {statusLine}

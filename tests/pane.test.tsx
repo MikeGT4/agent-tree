@@ -241,7 +241,7 @@ describe('Agent Tree', () => {
     expect(await screen(ui)).toMatch(/Hauptsitzung/)
     expect(await screen(ui)).toMatch(/Opus 5\.5/)
     expect(await screen(ui)).toMatch(/Code lesen/)
-    expect(await screen(ui)).toMatch(/Read auth\.ts/)
+    expect(await screen(ui)).toMatch(/liest auth\.ts/)
     expect(await screen(ui)).toMatch(/Aufrufe 1/)
     expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
     expect(seen.status.at(-1)).toBe('Unteragenten [1/1] · Berater [1×]')

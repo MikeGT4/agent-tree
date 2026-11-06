@@ -64,7 +64,7 @@ import {
   wasStopSent,
 } from '../hooks/model.ts'
 import { AGENT_WIDTH, connector, drawTree, helpLine, inputKey, limitSegments, litCells, lookLines, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
-import { lookChoice, logLine, resolveLang, toolText, WORDS } from '../hooks/words.ts'
+import { activityText, lookChoice, logLine, resolveLang, toolText, WORDS } from '../hooks/words.ts'
 import { contrast, DEFAULT_LOOK, frameEdges, isLookChoice, lightColor, lookFrom, LOOK_OPTIONS, PALETTES, restyleLine, STYLES } from '../hooks/looks.ts'
 
 const line = (entry: AgentTreeLogEntry | undefined) => (entry ? logLine(entry, 'de') : undefined)
@@ -1068,5 +1068,19 @@ describe('Kontext je Agent', () => {
     expect(windowOf(s, s.agents[0]!)).toBe(1_000_000)
     s = stepped(s, { agentId: 'a1', model: 'claude-haiku-5-5', contextTokens: 75_000 }, 4)
     expect(windowOf(s, s.agents[0]!)).toBeUndefined()
+  })
+})
+
+describe('Tätigkeit in Worten', () => {
+  test('activityText macht aus dem Werkzeug eine Tätigkeit', () => {
+    expect(activityText('Read auth.ts', 'de')).toBe('liest auth.ts')
+    expect(activityText('Edit api.ts', 'en')).toBe('edits api.ts')
+    expect(activityText('Bash npm', 'de')).toBe('führt npm aus')
+    expect(activityText('Bash Wait 4 seconds', 'de')).toBe('Wait 4 seconds')
+    expect(activityText('Grep', 'de')).toBe('sucht im Code')
+    expect(activityText('WebFetch docs.x.com', 'de')).toBe('liest im Netz docs.x.com')
+    expect(activityText('Agent', 'en')).toBe('starts an agent')
+    expect(activityText('TodoWrite', 'de')).toBe(toolText('TodoWrite', 'de'))
+    expect(activityText(undefined, 'de')).toBeUndefined()
   })
 })

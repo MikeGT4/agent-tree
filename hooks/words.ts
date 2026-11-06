@@ -2,7 +2,7 @@
 import type { AgentTreeCorrectionState, AgentTreeLogEntry, AgentTreeLogSource, AgentTreePhase, AgentTreeStatus } from '../types'
 import type { LookRow } from './looks.ts'
 import { DEFAULT_LOOK, LOOK_OPTIONS } from './looks.ts'
-import { effortLabel, familyLabel, fmtDuration, fmtTokens } from './model.ts'
+import { effortLabel, familyLabel, fmtDuration, fmtTokens, toolKind } from './model.ts'
 
 export type Lang = 'de' | 'en'
 
@@ -101,6 +101,16 @@ export type Words = {
   correctionLabel: string
   correction: Record<AgentTreeCorrectionState, string>
   toolWords: Record<string, string>
+  activity: {
+    read: (x: string) => string
+    change: (x: string) => string
+    search: (x: string) => string
+    searchCode: string
+    run: (x: string) => string
+    web: (x: string) => string
+    webSearch: string
+    agent: string
+  }
   subModel: string
   advisorOn: string
   advisorOff: string
@@ -244,6 +254,16 @@ export const WORDS: Record<Lang, Words> = {
     correctionLabel: 'Korrektur',
     correction: { sent: 'geschickt', read: 'gelesen', failed: 'nicht zugestellt' },
     toolWords: { SubagentHandback: 'Antwort übergeben' },
+    activity: {
+      read: x => `liest ${x}`,
+      change: x => `ändert ${x}`,
+      search: x => `sucht ${x}`,
+      searchCode: 'sucht im Code',
+      run: x => `führt ${x} aus`,
+      web: x => `liest im Netz ${x}`,
+      webSearch: 'sucht im Netz',
+      agent: 'startet einen Agenten',
+    },
     subModel: 'Unteragenten-Modell',
     advisorOn: 'einschalten',
     advisorOff: 'ausschalten',
@@ -390,6 +410,16 @@ export const WORDS: Record<Lang, Words> = {
     correctionLabel: 'Correction',
     correction: { sent: 'sent', read: 'read', failed: 'not delivered' },
     toolWords: { SubagentHandback: 'answer handed back' },
+    activity: {
+      read: x => `reads ${x}`,
+      change: x => `edits ${x}`,
+      search: x => `searches ${x}`,
+      searchCode: 'searches the code',
+      run: x => `runs ${x}`,
+      web: x => `browses ${x}`,
+      webSearch: 'searches the web',
+      agent: 'starts an agent',
+    },
     subModel: 'Sub-agent model',
     advisorOn: 'turn on',
     advisorOff: 'turn off',
@@ -489,4 +519,20 @@ export function resolveLang(configured: unknown, sessionLanguage: unknown): Lang
 export function toolText(label: string | undefined, lang: Lang = 'de'): string | undefined {
   if (label === undefined) return undefined
   return wordsFor(lang).toolWords[label] ?? label
+}
+
+export function activityText(label: string | undefined, lang: Lang = 'de'): string | undefined {
+  if (label === undefined) return undefined
+  const space = label.indexOf(' ')
+  const tool = space < 0 ? label : label.slice(0, space)
+  const detail = space < 0 ? '' : label.slice(space + 1)
+  const words = wordsFor(lang).activity
+  const kind = toolKind(tool)
+  if (kind === 'read' && detail) return words.read(detail)
+  if (kind === 'change' && detail) return words.change(detail)
+  if (kind === 'search') return detail ? words.search(detail) : words.searchCode
+  if (kind === 'run' && detail) return detail.includes(' ') ? detail : words.run(detail)
+  if (kind === 'web') return detail ? words.web(detail) : words.webSearch
+  if (kind === 'agent') return words.agent
+  return toolText(label, lang)
 }
