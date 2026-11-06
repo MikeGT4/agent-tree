@@ -22,6 +22,7 @@ export const TOOLS_KEPT = 5
 export const FILES_KEPT = 50
 export const CONTEXT_WARN = 70
 export const CONTEXT_ALERT = 85
+export const FEEDBACK_MS = 15000
 export const DETAIL_LIMIT = 160
 
 export type AdvisorUse = { id: string; startedAt: number; endedAt?: number }
@@ -73,6 +74,10 @@ export const MAIN = 'main'
 
 export function familyFrom(value: unknown): string | undefined {
   return typeof value === 'string' && (MODEL_FAMILIES as readonly string[]).includes(value) ? value : undefined
+}
+
+export function familyOf(model: string | undefined): string | undefined {
+  return model === undefined ? undefined : MODEL_FAMILIES.find(family => model.includes(family))
 }
 
 export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
@@ -518,13 +523,18 @@ export function stepped(s: AgentTreeState, input: StepInput, now: number): Agent
       },
     }
   } else if (findAgent(next, input.agentId)) {
-    next = withAgent(next, input.agentId, n => ({
-      ...n,
-      model: input.model,
-      effort: input.effortless ? undefined : (effort ?? n.effort),
-      contextTokens: input.contextTokens ?? n.contextTokens,
-      answer: input.answer ? excerpt(input.answer) : n.answer,
-    }))
+    next = withAgent(next, input.agentId, n => {
+      const nextEffort = input.effortless ? undefined : (effort ?? n.effort)
+      return {
+        ...n,
+        model: input.model,
+        effort: nextEffort,
+        contextTokens: input.contextTokens ?? n.contextTokens,
+        answer: input.answer ? excerpt(input.answer) : n.answer,
+        ...(input.model !== n.model ? { modelSince: now } : {}),
+        ...(nextEffort !== n.effort ? { effortSince: now } : {}),
+      }
+    })
   }
   for (const use of input.advisorUses ?? []) next = advised(next, use, input.agentId, now)
   return next
@@ -636,6 +646,35 @@ export function selectionOf(s: AgentTreeState): Selection | undefined {
   }
   const node = findAgent(s, target)
   return node ? { kind: 'agent', node } : undefined
+}
+
+export type Feedback = { kind: 'stop' | 'write' | 'model' | 'effort'; phase: 'pending' | 'done' | 'failed'; value?: string }
+
+function recent(since: number | undefined, now: number): boolean {
+  return since !== undefined && now - since < FEEDBACK_MS
+}
+
+export function feedbackFor(s: AgentTreeState, agentId: string, now: number): Feedback | undefined {
+  const node = findAgent(s, agentId)
+  if (!node) return undefined
+  if (node.status === 'stopped') return recent(node.endedAt, now) ? { kind: 'stop', phase: 'done' } : undefined
+  if (isStopping(s, agentId)) return { kind: 'stop', phase: 'pending' }
+  const correction = s.corrections?.[agentId]
+  if (correction?.state === 'sent') return { kind: 'write', phase: 'pending' }
+  if (correction?.state === 'read' && recent(correction.readAt, now)) return { kind: 'write', phase: 'done' }
+  if (correction?.state === 'failed' && recent(correction.at, now)) return { kind: 'write', phase: 'failed' }
+  const family = s.choices?.agents[agentId]
+  if (family !== undefined && family !== familyOf(node.model)) return { kind: 'model', phase: 'pending', value: family }
+  if (family !== undefined && recent(node.modelSince, now)) return { kind: 'model', phase: 'done', value: family }
+  const effort = s.choices?.efforts?.[agentId]
+  if (effort !== undefined && effort !== node.effort) return { kind: 'effort', phase: 'pending', value: effort }
+  if (effort !== undefined && recent(node.effortSince, now)) return { kind: 'effort', phase: 'done', value: effort }
+  return undefined
+}
+
+export function mainFeedback(s: AgentTreeState): Feedback | undefined {
+  const effort = s.choices?.mainEffort
+  return effort !== undefined && effort !== s.main.effort ? { kind: 'effort', phase: 'pending', value: effort } : undefined
 }
 
 export function windowOf(s: AgentTreeState, node: AgentTreeNode): number | undefined {

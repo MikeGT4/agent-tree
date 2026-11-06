@@ -58,6 +58,9 @@ import {
   NEW_AGENTS,
   selectedSet,
   selectionOf,
+  FEEDBACK_MS,
+  feedbackFor,
+  mainFeedback,
   CONTEXT_WARN,
   contextLevel,
   contextPercent,
@@ -1126,5 +1129,53 @@ describe('Auswahl', () => {
     expect(freshTree(selectedSet(s, 'a1'), 4).selected).toBeUndefined()
     expect(freshTree(selectedSet(s, 'a2'), 4).selected).toBe('a2')
     expect(freshTree(selectedSet(s, MAIN), 4).selected).toBe(MAIN)
+  })
+})
+
+describe('Rückmeldung', () => {
+  const running = () => stepped(spawned(createTree(0), spawn('a1'), 1), { agentId: 'a1', model: 'claude-haiku-5-5', effort: 'medium' }, 2)
+
+  test('Modell gewählt: wartet, nach dem nächsten Schritt bestätigt, danach still', () => {
+    let s = chosen(running(), 'a1', 'opus', 3)
+    expect(feedbackFor(s, 'a1', 4)).toEqual({ kind: 'model', phase: 'pending', value: 'opus' })
+    s = stepped(s, { agentId: 'a1', model: 'claude-opus-5-5', effort: 'medium' }, 10)
+    expect(feedbackFor(s, 'a1', 11)).toEqual({ kind: 'model', phase: 'done', value: 'opus' })
+    expect(feedbackFor(s, 'a1', 10 + FEEDBACK_MS)).toBeUndefined()
+  })
+
+  test('Denkstufe gewählt: wartet, nach dem nächsten Schritt bestätigt', () => {
+    let s = effortChosen(running(), 'a1', 'high', 3)
+    expect(feedbackFor(s, 'a1', 4)).toEqual({ kind: 'effort', phase: 'pending', value: 'high' })
+    s = stepped(s, { agentId: 'a1', model: 'claude-haiku-5-5', effort: 'high' }, 10)
+    expect(feedbackFor(s, 'a1', 11)).toEqual({ kind: 'effort', phase: 'done', value: 'high' })
+  })
+
+  test('Nachricht: angekommen, gelesen, nicht angekommen', () => {
+    let s = correctionSent(running(), { agentId: 'a1', text: 'Halt', via: 'append' }, 3)
+    expect(feedbackFor(s, 'a1', 4)).toEqual({ kind: 'write', phase: 'pending' })
+    s = correctionRead(s, 'a1', 6)
+    expect(feedbackFor(s, 'a1', 7)).toEqual({ kind: 'write', phase: 'done' })
+    expect(feedbackFor(s, 'a1', 6 + FEEDBACK_MS)).toBeUndefined()
+    const failed = correctionFailed(running(), { agentId: 'a1', text: 'Halt' }, 3)
+    expect(feedbackFor(failed, 'a1', 4)).toEqual({ kind: 'write', phase: 'failed' })
+  })
+
+  test('Stopp geht vor Modell', () => {
+    const s = stopRequested(chosen(running(), 'a1', 'opus', 3), 'a1', 4)
+    expect(feedbackFor(s, 'a1', 5)).toEqual({ kind: 'stop', phase: 'pending' })
+  })
+
+  test('gestoppt: bestätigt, danach still', () => {
+    let s = stopRequested(running(), 'a1', 3)
+    s = completed(s, { agentId: 'a1', answer: '', reason: 'aborted', isAborted: true, durationMs: 5 }, 8)
+    expect(feedbackFor(s, 'a1', 9)).toEqual({ kind: 'stop', phase: 'done' })
+    expect(feedbackFor(s, 'a1', 8 + FEEDBACK_MS)).toBeUndefined()
+  })
+
+  test('Denkstufe der Hauptsitzung gewählt: wartet auf die nächste Nachricht', () => {
+    let s = stepped(createTree(0), { model: 'claude-opus-5-5', effort: 'high' }, 1)
+    expect(mainFeedback(s)).toBeUndefined()
+    s = effortChosen(s, MAIN, 'max', 2)
+    expect(mainFeedback(s)).toEqual({ kind: 'effort', phase: 'pending', value: 'max' })
   })
 })

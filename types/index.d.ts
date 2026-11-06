@@ -23,6 +23,8 @@ export type AgentTreeNode = {
   read?: string[]
   changed?: string[]
   clash?: { file: string; with: string }
+  modelSince?: number
+  effortSince?: number
   task?: string
   answer?: string
   answerTokens?: number
