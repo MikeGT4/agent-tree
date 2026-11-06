@@ -28,6 +28,6 @@ Einmal am Tag, in Sitzungen mit Bedienung, ruft es Claude Codes `plugin list --j
 
 Seine Hooks greifen nur, wenn du in der Leiste handelst; Tippen in der Eingabe beendet nur das Start-Intro.
 
-Anleitung: [docs/GUIDE.de.md](docs/GUIDE.de.md)
+[Anleitung](docs/GUIDE.de.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.6.0/agent-tree-anleitung.pdf)
 
 MIT, © 2026 Mike Pollow, Digitalroots

@@ -24,10 +24,10 @@ Needs Claude Code 2.1.292+, tested with 2.1.319.
 
 ## What it runs
 
-Once a day, in interactive sessions, it runs Claude Code's `plugin list --json`, reads its version number from raw.githubusercontent.com and, when a newer one exists, runs `plugin update agent-tree`. It sends nothing else ([PRIVACY.md](PRIVACY.md)).
+Once a day, in interactive sessions, it runs Claude Code's `plugin list --json`, reads its version number from raw.githubusercontent.com and, if it is newer, runs `plugin update agent-tree`. It sends nothing else ([PRIVACY.md](PRIVACY.md)).
 
 Its hooks act only after you act in the pane; typing in the prompt only ends the start intro.
 
-Guide: [docs/GUIDE.md](docs/GUIDE.md)
+[Guide](docs/GUIDE.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.6.0/agent-tree-guide.pdf)
 
 MIT, © 2026 Mike Pollow, Digitalroots
