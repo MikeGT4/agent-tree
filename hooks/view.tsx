@@ -496,7 +496,7 @@ export function helpLine(items: readonly string[], width: number): string {
 }
 
 export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: number, look: TreeLook = { frame: 0, animate: false }) {
-  const { Box, Text, Button, Input } = ui
+  const { Box, Text, Button } = ui
   const lang: Lang = look.lang ?? 'de'
   const w = wordsFor(lang)
   const appearance = lookFrom(look.appearance)
@@ -552,7 +552,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const barButtons =
     barNode && actions
       ? [
-          ...(barRunning && !barStopping ? [{ key: `halt:${barNode.id}`, label: `■ ${w.stopButton}`, press: () => actions.stop(barNode.id) }] : []),
+          ...(barRunning && !barStopping ? [{ key: `halt:${barNode.id}`, label: `■ ${w.stopButton}`, hotkey: 's', press: () => actions.stop(barNode.id) }] : []),
           { key: `write:${barNode.id}`, label: `✎ ${w.writeButton}`, press: () => actions.write(barNode.id) },
           ...(barRunning ? [{ key: `pick:${barNode.id}`, label: `${w.model}: ${modelText(barNode).trim() || w.model} ▾`, press: () => actions.pick(barNode.id) }] : []),
           { key: `detail:${barNode.id}`, label: w.detailsButton, press: () => actions.detail(barNode.id) },
@@ -1173,6 +1173,8 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       </Box>
     ) : null
 
+  const fileList = (names: readonly string[] | undefined) =>
+    !names?.length ? '0' : `${names.slice(-6).reverse().join(' · ')}${names.length > 6 ? ` · +${names.length - 6}` : ''}`
   const missing = (value: string | undefined, empty: string) =>
     detail?.state === 'loading' ? w.loading : value || (detail?.state === 'denied' ? w.noAccess : empty)
   const detailRunning = detailNode?.status === 'running'
@@ -1188,24 +1190,10 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             </Text>
           </Box>
           <Box key="detail-buttons" flexDirection="row" columnGap={1} flexShrink={0}>
-            {detailRunning && !detailStopping ? (
-              <Button key={`stop:${detailNode.id}`} hotkey="s" label={w.stop} onPress={() => actions.stop(detailNode.id)} />
-            ) : null}
             {detailStopping ? <Text color={palette.dim}>{w.stopping}</Text> : null}
             <Button key="detail:close" plain hotkey="x" label={w.close} onPress={() => actions.close()} />
           </Box>
         </Box>
-        {Input ? (
-          <Input
-            key={`say:${detailNode.id}:${s.corrections?.[detailNode.id]?.count ?? 0}`}
-            rows={2}
-            autoFocus
-            label={w.sayLabel}
-            placeholder={w.sayPlaceholder}
-            submitLabel={w.send}
-            onSubmit={value => actions.say(detailNode.id, value)}
-          />
-        ) : null}
         {detailCorrection ? (
           <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
             {`${w.correctionLabel}: ${w.correction[detailCorrection.state]} · ${clockTime(detailCorrection.at)}${detailCorrection.text ? ` · „${detailCorrection.text}“` : ''}`}
@@ -1213,7 +1201,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         ) : null}
         <Text wrap="truncate-end">{`${w.task}: ${missing(detailNode.task, '?')}`}</Text>
         <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
-          {`${w.tools}: ${detailNode.tools?.length ? detailNode.tools.map(t => toolText(t, lang)).join(' · ') : '0'}`}
+          {`${w.tools}: ${detailNode.toolCount}${detailNode.tools?.length ? ` · ${detailNode.tools.map(t => activityText(t, lang)).join(' · ')}` : ''}`}
+        </Text>
+        <Text key="detail-read" size={SIZE.detail} wrap="truncate-end">
+          {`${w.readFiles}: ${fileList(detailNode.read)}`}
+        </Text>
+        <Text key="detail-changed" size={SIZE.detail} wrap="truncate-end">
+          {`${w.changedFiles}: ${fileList(detailNode.changed)}`}
         </Text>
         <Text wrap="truncate-end">{`${detailRunning ? w.latest : w.reply}: ${missing(detailNode.answer, w.noReply)}`}</Text>
         <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
@@ -1268,7 +1262,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       {barButtons.length ? (
         <Box key="actions-buttons" flexDirection="row" flexWrap="wrap" columnGap={1} width={width}>
           {barButtons.map(b => (
-            <Button key={b.key} label={b.label} onPress={b.press} />
+            <Button key={b.key} label={b.label} hotkey={'hotkey' in b ? b.hotkey : undefined} onPress={b.press} />
           ))}
         </Box>
       ) : null}

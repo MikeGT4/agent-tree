@@ -115,6 +115,8 @@ export type Words = {
   stopButton: string
   writeButton: string
   detailsButton: string
+  readFiles: string
+  changedFiles: string
   alsoChanges: (file: string, other: string) => string
   feedback: {
     modelPending: (x: string) => string
@@ -285,6 +287,8 @@ export const WORDS: Record<Lang, Words> = {
     stopButton: 'Stoppen',
     writeButton: 'Schreiben',
     detailsButton: 'Details',
+    readFiles: 'Gelesen',
+    changedFiles: 'Geändert',
     alsoChanges: (file, other) => `⚠ ${file} ändert auch: ${other}`,
     feedback: {
       modelPending: x => `✓ Modell auf ${x} gestellt, gilt ab seinem nächsten Schritt`,
@@ -458,6 +462,8 @@ export const WORDS: Record<Lang, Words> = {
     stopButton: 'Stop',
     writeButton: 'Write',
     detailsButton: 'Details',
+    readFiles: 'Read',
+    changedFiles: 'Changed',
     alsoChanges: (file, other) => `⚠ ${other} edits ${file} too`,
     feedback: {
       modelPending: x => `✓ Model set to ${x}, applies from its next step`,
