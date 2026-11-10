@@ -9,6 +9,7 @@ import type {
   AgentTreeLogSource,
   AgentTreeLook,
   AgentTreeNode,
+  AgentTreeReport,
   AgentTreeState,
   AgentTreeStatus,
   AgentTreeTab,
@@ -43,6 +44,7 @@ import {
   typeLabel,
   hasClash,
   hasNewReport,
+  reportAgent,
   tabOf,
   TABS,
 } from './model.ts'
@@ -51,12 +53,12 @@ import { LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, li
 import type { Glyphs, LookRow, Palette } from './looks.ts'
 import { WORDS, activityText, familyOr, logLine, lookOptionLabel, toolText, wordsFor } from './words.ts'
 import type { Lang, Words } from './words.ts'
-import { drawMark, drawTabBar, tabNames, tabRows } from './tabs.tsx'
+import { drawFiles, drawHelp, drawLog, drawMark, drawReports, drawTabBar, drawUsage, tabNames, tabRows } from './tabs.tsx'
 
 export { WORDS, logLine, wordsFor }
 export type { Lang }
 
-type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
+type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'> & Partial<Pick<Elements['terminal'], 'Markdown'>>
 
 export const WIDE_FROM = 84
 export const TIGHT_BELOW = 36
@@ -127,6 +129,8 @@ export type TreeActions = {
   restyleDefault: () => void
   deselect: () => void
   tab: (id: AgentTreeTab) => void
+  logFilter: (source: string) => void
+  report: (agentId: string) => void
 }
 
 export type TreeLook = {
@@ -137,6 +141,7 @@ export type TreeLook = {
   actions?: TreeActions
   appearance?: AgentTreeLook
   canAdvise?: boolean
+  reports?: Record<string, AgentTreeReport>
 }
 
 export function pressKey(actions: TreeActions, key: string): boolean {
@@ -148,6 +153,8 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   else if (key === 'advisor:toggle') actions.advisor()
   else if (key === 'actions:close') actions.deselect()
   else if (kind === 'tab' && TABS.some(t => t === rest)) actions.tab(rest as AgentTreeTab)
+  else if (kind === 'logfilter') actions.logFilter(rest)
+  else if (kind === 'report') actions.report(rest)
   else if (kind === 'look') return lookKey(actions, rest)
   else if (kind === 'select') actions.select(rest)
   else if (kind === 'pick' || kind === 'level') actions.pick(rest)
@@ -1253,6 +1260,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           <Box key="detail-task" flexShrink={1}>
             <Text wrap="truncate-end">{`${w.task}: ${missing(detailNode.task, '?')}`}</Text>
           </Box>
+          <Button key={`report:${detailNode.id}`} plain label={w.fullReport} onPress={() => actions.report(detailNode.id)} />
           <Button key="detail:close" plain hotkey="x" label={w.close} onPress={() => actions.close()} />
         </Box>
         {detailCorrection ? (
@@ -1387,6 +1395,36 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         {header}
         {tabBar}
         {tab === 'help' ? legend : null}
+        {tab === 'help' ? drawHelp(ui, { s, width, palette, glyphs, w, lang }) : null}
+        {tab === 'reports'
+          ? drawReports(ui, {
+              s,
+              width,
+              palette,
+              glyphs,
+              w,
+              lang,
+              now,
+              ...(reportAgent(s) !== undefined ? { agentId: reportAgent(s) } : {}),
+              ...(look.reports?.[reportAgent(s) ?? ''] ? { report: look.reports[reportAgent(s) ?? ''] } : {}),
+              ...(actions ? { pick: (agentId: string) => actions.report(agentId) } : {}),
+            })
+          : null}
+        {tab === 'files' ? drawFiles(ui, { s, width, palette, glyphs, w, lang }) : null}
+        {tab === 'usage'
+          ? drawUsage(ui, {
+              s,
+              width,
+              palette,
+              glyphs,
+              w,
+              lang,
+              now,
+              limits: (s.main.limits ?? []).map(l => ({ text: limitSegments([l], w, glyphs, width)[0] ?? '', warn: l.percent >= LIMIT_WARN })),
+              mainLine: `${contextLine(s, w)} · ${roundLine}`,
+            })
+          : null}
+        {tab === 'log' ? drawLog(ui, { s, width, palette, glyphs, w, lang, ...(actions ? { filter: (source: string) => actions.logFilter(source) } : {}) }) : null}
       </Box>
     )
   }

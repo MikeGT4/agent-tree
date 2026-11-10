@@ -9,12 +9,13 @@ import type {
   AgentTreeLogSource,
   AgentTreeNode,
   AgentTreePhase,
+  AgentTreeReport,
   AgentTreeState,
   AgentTreeStatus,
   AgentTreeTab,
 } from '../types'
 
-export const LOG_LIMIT = 40
+export const LOG_LIMIT = 200
 export const LOG_EXCERPT = 60
 export const DESCRIPTION_LIMIT = 80
 export const LABEL_LIMIT = 40
@@ -129,6 +130,14 @@ export function tabChosen(s: AgentTreeState, tab: string, now = 0): AgentTreeSta
   if (!known) return s
   const seen = known === 'reports' || tabOf(s) === 'reports' ? { reportsSeen: now } : {}
   return { ...closed(s), tab: known, ...seen }
+}
+
+export const LOG_SOURCES: readonly AgentTreeLogSource[] = ['session', 'main', 'agent', 'advisor']
+
+export function logFiltered(s: AgentTreeState, source: string): AgentTreeState {
+  if (source === 'all') return { ...s, logFilter: undefined }
+  const known = LOG_SOURCES.find(x => x === source)
+  return known ? { ...s, logFilter: known } : s
 }
 
 export function hasNewReport(s: AgentTreeState): boolean {
@@ -438,7 +447,7 @@ function masked(text: string, scan: RegExp, value: RegExp, secret: (name: string
   return out + text.slice(from)
 }
 
-function oneLine(text: string): string {
+function maskedText(text: string): string {
   const plain = text
     .replace(ANSI, ' ')
     .replace(CONTROL, ' ')
@@ -446,8 +455,30 @@ function oneLine(text: string): string {
     .replace(BEARER, '•••')
     .replace(URL_CREDENTIALS, '://•••@')
   return masked(masked(plain, ASSIGNMENT, ASSIGNED_VALUE, secretName), ENV_ASSIGNMENT, ENV_VALUE, name => ENV_SECRET_NAME.test(name))
-    .replace(/\s+/g, ' ')
-    .trim()
+}
+
+function oneLine(text: string): string {
+  return maskedText(text).replace(/\s+/g, ' ').trim()
+}
+
+export const REPORT_LIMIT = 20000
+
+export function fullText(text: string | undefined, limit = REPORT_LIMIT): string {
+  const lines = (text ?? '').split(/\r?\n/).map(line => maskedText(line).replace(/[ \t]+$/, ''))
+  return cut(lines.join('\n').trim(), limit)
+}
+
+export function reportLoaded(agentId: string, found: { task?: string; answer?: string; denied?: boolean }): AgentTreeReport {
+  if (found.denied) return { agentId, state: 'denied' }
+  const task = fullText(found.task)
+  const answer = fullText(found.answer)
+  return { agentId, state: 'ready', ...(task ? { task } : {}), ...(answer ? { answer } : {}) }
+}
+
+export function reportAgent(s: AgentTreeState): string | undefined {
+  if (s.selected !== undefined && s.agents.some(n => n.id === s.selected)) return s.selected
+  const ended = s.agents.filter(n => n.endedAt !== undefined).sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0))[0]
+  return (ended ?? s.agents.at(-1))?.id
 }
 
 const GRAPHEMES = 'Segmenter' in Intl ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : undefined

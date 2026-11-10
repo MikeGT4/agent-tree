@@ -124,12 +124,20 @@ export type AgentTreeDetail = {
   state: 'loading' | 'ready' | 'denied'
 }
 
+export type AgentTreeReport = {
+  agentId: string
+  state: 'loading' | 'ready' | 'denied'
+  task?: string
+  answer?: string
+}
+
 export type AgentTreeTab = 'tree' | 'reports' | 'files' | 'log' | 'usage' | 'help'
 
 export type AgentTreeState = {
   startedAt: number
   tab?: AgentTreeTab
   reportsSeen?: number
+  logFilter?: AgentTreeLogSource
   choices?: AgentTreeChoices
   detail?: AgentTreeDetail
   stopping?: string[]
@@ -167,6 +175,6 @@ export type AgentTreeGroup =
 
 declare module 'claude-code' {
   interface PluginState {
-    'agent-tree': { tree: Shaped<AgentTreeState>; frame: number; look: Shaped<AgentTreeLook>; unread: Record<string, string[]>; intro: boolean; introBeat: number }
+    'agent-tree': { tree: Shaped<AgentTreeState>; frame: number; look: Shaped<AgentTreeLook>; unread: Record<string, string[]>; reports: Record<string, AgentTreeReport>; intro: boolean; introBeat: number }
   }
 }

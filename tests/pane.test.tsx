@@ -3314,3 +3314,266 @@ describe('Tabs', () => {
     await ui.unmount()
   })
 })
+
+describe('Tab Verlauf', () => {
+  test('zeigt alle Einträge, die neuesten zuerst', de, async ($, on) => {
+    engine(on)
+    await agents($, 3)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('"key":"log-view"')
+    expect(text.indexOf('gestartet: Agent 3')).toBeGreaterThan(-1)
+    expect(text.indexOf('gestartet: Agent 3')).toBeLessThan(text.indexOf('gestartet: Agent 1'))
+    await ui.unmount()
+  })
+
+  test('der Filter zeigt nur eine Quelle, alle hebt ihn auf', de, async ($, on) => {
+    engine(on)
+    await agents($, 2)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Runde 1/)
+    await ui.press({ key: 'logfilter:agent' })
+    await ui.redraw()
+    const filtered = await screen(ui)
+    expect(filtered).toMatch(/gestartet: Agent 2/)
+    expect(filtered).not.toMatch(/Runde 1/)
+    await ui.press({ key: 'logfilter:all' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Runde 1/)
+    await ui.unmount()
+  })
+
+  test('ohne Einträge steht dort, dass noch nichts geschehen ist', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/noch nichts geschehen/)
+    await ui.unmount()
+  })
+})
+
+describe('Tab Dateien', () => {
+  test('zeigt je Agent alle geänderten und gelesenen Dateien, nicht nur die letzten sechs', de, async ($, on) => {
+    engine(on)
+    await twoAgents($)
+    for (let i = 1; i <= 8; i++) await $.tool.call({ tool: 'Edit', file_path: `/p/src/teil${i}.ts`, agentId: 'sub-1' } as never)
+    await $.tool.call({ tool: 'Read', file_path: '/p/src/lesen.ts', agentId: 'sub-2' } as never)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:files' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('"key":"files-view"')
+    for (let i = 1; i <= 8; i++) expect(text).toContain(`teil${i}.ts`)
+    for (const word of ['Agent A', 'Agent B', 'lesen.ts', 'Geändert (8)', 'Gelesen (1)']) expect(text).toContain(word)
+    expect(text).toContain('Geändert (0)')
+    expect(text).not.toContain('Geändert (0):')
+    await ui.unmount()
+  })
+
+  test('doppelt geänderte Dateien stehen oben mit beiden Agenten', de, async ($, on) => {
+    engine(on)
+    await twoAgents($)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/index.ts', agentId: 'sub-1' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/index.ts', agentId: 'sub-2' } as never)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:files' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('"key":"files-clash"')
+    expect(text).toMatch(/index\.ts · Agent A \+ Agent B/)
+    expect(text.indexOf('"key":"files-clash"')).toBeLessThan(text.indexOf('"key":"files:sub-1"'))
+    await ui.unmount()
+  })
+
+  test('ohne Dateien steht dort ein Hinweis', de, async ($, on) => {
+    engine(on)
+    await twoAgents($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:files' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/noch keine Dateien/)
+    await ui.unmount()
+  })
+})
+
+describe('Tab Verbrauch', () => {
+  test('zeigt die Limits, den Kontext der Hauptsitzung und je Agent Modell, Kontext und Werkzeuge', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const rateLimits = [
+      { kind: 'five_hour', percentUsed: 13 },
+      { kind: 'seven_day', percentUsed: 84 },
+    ]
+    await $.session.measure({ context: { window: 200000, tokens: 50000, percent: 25 }, rateLimits, cost: { usd: 1.5 }, changed: ['context', 'rateLimits'] } as never)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:usage' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('"key":"usage-view"')
+    for (const word of ['13 %', '84 %', 'Kontext 50k', 'Code lesen', 'Haiku', 'Werkzeuge']) expect(text).toContain(word)
+    await ui.unmount()
+  })
+
+  test('ohne Unteragenten steht dort, dass es noch keine gibt', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:usage' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/noch keine Unteragenten/)
+    await ui.unmount()
+  })
+})
+
+describe('Tab Hilfe', () => {
+  test('zeigt Tasten, Zeichen, Befehle und den Weg zur Anleitung', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:help' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('"key":"help-view"')
+    for (const word of ['Tasten', 's: stoppen', 'a: Aussehen', 'Zeichen', 'läuft', 'fehlgeschlagen', 'Befehle', '/agent-tree', 'Anleitung', 'docs/GUIDE.de.md']) expect(text).toContain(word)
+    await ui.unmount()
+  })
+
+  test('auf Englisch führt der Weg zur englischen Anleitung', { options: { language: 'en', intro: false } }, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:help' })
+    await ui.redraw()
+    const text = await screen(ui)
+    for (const word of ['Keys', 'Glyphs', 'Commands', 'Guide', 'docs/GUIDE.md']) expect(text).toContain(word)
+    await ui.unmount()
+  })
+})
+
+describe('Tab Berichte', () => {
+  const longTask = 'Lies den Code und liste jede Stelle auf, an der Sitzungen geprüft werden. '.repeat(4).trim()
+  const longAnswer = `Zeile eins der Antwort.\n\n${'Ein langer Absatz. '.repeat(30).trim()}`
+  const history = (on: On, answer: () => string = () => longAnswer) =>
+    on('session.messages', (_, e) =>
+      ({
+        value: [
+          { role: 'user', text: `${longTask} (${String((e as { agentId?: string }).agentId)})`, toolUses: [] },
+          { role: 'assistant', text: `${answer()} (${String((e as { agentId?: string }).agentId)})`, toolUses: [] },
+        ],
+      }) as never,
+    )
+
+  test('zeigt Aufgabe und Antwort im Volltext, nicht nur den Auszug', de, async ($, on) => {
+    engine(on)
+    history(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:reports' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('"key":"reports-view"')
+    expect(text).toContain(`${longTask} (sub-1)`)
+    expect(text).toContain(`${'Ein langer Absatz. '.repeat(30).trim()} (sub-1)`)
+    await ui.unmount()
+  })
+
+  test('ein Klick auf einen anderen Agenten zeigt dessen Bericht', de, async ($, on) => {
+    engine(on)
+    history(on)
+    await twoAgents($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:reports' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('(sub-2)')
+    await ui.press({ key: 'report:sub-1' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('Ein langer Absatz. (sub-1)')
+    expect(text).not.toContain('Ein langer Absatz. (sub-2)')
+    await ui.unmount()
+  })
+
+  test('nach dem Ende des Agenten steht die endgültige Antwort da', de, async ($, on) => {
+    engine(on)
+    let answer = 'Zwischenstand'
+    history(on, () => answer)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:reports' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('Zwischenstand (sub-1)')
+    answer = 'Endergebnis'
+    await $.turn.complete({ answer: 'Endergebnis', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('Endergebnis (sub-1)')
+    await ui.unmount()
+  })
+
+  test('die übergebene Antwort zählt, nicht der letzte Zwischentext', de, async ($, on) => {
+    engine(on)
+    on('session.messages', () =>
+      ({
+        value: [
+          { role: 'user', text: 'Auftrag', toolUses: [] },
+          { role: 'assistant', text: 'Bevor ich abgebe, prüfe ich noch etwas.', toolUses: [{ tool_use_id: 'u1', tool: 'SubagentHandback', input: { message: 'Endbericht mit drei Punkten' } }] },
+        ],
+      }) as never,
+    )
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:reports' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('Endbericht mit drei Punkten')
+    expect(text).not.toContain('Bevor ich abgebe')
+    await ui.unmount()
+  })
+
+  test('ist der Verlauf nicht lesbar, steht das dort', de, async ($, on) => {
+    engine(on)
+    on('session.messages', () => {
+      throw new Error('kein Zugriff')
+    })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:reports' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/nicht lesbar/)
+    await ui.unmount()
+  })
+
+  test('ohne Unteragenten steht dort, dass es noch keine gibt', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:reports' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/noch keine Unteragenten/)
+    await ui.unmount()
+  })
+})
+
+describe('Vom Detailkasten zum ganzen Bericht', () => {
+  test('der Knopf im Detailkasten öffnet den Tab Berichte für diesen Agenten', de, async ($, on) => {
+    engine(on)
+    on('session.messages', () => ({ value: [{ role: 'user', text: 'Voller Auftrag', toolUses: [] }, { role: 'assistant', text: 'Volle Antwort', toolUses: [] }] }) as never)
+    await twoAgents($)
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'detail:sub-1')
+    await ui.redraw()
+    expect((await ui.find({ key: 'report:sub-1' }))?.props.label).toBe('ganzer Bericht ›')
+    await ui.press({ key: 'report:sub-1' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('"key":"reports-view"')
+    expect(text).toContain('Agent A')
+    expect(text).toContain('Volle Antwort')
+    await ui.unmount()
+  })
+})

@@ -2,7 +2,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { AgentTreeLook, AgentTreeState } from '../types'
+import type { AgentTreeLook, AgentTreeReport, AgentTreeState } from '../types'
 import { INTRO_MS } from './logo.ts'
 import { drawIntro } from './intro.tsx'
 import { introInfo } from './intro-model.ts'
@@ -39,6 +39,7 @@ import {
   fileNameOf,
   isStopping,
   lookOpened,
+  logFiltered,
   limitsFrom,
   MAIN,
   mainStepEffort,
@@ -48,6 +49,9 @@ import {
   pendingCorrection,
   phaseOf,
   pickerOpened,
+  reportAgent,
+  reportLoaded,
+  selectedSet,
   runningIds,
   isNewInput,
   restoredChoices,
@@ -101,6 +105,7 @@ const INTRO_WAIT_MS = 5000
 const INTRO_INLINE_ROWS = 22
 const appearance = atom({ plugin: 'agent-tree', key: 'look' } as const, DEFAULT_LOOK, { shape: LOOK_SHAPE })
 const unreadTexts = atom({ plugin: 'agent-tree', key: 'unread' } as const, {} as Record<string, string[]>)
+const reportTexts = atom({ plugin: 'agent-tree', key: 'reports' } as const, {} as Record<string, AgentTreeReport>)
 
 let ticker: Timer | undefined
 let introOn = true
@@ -406,7 +411,15 @@ function summarize(rows: unknown): Found {
     (m): m is { role: string; text: string } => typeof m === 'object' && m !== null && typeof m.text === 'string',
   )
   const task = messages.find(m => m.role === 'user' && m.text.trim() !== '')?.text
-  const answer = [...messages].reverse().find(m => m.role === 'assistant' && m.text.trim() !== '')?.text
+  const handed = [...messages]
+    .reverse()
+    .flatMap(m => {
+      const uses = (m as { toolUses?: unknown }).toolUses
+      return Array.isArray(uses) ? [...uses].reverse() : []
+    })
+    .map(use => (use as { tool?: unknown; input?: { message?: unknown } }))
+    .find(use => use.tool === HANDBACK && typeof use.input?.message === 'string' && use.input.message.trim() !== '')
+  const answer = (handed?.input?.message as string | undefined) ?? [...messages].reverse().find(m => m.role === 'assistant' && m.text.trim() !== '')?.text
   return { task, answer }
 }
 
@@ -415,6 +428,13 @@ async function openDetail($: EngineInterface, agentId: string): Promise<void> {
   if (s.detail?.agentId !== agentId || s.detail.state !== 'loading') return
   const rows = await $.session.messages({ agentId }).catch(() => undefined)
   await change($, t => detailLoaded(t, agentId, summarize(rows)))
+}
+
+async function loadReport($: EngineInterface, agentId: string | undefined): Promise<void> {
+  if (!agentId) return
+  await update($, reportTexts, shown => ({ [agentId]: shown[agentId] ?? { agentId, state: 'loading' as const } }))
+  const rows = await $.session.messages({ agentId }).catch(() => undefined)
+  await update($, reportTexts, shown => (shown[agentId] ? { [agentId]: reportLoaded(agentId, summarize(rows)) } : shown))
 }
 
 async function appendRow($: EngineInterface, text: string, agentId?: string): Promise<boolean> {
@@ -541,9 +561,17 @@ function actionsFor($: EngineInterface): TreeActions {
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
     restyle: (row, id) => void restyle($, row, id).catch(ignore),
     restyleDefault: () => void resetLook($).catch(ignore),
+    logFilter: source => void change($, t => logFiltered(t, source)).catch(ignore),
     tab: id => {
       void clock($)
         .then(now => change($, t => tabChosen(t, id, now)))
+        .then(t => (id === 'reports' ? loadReport($, reportAgent(t)) : undefined))
+        .catch(ignore)
+    },
+    report: agentId => {
+      void clock($)
+        .then(now => change($, t => (t.agents.some(n => n.id === agentId) ? tabChosen(selectedSet(t, agentId), 'reports', now) : t)))
+        .then(t => loadReport($, reportAgent(t)))
         .catch(ignore)
     },
   }
@@ -882,6 +910,7 @@ export const register: Register = (on, options) => {
       completed(s, { agentId: e.agentId, answer: e.answer, reason: e.reason, isAborted: e.isAborted, durationMs: e.durationMs }, now),
     ).catch(() => undefined)
     if (e.agentId && after) await settleUnread($, after, e.agentId, now).catch(() => undefined)
+    if (e.agentId && (await read($, reportTexts).catch(() => undefined))?.[e.agentId]) await loadReport($, e.agentId).catch(() => undefined)
     if (!e.agentId) await catchUp($, now, keep).catch(() => undefined)
     await dropChanger($, e.agentId ?? MAIN).catch(() => undefined)
     return result
@@ -933,7 +962,8 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
-    const { Box, Text, Button } = elements
+    const { Box, Text, Button, Markdown } = elements
+    const reports = await read($, reportTexts)
     const draft = carried
     const now = await clock($)
     const stored = await read($, tree)
@@ -957,7 +987,7 @@ export const register: Register = (on, options) => {
       )
       if (intro) return intro
     }
-    return drawTree({ Box, Text, Button } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {
+    return drawTree({ Box, Text, Button, Markdown } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {
       frame: tick,
       animate,
       now,
@@ -965,6 +995,7 @@ export const register: Register = (on, options) => {
       actions: actionsFor($),
       appearance: look,
       canAdvise: advisorCommand,
+      reports,
     })
   })
 

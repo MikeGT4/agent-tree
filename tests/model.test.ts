@@ -156,11 +156,11 @@ describe('Datenmodell', () => {
     ])
   })
 
-  test('das Protokoll hält die neuesten 40 Einträge', () => {
+  test('das Protokoll hält die neuesten 200 Einträge', () => {
     let s = createTree(0)
-    for (let i = 0; i < 50; i++) s = spawned(s, spawn(`p${i}`), i)
-    expect(s.log.length).toBe(40)
-    expect(line(s.log.at(-1))).toContain('Auftrag p49')
+    for (let i = 0; i < 250; i++) s = spawned(s, spawn(`p${i}`), i)
+    expect(s.log.length).toBe(200)
+    expect(line(s.log.at(-1))).toContain('Auftrag p249')
   })
 
   test('Hauptsitzung: Phasen, Rückgaben, Kontext und gekürzter Prompt', () => {
@@ -366,6 +366,8 @@ describe('Datenmodell', () => {
       restyle: () => undefined,
       restyleDefault: () => undefined,
       tab: () => undefined,
+      logFilter: () => undefined,
+      report: () => undefined,
       deselect: () => void calls.push('deselect'),
       write: () => undefined,
     }
@@ -718,7 +720,7 @@ describe('Korrekturen', () => {
 describe('Stopp am Kasten', () => {
   test('pressKey kennt halt', () => {
     const stopped: string[] = []
-    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, deselect: () => {}, write: () => {}, tab: () => {} }
+    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, deselect: () => {}, write: () => {}, tab: () => {}, logFilter: () => {}, report: () => {} }
     expect(pressKey(actions, 'halt:sub-1')).toBe(true)
     expect(stopped).toEqual(['sub-1'])
   })
@@ -838,7 +840,7 @@ describe('Aussehen', () => {
     const ui = { Box: 'Box', Text: 'Text', Button: 'Button' } as never
     const s = detailOpened(spawned(createTree(0), spawn('sub-1'), 1), 'sub-1')
     const noop = () => {}
-    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, deselect: noop, write: noop, tab: noop }
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, deselect: noop, write: noop, tab: noop, logFilter: noop, report: noop }
     const text = JSON.stringify(drawTree(ui, s, 90, 60, { frame: 0, animate: false, now: 5000, actions }))
     expect(text).not.toMatch(/say:sub-1/)
   })
@@ -1270,7 +1272,7 @@ describe('Aktionszeile schließen', () => {
   test('pressKey kennt das Schließen der Aktionszeile', () => {
     const calls: string[] = []
     const noop = () => {}
-    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop, tab: noop, deselect: () => void calls.push('deselect') }
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop, tab: noop, logFilter: noop, report: noop, deselect: () => void calls.push('deselect') }
     expect(pressKey(actions, 'actions:close')).toBe(true)
     expect(calls).toEqual(['deselect'])
   })

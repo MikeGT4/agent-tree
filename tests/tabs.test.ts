@@ -2,8 +2,9 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { LOGO_COLORS, logoMark } from '../hooks/logo.ts'
-import { completed, createTree, detailOpened, freshTree, hasNewReport, lookOpened, pickerOpened, selectionToggled, spawned, tabChosen, tabOf, TABS } from '../hooks/model.ts'
+import { completed, createTree, fullText, reportAgent, reportLoaded, selectedSet, stepped, detailOpened, freshTree, hasNewReport, lookOpened, pickerOpened, selectionToggled, spawned, tabChosen, tabOf, TABS } from '../hooks/model.ts'
 import { drawTree, pressKey } from '../hooks/view.tsx'
+import { usageRows } from '../hooks/tabs.tsx'
 
 const spawn = (agentId: string) => ({ agentId, agentType: 'Explore', description: `Auftrag ${agentId}`, background: false, fork: false })
 
@@ -94,5 +95,41 @@ describe('Tabs zeichnen und drücken', () => {
     const drawn = JSON.stringify(drawTree(ui, createTree(0), 90, 60, { frame: 0, animate: false, now: 5 }))
     expect(drawn).toContain('Berichte')
     expect(drawn).not.toContain('"Button"')
+  })
+})
+
+describe('Verbrauch', () => {
+  test('die Agenten stehen nach Kontext sortiert, der größte zuerst, ohne Messung zuletzt', () => {
+    let s = spawned(spawned(spawned(createTree(0), spawn('a1'), 1), spawn('a2'), 2), spawn('a3'), 3)
+    s = stepped(s, { agentId: 'a1', model: 'claude-haiku-5-5', contextTokens: 5000 }, 4)
+    s = stepped(s, { agentId: 'a2', model: 'claude-haiku-5-5', contextTokens: 90000 }, 5)
+    expect(usageRows(s).map(n => n.id)).toEqual(['a2', 'a1', 'a3'])
+  })
+})
+
+describe('Berichte', () => {
+  const finish = (agentId: string) => ({ agentId, answer: 'OK', reason: 'answer', isAborted: false, durationMs: 900 })
+
+  test('der Volltext behält seine Zeilen und maskiert Geheimnisse', () => {
+    const text = fullText('Zeile 1\nZeile 2 mit Bearer abcdef123456\n\n- Punkt')
+    expect(text.split('\n')).toEqual(['Zeile 1', 'Zeile 2 mit •••', '', '- Punkt'])
+  })
+
+  test('der Volltext endet an der Obergrenze', () => {
+    expect([...fullText('a'.repeat(30000))].length).toBeLessThanOrEqual(20000)
+  })
+
+  test('gezeigt wird der gewählte Agent, sonst der zuletzt fertige, sonst der zuletzt gestartete', () => {
+    let s = spawned(spawned(spawned(createTree(0), spawn('a1'), 1), spawn('a2'), 2), spawn('a3'), 3)
+    expect(reportAgent(createTree(0))).toBeUndefined()
+    expect(reportAgent(s)).toBe('a3')
+    s = completed(s, finish('a1'), 5)
+    expect(reportAgent(s)).toBe('a1')
+    expect(reportAgent(selectedSet(s, 'a2'))).toBe('a2')
+  })
+
+  test('ein geladener Bericht ist bereit, ein verweigerter sagt das', () => {
+    expect(reportLoaded('a1', { task: 'Auftrag', answer: 'Antwort' })).toEqual({ agentId: 'a1', state: 'ready', task: 'Auftrag', answer: 'Antwort' })
+    expect(reportLoaded('a1', { denied: true })).toEqual({ agentId: 'a1', state: 'denied' })
   })
 })

@@ -57,6 +57,17 @@ export type Words = {
   newAgents: string
   help: readonly string[]
   tabs: Record<AgentTreeTab, string>
+  fullReport: string
+  helpKeys: string
+  helpGlyphs: string
+  helpCommands: string
+  helpGuide: string
+  guideUrl: string
+  filesNone: string
+  filesClash: string
+  logAll: string
+  logOrder: string
+  logEntries: (count: number) => string
   task: string
   reply: string
   loading: string
@@ -223,6 +234,17 @@ export const WORDS: Record<Lang, Words> = {
     newAgents: 'neue Unteragenten',
     help: ['ctrl+x tab: Leiste', 'Kasten: wählen', 's: stoppen', 'e: Denkstufe', 'm: Modell', 'a: Aussehen', 'Tab: wandern'],
     tabs: { tree: 'Baum', reports: 'Berichte', files: 'Dateien', log: 'Verlauf', usage: 'Verbrauch', help: 'Hilfe' },
+    fullReport: 'ganzer Bericht ›',
+    helpKeys: 'Tasten',
+    helpGlyphs: 'Zeichen',
+    helpCommands: 'Befehle',
+    helpGuide: 'Anleitung',
+    guideUrl: 'github.com/MikeGT4/agent-tree/blob/main/docs/GUIDE.de.md',
+    filesNone: 'noch keine Dateien',
+    filesClash: 'Gleiche Datei',
+    logAll: 'alle',
+    logOrder: 'neueste zuerst',
+    logEntries: count => (count === 1 ? '1 Eintrag' : `${count} Einträge`),
     task: 'Auftrag',
     reply: 'Antwort',
     loading: 'lädt …',
@@ -396,6 +418,17 @@ export const WORDS: Record<Lang, Words> = {
     newAgents: 'new sub-agents',
     help: ['ctrl+x tab: pane', 'box: select', 's: stop', 'e: effort', 'm: model', 'a: look', 'Tab: move'],
     tabs: { tree: 'Tree', reports: 'Reports', files: 'Files', log: 'Log', usage: 'Usage', help: 'Help' },
+    fullReport: 'full report ›',
+    helpKeys: 'Keys',
+    helpGlyphs: 'Glyphs',
+    helpCommands: 'Commands',
+    helpGuide: 'Guide',
+    guideUrl: 'github.com/MikeGT4/agent-tree/blob/main/docs/GUIDE.md',
+    filesNone: 'no files yet',
+    filesClash: 'Same file',
+    logAll: 'all',
+    logOrder: 'newest first',
+    logEntries: count => (count === 1 ? '1 entry' : `${count} entries`),
     task: 'Task',
     reply: 'Answer',
     loading: 'loading …',
