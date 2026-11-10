@@ -52,6 +52,7 @@ import {
   reportAgent,
   reportLoaded,
   reportPinned,
+  resolvedPath,
   runningIds,
   isNewInput,
   restoredChoices,
@@ -172,7 +173,8 @@ async function handOver($: EngineInterface, from: Carried): Promise<void> {
 }
 
 async function noteChange($: EngineInterface, who: string, path: string) {
-  const key = pathKey(path)
+  const cwd = await $.session.cwd().catch(() => '')
+  const key = pathKey(resolvedPath(path, cwd))
   const entry: { file: string; ids: Set<string> } = changers.get(key) ?? { file: fileNameOf({ file_path: path }) ?? '', ids: new Set() }
   entry.ids.add(who)
   changers.set(key, entry)

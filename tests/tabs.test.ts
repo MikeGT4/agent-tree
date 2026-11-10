@@ -1,7 +1,7 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import { describe, expect, test } from 'claude-code/testing'
 
-import { completed, createTree, fileNoted, fullText, reportAgent, reportLoaded, reportPinned, selectedSet, stepped, detailOpened, freshTree, hasNewReport, lookOpened, pickerOpened, selectionToggled, spawned, tabChosen, tabOf, TABS } from '../hooks/model.ts'
+import { completed, createTree, fileNoted, fullText, pathKey, reportAgent, reportLoaded, reportPinned, resolvedPath, selectedSet, stepped, detailOpened, freshTree, hasNewReport, lookOpened, pickerOpened, selectionToggled, spawned, tabChosen, tabOf, TABS } from '../hooks/model.ts'
 import type { AgentTreeState } from '../types'
 import { drawTree, pressKey } from '../hooks/view.tsx'
 import { usageRows } from '../hooks/tabs.tsx'
@@ -178,6 +178,26 @@ describe('Berichte', () => {
   test('ist der angeheftete Agent nicht mehr da, gilt wieder der zuletzt fertige oder gestartete', () => {
     const s = reportPinned(spawned(spawned(createTree(0), spawn('a1'), 1), spawn('a2'), 2), 'a1', 3)
     expect(reportAgent({ ...s, agents: s.agents.filter(n => n.id !== 'a1') })).toBe('a2')
+  })
+})
+
+describe('Pfade für die Warnung gleiche Datei', () => {
+  test('relative und absolute Schreibweise ergeben denselben Pfad', () => {
+    expect(resolvedPath('src/api.ts', '/repo')).toBe('/repo/src/api.ts')
+    expect(resolvedPath('/repo/src/api.ts', '/anders')).toBe('/repo/src/api.ts')
+    expect(resolvedPath('./src/../src/api.ts', '/repo')).toBe('/repo/src/api.ts')
+    expect(resolvedPath('/repo//src/./api.ts', '/repo')).toBe('/repo/src/api.ts')
+    expect(pathKey(resolvedPath('src/api.ts', '/repo'))).toBe(pathKey(resolvedPath('/repo/src/api.ts', '/repo')))
+  })
+
+  test('Laufwerkspfade zählen ohne Rücksicht auf Groß- und Kleinschreibung und Trennzeichen', () => {
+    expect(resolvedPath('src\\api.ts', 'C:\\Repo')).toBe(resolvedPath('c:/repo/src/API.ts', ''))
+    expect(resolvedPath('..\\..\\..\\x.ts', 'C:\\Repo')).toBe('c:/x.ts')
+  })
+
+  test('verschiedene Dateien bleiben verschieden, ohne Arbeitsverzeichnis bleibt der Pfad, wie er ist', () => {
+    expect(resolvedPath('/repo/a.ts', '/repo')).not.toBe(resolvedPath('/repo/b/a.ts', '/repo'))
+    expect(resolvedPath('src/api.ts', '')).toBe('/src/api.ts')
   })
 })
 

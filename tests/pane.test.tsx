@@ -2795,6 +2795,16 @@ describe('Gleiche Datei', () => {
     expect(clashOf(s, 'sub-2')).toEqual({ file: 'api.ts', with: 'sub-1' })
   })
 
+  test('absoluter und relativer Pfad derselben Datei warnen', de, async ($, on) => {
+    const { tree } = engine(on)
+    await twoAgents($)
+    await $.tool.call({ tool: 'Edit', file_path: '/src/api.ts', agentId: 'sub-1' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: 'src/api.ts', agentId: 'sub-2' } as never)
+    const s = tree()
+    expect(clashOf(s, 'sub-1')).toEqual({ file: 'api.ts', with: 'sub-2' })
+    expect(clashOf(s, 'sub-2')).toEqual({ file: 'api.ts', with: 'sub-1' })
+  })
+
   test('Hauptsitzung und Agent an derselben Datei', de, async ($, on) => {
     const { tree } = engine(on)
     await twoAgents($)

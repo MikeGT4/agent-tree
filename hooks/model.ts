@@ -807,6 +807,19 @@ export function fileNameOf(input: Record<string, unknown>): string | undefined {
   return lastSegment(pathOf(input) ?? '') || undefined
 }
 
+export function resolvedPath(path: string, cwd: string): string {
+  const absolute = /^(?:[\\/]|[A-Za-z]:[\\/])/.test(path)
+  const whole = absolute || !cwd ? path : `${cwd}/${path}`
+  const drive = /^[A-Za-z]:/.test(whole)
+  const parts: string[] = []
+  for (const part of whole.split(/[\\/]+/)) {
+    if (part === '' || part === '.') continue
+    if (part !== '..') parts.push(part)
+    else if (parts.length > (drive ? 1 : 0)) parts.pop()
+  }
+  return drive ? parts.join('/').toLowerCase() : `/${parts.join('/')}`
+}
+
 export function pathKey(path: string): string {
   let hash = 0x811c9dc5
   for (let i = 0; i < path.length; i++) {
