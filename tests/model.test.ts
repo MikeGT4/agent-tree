@@ -395,7 +395,7 @@ describe('Datenmodell', () => {
     expect(planRows({ ...wide, height: 60, total: 6 })).toEqual({ shown: 6, logRows: 6 })
     expect(planRows({ ...wide, height: undefined, total: 12 })).toEqual({ shown: 9, logRows: 6 })
     const tight = { wide: false, tight: true, asRows: true, perRow: 3, advisorRows: 4, earlier: false }
-    expect(planRows({ ...tight, height: 31, total: 6 })).toEqual({ shown: 2, logRows: 2 })
+    expect(planRows({ ...tight, height: 33, total: 6 })).toEqual({ shown: 2, logRows: 2 })
     expect(planRows({ ...tight, height: 30, total: 0 })).toEqual({ shown: 0, logRows: 6 })
   })
 

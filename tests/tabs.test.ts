@@ -1,7 +1,6 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import { describe, expect, test } from 'claude-code/testing'
 
-import { LOGO_COLORS, logoMark } from '../hooks/logo.ts'
 import { completed, createTree, fullText, reportAgent, reportLoaded, selectedSet, stepped, detailOpened, freshTree, hasNewReport, lookOpened, pickerOpened, selectionToggled, spawned, tabChosen, tabOf, TABS } from '../hooks/model.ts'
 import { drawTree, pressKey } from '../hooks/view.tsx'
 import { usageRows } from '../hooks/tabs.tsx'
@@ -66,18 +65,6 @@ describe('Neue Antwort am Tab Berichte', () => {
     let s = spawned(spawned(createTree(0), spawn('a1'), 1), spawn('a2'), 2)
     s = tabChosen(tabChosen(completed(s, finish('a1'), 5), 'reports', 6), 'tree', 7)
     expect(hasNewReport(completed(s, finish('a2'), 9))).toBe(true)
-  })
-})
-
-describe('Kleines Logo', () => {
-  test('die Kleinform kommt aus der Logo-Karte: Balken oben, drei Felder unten', () => {
-    expect(logoMark()).toEqual([
-      { bottom: LOGO_COLORS.B },
-      { top: LOGO_COLORS.O },
-      { top: LOGO_COLORS.O, bottom: LOGO_COLORS.B },
-      { top: LOGO_COLORS.O },
-      { bottom: LOGO_COLORS.N },
-    ])
   })
 })
 

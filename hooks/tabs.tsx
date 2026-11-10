@@ -2,7 +2,6 @@
 import type { Elements } from 'claude-code'
 
 import type { AgentTreeLogSource, AgentTreeNode, AgentTreeReport, AgentTreeState, AgentTreeTab } from '../types'
-import { logoMark } from './logo.ts'
 import { frameEdges, restyleLine } from './looks.ts'
 import type { Glyphs, Palette } from './looks.ts'
 import { LOG_SOURCES, MAIN, TABS, clashShown, clockTime, contextLevel, contextPercent, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
@@ -37,31 +36,7 @@ export function stripLines(names: readonly TabName[], width: number): number {
 }
 
 export function tabRows(names: readonly TabName[], width: number, tight: boolean): number {
-  if (tight) return stripLines(names, width)
-  return reiterPad(names, width) === undefined ? stripLines(names, width) + 1 : 3
-}
-
-export function drawMark(ui: Ui) {
-  const { Box, Text } = ui
-  return (
-    <Box key="mark" flexDirection="row" flexShrink={0}>
-      {logoMark().map((cell, i) =>
-        cell.top && cell.bottom ? (
-          <Text key={`mark:${i}`} color={cell.top} backgroundColor={cell.bottom}>
-            {'▀'}
-          </Text>
-        ) : cell.top ? (
-          <Text key={`mark:${i}`} color={cell.top}>
-            {'▀'}
-          </Text>
-        ) : (
-          <Text key={`mark:${i}`} color={cell.bottom}>
-            {cell.bottom ? '▄' : ' '}
-          </Text>
-        ),
-      )}
-    </Box>
-  )
+  return reiterPad(names, width) === undefined ? stripLines(names, width) + (tight ? 0 : 1) : 3
 }
 
 export type TabBarInput = {
@@ -93,7 +68,7 @@ export function drawTabBar(ui: Ui, o: TabBarInput) {
     )
   }
   const rule = restyleLine('─', o.glyphs)
-  const pad = o.tight ? undefined : reiterPad(o.names, o.width)
+  const pad = reiterPad(o.names, o.width)
   if (pad === undefined) {
     return (
       <Box key="tabs" flexDirection="column" width={o.width}>

@@ -198,14 +198,6 @@ async function screen(ui: { drawn: () => Promise<unknown> }): Promise<string> {
   return JSON.stringify(await ui.drawn())
 }
 
-function outsideMark(text: string): string {
-  const start = text.indexOf('{"type":"Box","props":{"key":"mark"')
-  if (start < 0) return text
-  let end = start
-  for (let i = 0; i < 6; i++) end = text.indexOf(']}', end) + 2
-  return text.slice(0, start) + text.slice(end)
-}
-
 type Pressable = { press: (target: { key: string }) => Promise<unknown>; drawn: () => Promise<unknown> }
 
 async function steer(ui: Pressable, key: string) {
@@ -583,10 +575,10 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('bei 30 Zeilen Höhe stehen Unteragenten als Zeilen und das Protokoll bleibt', de, async ($, on) => {
+  test('bei 33 Zeilen Höhe stehen Unteragenten als Zeilen und das Protokoll bleibt', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
-    const ui = await $.ui.mount(pane(90, 30))
+    const ui = await $.ui.mount(pane(90, 33))
     expect(await screen(ui)).toMatch(/◐ läuft · Explore · Code lesen/)
     expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
     expect(await screen(ui)).not.toMatch(/schreibt nie/)
@@ -953,7 +945,7 @@ describe('Agent Tree', () => {
     await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(39))
-    expect(outsideMark(await screen(ui))).not.toMatch(plantDots)
+    expect(await screen(ui)).not.toMatch(plantDots)
     await ui.unmount()
   })
 
@@ -1095,7 +1087,7 @@ describe('Agent Tree', () => {
     await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(90, 13))
-    expect(brailleCount(outsideMark(await screen(ui)))).toBe(0)
+    expect(brailleCount(await screen(ui))).toBe(0)
     await ui.unmount()
   })
 
@@ -1859,7 +1851,7 @@ describe('Aussehen in der Leiste', () => {
     await ui.press({ key: 'look:colors:light' })
     await ui.redraw()
     expect(await screen(ui)).toContain(PALETTES.light.agent)
-    expect(outsideMark(await screen(ui))).not.toContain(PALETTES.original.agent)
+    expect(await screen(ui)).not.toContain(PALETTES.original.agent)
     await ui.unmount()
   })
 
@@ -2368,7 +2360,7 @@ describe('Zweites /clear, Intro, Aussehen und Eingaben', () => {
     const first = await $.ui.mount(pane(90))
     await clock.advance(2500)
     await first.redraw()
-    expect(blocks(outsideMark(await screen(first)))).toBe(0)
+    expect(blocks(await screen(first))).toBe(0)
     await first.unmount()
     await clearSession($, seen)
     await $.turn.start({ text: 'Weiter', turnId: 't2' })
@@ -2376,7 +2368,7 @@ describe('Zweites /clear, Intro, Aussehen und Eingaben', () => {
     const ui = await $.ui.mount(pane(90))
     await clock.advance(300)
     await ui.redraw()
-    expect(blocks(outsideMark(await screen(ui)))).toBe(0)
+    expect(blocks(await screen(ui))).toBe(0)
     await ui.unmount()
   })
 
@@ -3256,22 +3248,22 @@ describe('Tabs', () => {
     await ui.unmount()
   })
 
-  test('bei niedriger Leiste wird aus den Reitern ein Streifen', de, async ($, on) => {
+  test('auch bei niedriger Leiste bleiben die Reiter mit ihrem Rahmen', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90, 30))
     for (const key of TAB_KEYS) expect(await ui.find({ key })).toBeDefined()
-    expect(await screen(ui)).not.toContain('"key":"tab-tops"')
+    expect(await screen(ui)).toContain('"key":"tab-tops"')
     await ui.unmount()
   })
 
-  test('vor dem Titel steht das kleine Logo', de, async ($, on) => {
+  test('vor dem Titel steht kein Logo', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))
     const text = await screen(ui)
-    expect(text).toContain('"key":"mark"')
-    expect(text.indexOf('"key":"mark"')).toBeLessThan(text.indexOf('AGENT TREE'))
+    expect(text).not.toContain('"key":"mark"')
+    expect(text).not.toMatch(/[▀▄]/)
     await ui.unmount()
   })
 

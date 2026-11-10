@@ -53,7 +53,7 @@ import { LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, li
 import type { Glyphs, LookRow, Palette } from './looks.ts'
 import { WORDS, activityText, familyOr, logLine, lookOptionLabel, toolText, wordsFor } from './words.ts'
 import type { Lang, Words } from './words.ts'
-import { drawFiles, drawHelp, drawLog, drawMark, drawReports, drawTabBar, drawUsage, tabNames, tabRows } from './tabs.tsx'
+import { drawFiles, drawHelp, drawLog, drawReports, drawTabBar, drawUsage, tabNames, tabRows } from './tabs.tsx'
 
 export { WORDS, logLine, wordsFor }
 export type { Lang }
@@ -285,7 +285,7 @@ function treeRows(o: RowPlanInput, shown: number): number {
 const LOG_FRAME_ROWS = 4
 
 function usedRows(o: RowPlanInput, shown: number, logRows: number | undefined): number {
-  const header = 1 + (o.tabRows ?? (o.tight ? 1 : 3)) + (o.pickerRows ?? 0)
+  const header = 1 + (o.tabRows ?? 3) + (o.pickerRows ?? 0)
   const tree = treeRows(o, shown)
   const body = o.wide ? Math.max(o.advisorRows, tree) : o.advisorRows + tree
   const log = logRows === undefined ? 0 : LOG_FRAME_ROWS + logRows
@@ -901,8 +901,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const verb = phase === 'idle' ? w.idle : w.working
   const header = (
-    <Box key="head" flexDirection="row" justifyContent="center" columnGap={1} width={width}>
-      {drawMark(ui)}
+    <Box key="head" flexDirection="row" justifyContent="center" width={width}>
       <Box key="title" flexShrink={1}>
         {tight ? (
           <Text bold size={SIZE.title} wrap="truncate-end">
