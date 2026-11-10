@@ -4,9 +4,11 @@
 
 A side pane for Claude Code that shows a session's agents as a live tree.
 
-Toggle the advisor, set the main session's effort, stop and correct running sub-agents, switch their model and effort, change the look, watch 5-hour and weekly limits.
+Stop and correct running sub-agents, switch their model and effort, set the main session's effort, toggle the advisor, change the look, watch your limits.
 
 <img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.5.4/readme-agent-tree-4.gif" width="560" alt="Demo of the functions above">
+
+Tabs: each agent's full report, files, log, usage.
 
 ## Install
 
@@ -20,14 +22,14 @@ Then start Claude Code; the pane opens.
 
 Inside a session: `/plugin install agent-tree --marketplace MikeGT4/agent-tree`
 
-Needs Claude Code 2.1.292+, tested with 2.1.319.
+Needs Claude Code 2.1.292+, tested with 2.1.322.
 
 ## What it runs
 
-Once a day, in interactive sessions, it runs Claude Code's `plugin list --json`, reads its version number from raw.githubusercontent.com and, if it is newer, runs `plugin update agent-tree`. It sends nothing else ([PRIVACY.md](PRIVACY.md)).
+Once a day, in interactive sessions, it runs Claude Code's `plugin list --json`, reads its version from raw.githubusercontent.com and, if newer, runs `plugin update agent-tree`. It sends nothing else ([PRIVACY.md](PRIVACY.md)).
 
-Its hooks act only after you act in the pane; typing in the prompt only ends the start intro.
+Its hooks act only after you act in the pane; typing only ends the start intro.
 
-[Guide](docs/GUIDE.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.6.0/agent-tree-guide.pdf)
+[Guide](docs/GUIDE.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/agent-tree-guide.pdf)
 
 MIT, © 2026 Mike Pollow, Digitalroots

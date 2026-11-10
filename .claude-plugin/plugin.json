@@ -1,8 +1,8 @@
 {
   "name": "agent-tree",
   "displayName": "Agent Tree",
-  "version": "0.6.0",
-  "description": "Terminal side pane that shows a session's agents as a live tree: what each one does, how full its context is, which file two of them change. Stop one, send it new instructions, switch its model and effort.",
+  "version": "0.7.0",
+  "description": "Terminal side pane that shows a session's agents as a live tree: what each one does, how full its context is, which file two of them change. Tabs open each agent's full report, files, log and usage. Stop one, send it new instructions, switch its model and effort.",
   "author": {
     "name": "Mike Pollow, Digitalroots"
   },
@@ -28,7 +28,10 @@
     "sidebar",
     "themes",
     "usage-monitor",
-    "context-window"
+    "context-window",
+    "tabs",
+    "reports",
+    "activity-log"
   ],
   "types": "./types/index.d.ts",
   "userConfig": {
