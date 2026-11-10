@@ -15,7 +15,7 @@ import type {
   AgentTreeTab,
 } from '../types'
 
-export const LOG_LIMIT = 200
+export const LOG_LIMIT = 150
 export const LOG_EXCERPT = 60
 export const DESCRIPTION_LIMIT = 80
 export const LABEL_LIMIT = 40
@@ -129,7 +129,13 @@ export function tabChosen(s: AgentTreeState, tab: string, now = 0): AgentTreeSta
   const known = TABS.find(t => t === tab)
   if (!known) return s
   const seen = known === 'reports' || tabOf(s) === 'reports' ? { reportsSeen: now } : {}
-  return { ...closed(s), tab: known, ...seen }
+  const pin = known === 'reports' ? { reportOf: tabOf(s) === 'reports' ? reportAgent(s) : latestReportAgent(s) } : {}
+  return { ...closed(s), tab: known, ...seen, ...pin }
+}
+
+export function reportPinned(s: AgentTreeState, agentId: string, now = 0): AgentTreeState {
+  if (!s.agents.some(n => n.id === agentId)) return s
+  return { ...tabChosen(s, 'reports', now), reportOf: agentId }
 }
 
 export const LOG_SOURCES: readonly AgentTreeLogSource[] = ['session', 'main', 'agent', 'advisor']
@@ -463,9 +469,33 @@ function oneLine(text: string): string {
 
 export const REPORT_LIMIT = 20000
 
+const MASK = '•••'
+
+function sharedEnd(a: string, b: string): number {
+  let shared = 0
+  while (shared < a.length && shared < b.length && a[a.length - 1 - shared] === b[b.length - 1 - shared]) shared += 1
+  return shared
+}
+
+function maskedAfter(before: string | undefined, line: string): string {
+  const own = maskedText(line)
+  if (before === undefined) return own
+  const together = maskedText(`${before} ${line}`)
+  if (together === `${maskedText(before)} ${own}`) return own
+  const kept = sharedEnd(together, own)
+  return kept >= own.length ? own : `${MASK}${own.slice(own.length - kept)}`
+}
+
 export function fullText(text: string | undefined, limit = REPORT_LIMIT): string {
-  const lines = (text ?? '').split(/\r?\n/).map(line => maskedText(line).replace(/[ \t]+$/, ''))
-  return cut(lines.join('\n').trim(), limit)
+  const raw = (text ?? '').slice(0, limit + 2000).replace(/\t/g, '    ').split(/\r?\n/)
+  const lines: string[] = []
+  let before: string | undefined
+  for (const line of raw) {
+    lines.push(maskedAfter(before, line).replace(/ +$/, ''))
+    if (line.trim() !== '') before = line
+  }
+  const whole = lines.join('\n').trim()
+  return whole.length > limit ? `${cut(whole, limit - 1)}…` : whole
 }
 
 export function reportLoaded(agentId: string, found: { task?: string; answer?: string; denied?: boolean }): AgentTreeReport {
@@ -475,10 +505,14 @@ export function reportLoaded(agentId: string, found: { task?: string; answer?: s
   return { agentId, state: 'ready', ...(task ? { task } : {}), ...(answer ? { answer } : {}) }
 }
 
-export function reportAgent(s: AgentTreeState): string | undefined {
+function latestReportAgent(s: AgentTreeState): string | undefined {
   if (s.selected !== undefined && s.agents.some(n => n.id === s.selected)) return s.selected
   const ended = s.agents.filter(n => n.endedAt !== undefined).sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0))[0]
   return (ended ?? s.agents.at(-1))?.id
+}
+
+export function reportAgent(s: AgentTreeState): string | undefined {
+  return s.reportOf !== undefined && s.agents.some(n => n.id === s.reportOf) ? s.reportOf : latestReportAgent(s)
 }
 
 const GRAPHEMES = 'Segmenter' in Intl ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : undefined

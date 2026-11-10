@@ -51,7 +51,7 @@ import {
   pickerOpened,
   reportAgent,
   reportLoaded,
-  selectedSet,
+  reportPinned,
   runningIds,
   isNewInput,
   restoredChoices,
@@ -67,6 +67,7 @@ import {
   stopSent,
   synced,
   tabChosen,
+  tabOf,
   toolKind,
   toolLabel,
   toolRan,
@@ -133,6 +134,7 @@ let spawning = 0
 let generation = 0
 let handing: Promise<void> | undefined
 let carried: Carried | undefined
+let reportRequest = 0
 
 async function takeOver($: EngineInterface): Promise<void> {
   if (handing) return handing
@@ -405,21 +407,33 @@ async function catchUp($: EngineInterface, now: number, keep: number): Promise<v
 
 type Found = { task?: string; answer?: string; denied?: boolean }
 
+function handedBack(uses: unknown): string | undefined {
+  if (!Array.isArray(uses)) return undefined
+  for (const use of [...uses].reverse()) {
+    const { tool, input } = use as { tool?: unknown; input?: { message?: unknown } }
+    if (tool === HANDBACK && typeof input?.message === 'string' && input.message.trim() !== '') return input.message
+  }
+  return undefined
+}
+
 function summarize(rows: unknown): Found {
   if (!Array.isArray(rows)) return { denied: true }
   const messages = rows.filter(
     (m): m is { role: string; text: string } => typeof m === 'object' && m !== null && typeof m.text === 'string',
   )
   const task = messages.find(m => m.role === 'user' && m.text.trim() !== '')?.text
-  const handed = [...messages]
-    .reverse()
-    .flatMap(m => {
-      const uses = (m as { toolUses?: unknown }).toolUses
-      return Array.isArray(uses) ? [...uses].reverse() : []
-    })
-    .map(use => (use as { tool?: unknown; input?: { message?: unknown } }))
-    .find(use => use.tool === HANDBACK && typeof use.input?.message === 'string' && use.input.message.trim() !== '')
-  const answer = (handed?.input?.message as string | undefined) ?? [...messages].reverse().find(m => m.role === 'assistant' && m.text.trim() !== '')?.text
+  let answer: string | undefined
+  for (const m of [...messages].reverse()) {
+    const handed = handedBack((m as { toolUses?: unknown }).toolUses)
+    if (handed !== undefined) {
+      answer = handed
+      break
+    }
+    if (m.role === 'assistant' && m.text.trim() !== '') {
+      answer = m.text
+      break
+    }
+  }
   return { task, answer }
 }
 
@@ -432,9 +446,20 @@ async function openDetail($: EngineInterface, agentId: string): Promise<void> {
 
 async function loadReport($: EngineInterface, agentId: string | undefined): Promise<void> {
   if (!agentId) return
+  reportRequest += 1
+  const request = reportRequest
   await update($, reportTexts, shown => ({ [agentId]: shown[agentId] ?? { agentId, state: 'loading' as const } }))
   const rows = await $.session.messages({ agentId }).catch(() => undefined)
+  if (request !== reportRequest) return
   await update($, reportTexts, shown => (shown[agentId] ? { [agentId]: reportLoaded(agentId, summarize(rows)) } : shown))
+}
+
+async function ensureReport($: EngineInterface, s: AgentTreeState): Promise<void> {
+  if (tabOf(s) !== 'reports') return
+  const agentId = reportAgent(s)
+  if (!agentId) return
+  const shown = await read($, reportTexts)
+  if (!shown[agentId]) await loadReport($, agentId)
 }
 
 async function appendRow($: EngineInterface, text: string, agentId?: string): Promise<boolean> {
@@ -570,8 +595,8 @@ function actionsFor($: EngineInterface): TreeActions {
     },
     report: agentId => {
       void clock($)
-        .then(now => change($, t => (t.agents.some(n => n.id === agentId) ? tabChosen(selectedSet(t, agentId), 'reports', now) : t)))
-        .then(t => loadReport($, reportAgent(t)))
+        .then(now => change($, t => reportPinned(t, agentId, now)))
+        .then(t => (tabOf(t) === 'reports' && reportAgent(t) === agentId ? loadReport($, agentId) : undefined))
         .catch(ignore)
     },
   }
@@ -829,7 +854,7 @@ export const register: Register = (on, options) => {
       const now = await clock($)
       let written = true
       try {
-        await change($, s =>
+        const grown = await change($, s =>
           trimmed(
             spawned(
               s,
@@ -850,6 +875,7 @@ export const register: Register = (on, options) => {
             keep,
           ),
         )
+        await ensureReport($, grown).catch(() => undefined)
       } catch {
         written = false
       }
@@ -911,6 +937,7 @@ export const register: Register = (on, options) => {
     ).catch(() => undefined)
     if (e.agentId && after) await settleUnread($, after, e.agentId, now).catch(() => undefined)
     if (e.agentId && (await read($, reportTexts).catch(() => undefined))?.[e.agentId]) await loadReport($, e.agentId).catch(() => undefined)
+    if (after) await ensureReport($, after).catch(() => undefined)
     if (!e.agentId) await catchUp($, now, keep).catch(() => undefined)
     await dropChanger($, e.agentId ?? MAIN).catch(() => undefined)
     return result

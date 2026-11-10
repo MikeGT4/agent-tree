@@ -517,6 +517,13 @@ export function clip(text: string, width: number): string {
   return text.length > width ? `${cut(text, Math.max(0, width - 1))}…` : text
 }
 
+export function centered(text: string, width: number): string {
+  const shown = clip(text, width)
+  const free = Math.max(0, width - [...shown].length)
+  const left = Math.floor(free / 2)
+  return `${' '.repeat(left)}${shown}${' '.repeat(free - left)}`
+}
+
 function chunk<T>(items: readonly T[], size: number): T[][] {
   const rows: T[][] = []
   for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size))
@@ -742,48 +749,55 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     ]
   }
 
-  const typeButton = (n: AgentTreeNode, running: boolean) =>
-    actions ? (
-      <Box key={`type-row:${n.id}`} width={AGENT_WIDTH - 2} flexDirection="row" justifyContent="center">
-        <Button key={`select:${n.id}`} plain label={clip(`${s.selected === n.id ? '▸ ' : ''}${typeLabel(n.type)}`, AGENT_WIDTH - 2)} onPress={() => actions.select(n.id)} />
-      </Box>
-    ) : (
-      <Text bold size={SIZE.title} color={running ? palette.agent : undefined} wrap="truncate-end">
-        {typeLabel(n.type)}
-      </Text>
-    )
+  const boxLines = (lines: readonly RenderChildren[]) => lines.flatMap((line, i) => (i ? ['\n', line] : [line]))
 
   const agentBox = (g: AgentTreeGroup, marginLeft: number) => {
     if (g.kind === 'workflow') {
       const wfTarget = `${WORKFLOW_PREFIX}${g.runId}`
       const wfClash = s.agents.some(n => n.workflowRunId === g.runId && clashShown(s, n.id))
       const color = s.selected === wfTarget ? palette.main : g.running > 0 ? palette.agent : g.failed > 0 ? palette.failed : palette.dim
+      const wfInner = AGENT_WIDTH - 2
+      const wfLabel = clip(`${s.selected === wfTarget ? '▸ ' : ''}Workflow · ${g.size}${wfClash ? ' ⚠' : ''}`, wfInner)
+      const wfLine = (key: string, text: string, tint?: string) => (
+        <Text key={key} size={SIZE.detail} color={tint}>
+          {centered(text, wfInner)}
+        </Text>
+      )
+      const wfRows = (title: RenderChildren) => [
+        title,
+        wfLine('wf-running', `${spin} ${w.running(g.running)}`, palette.agent),
+        wfLine('wf-done', `${glyphs.marks.done} ${g.done} ${w.done}`, palette.done),
+        wfLine('wf-failed', `${glyphs.marks.failed} ${g.failed} ${w.status.failed}`, g.failed ? palette.failed : palette.dim),
+        wfLine('wf-last', g.lastDescription || ' '),
+        wfLine('wf-stopped', g.stopped ? `${glyphs.marks.stopped} ${g.stopped} ${w.status.stopped}` : ' ', palette.dim),
+        <Text key="wf-bar">
+          {' '}
+          {barLine(bar(g), color, g.running > 0 && look.animate)}
+        </Text>,
+      ]
       return (
         <Box key={`wf:${g.runId}`} width={AGENT_WIDTH} marginLeft={marginLeft} {...frameProps(color)} flexDirection="column" alignItems="center">
           {actions ? (
-            <Button
-              key={`select:${wfTarget}`}
-              plain
-              label={clip(`${s.selected === wfTarget ? '▸ ' : ''}Workflow · ${g.size}${wfClash ? ' ⚠' : ''}`, AGENT_WIDTH - 2)}
-              onPress={() => actions.select(wfTarget)}
-            />
+            <Button key={`select:${wfTarget}`} plain label={wfLabel} onPress={() => actions.select(wfTarget)}>
+              {boxLines(
+                wfRows(
+                  <Text key="wf-title" bold size={SIZE.title} color={g.running > 0 ? palette.agent : undefined}>
+                    {centered(wfLabel, wfInner)}
+                  </Text>,
+                ),
+              )}
+            </Button>
           ) : (
-            <Text bold size={SIZE.title} color={g.running > 0 ? palette.agent : undefined} wrap="truncate-end">
-              {`Workflow · ${g.size}`}
+            <Text>
+              {boxLines(
+                wfRows(
+                  <Text key="wf-title" bold size={SIZE.title} color={g.running > 0 ? palette.agent : undefined}>
+                    {centered(`Workflow · ${g.size}`, wfInner)}
+                  </Text>,
+                ),
+              )}
             </Text>
           )}
-          <Text size={SIZE.detail} color={palette.agent} wrap="truncate-end">
-            {`${spin} ${w.running(g.running)}`}
-          </Text>
-          <Text size={SIZE.detail} color={palette.done} wrap="truncate-end">{`${glyphs.marks.done} ${g.done} ${w.done}`}</Text>
-          <Text size={SIZE.detail} color={g.failed ? palette.failed : palette.dim} wrap="truncate-end">
-            {`${glyphs.marks.failed} ${g.failed} ${w.status.failed}`}
-          </Text>
-          <Text size={SIZE.detail} wrap="truncate-end">{g.lastDescription || ' '}</Text>
-          <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
-            {g.stopped ? `${glyphs.marks.stopped} ${g.stopped} ${w.status.stopped}` : ' '}
-          </Text>
-          {barLine(bar(g), color, g.running > 0 && look.animate)}
           {frameParts(`wf:${g.runId}`, AGENT_WIDTH, color)}
         </Box>
       )
@@ -814,29 +828,46 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           ? statusWithMark(`${glyphs.marks.done} ${w.status.done}`, mark, ` · ${fmtShortDuration(n.endedAt - n.startedAt)}`, inner)
           : statusWithMark(`${statusMark(glyphs, n.status)} ${w.status[n.status]}`, mark, '', inner)
     const edge = s.selected === n.id ? palette.main : running ? palette.agent : n.status === 'failed' ? palette.failed : palette.dim
+    const typeText = clip(`${actions && s.selected === n.id ? '▸ ' : ''}${typeLabel(n.type)}`, inner)
+    const effortText =
+      running && n.effort !== undefined && choices.efforts?.[n.id] && choices.efforts[n.id] !== n.effort
+        ? `${n.effort} → ${choices.efforts[n.id]}`
+        : nested
+          ? `↳ ${w.under} ${nested}`
+          : effortLine(n.effort, glyphs)
+    const rows = boxLines([
+      <Text key="box-type" bold size={SIZE.title} color={running ? palette.agent : undefined}>
+        {centered(typeText, inner)}
+      </Text>,
+      <Text key="box-model" color={running ? undefined : palette.dim}>
+        {centered(modelText(n, inner), inner)}
+      </Text>,
+      <Text key="box-effort" size={SIZE.detail} color={palette.dim}>
+        {centered(effortText, inner)}
+      </Text>,
+      <Text key="box-task" size={SIZE.detail} color={running ? undefined : palette.dim}>
+        {centered(n.description || ' ', inner)}
+      </Text>,
+      <Text key="box-activity" size={SIZE.detail} color={palette.dim}>
+        {centered(activityText(n.lastTool, lang) ?? `${w.tools}: ${n.toolCount}`, inner)}
+      </Text>,
+      <Text key="box-status" size={SIZE.detail} color={levelColor(palette, filledShare, statusColor(palette, n.status))}>
+        {centered(statusLine, inner)}
+      </Text>,
+      <Text key="box-bar">
+        {' '}
+        {barLine(bar(g), statusColor(palette, n.status), running && look.animate)}
+      </Text>,
+    ])
     return (
       <Box key={`ag:${n.id}`} width={AGENT_WIDTH} marginLeft={marginLeft} {...frameProps(edge)} flexDirection="column" alignItems="center">
-        {typeButton(n, running)}
-        <Text color={running ? undefined : palette.dim} wrap="truncate-end">
-          {clip(modelText(n, AGENT_WIDTH - 2), AGENT_WIDTH - 2)}
-        </Text>
-        <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
-          {running && n.effort !== undefined && choices.efforts?.[n.id] && choices.efforts[n.id] !== n.effort
-            ? `${n.effort} → ${choices.efforts[n.id]}`
-            : nested
-              ? `↳ ${w.under} ${nested}`
-              : effortLine(n.effort, glyphs)}
-        </Text>
-        <Text size={SIZE.detail} color={running ? undefined : palette.dim} wrap="truncate-end">
-          {n.description || ' '}
-        </Text>
-        <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
-          {activityText(n.lastTool, lang) ?? `${w.tools}: ${n.toolCount}`}
-        </Text>
-        <Text size={SIZE.detail} color={levelColor(palette, filledShare, statusColor(palette, n.status))} wrap="truncate-end">
-          {statusLine}
-        </Text>
-        {barLine(bar(g), statusColor(palette, n.status), running && look.animate)}
+        {actions ? (
+          <Button key={`select:${n.id}`} plain label={typeText} onPress={() => actions.select(n.id)}>
+            {rows}
+          </Button>
+        ) : (
+          <Text>{rows}</Text>
+        )}
         {frameParts(`ag:${n.id}`, AGENT_WIDTH, edge)}
       </Box>
     )

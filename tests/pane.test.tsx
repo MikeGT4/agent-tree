@@ -599,7 +599,7 @@ describe('Agent Tree', () => {
     await $.agent.spawn({ prompt: 'C.', description: 'Neu', subagentType: 'Plan' } as never)
     const ui = await $.ui.mount(pane(90))
     expect(await screen(ui)).toMatch(/aus früheren Runden: 2 Agenten/)
-    expect(await screen(ui)).toMatch(/"Neu"/)
+    expect(await screen(ui)).toMatch(/" *Neu *"/)
     expect(await screen(ui)).not.toMatch(/"Alt eins"/)
     await ui.unmount()
   })
@@ -613,7 +613,7 @@ describe('Agent Tree', () => {
     await $.turn.start({ text: 'Zweite Runde', turnId: 't2' })
     await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
     const ui = await $.ui.mount(pane(90))
-    expect(await screen(ui)).toMatch(/"Hintergrund"/)
+    expect(await screen(ui)).toMatch(/" *Hintergrund *"/)
     expect(await screen(ui)).toMatch(/1 Antwort/)
     expect(await screen(ui)).not.toMatch(/aus früheren Runden/)
     await ui.unmount()
@@ -1199,7 +1199,7 @@ describe('Agent Tree', () => {
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount({ ...pane(90), surface: 'desktop' })
     expect((await ui.find({ type: 'Text', text: /^AGENT TREE/ }))?.props.size).toBe('heading')
-    expect((await ui.find({ type: 'Text', text: /^Code lesen$/ }))?.props.size).toBe('footnote')
+    expect((await ui.find({ type: 'Text', text: /^ *Code lesen *$/ }))?.props.size).toBe('footnote')
     expect((await ui.find({ type: 'Text', text: /^Sitzungsprotokoll$/ }))?.props.size).toBe('caption')
     await ui.unmount()
     const terminal = await $.ui.mount(pane(90))
@@ -3339,6 +3339,19 @@ describe('Tab Verlauf', () => {
     await ui.unmount()
   })
 
+  test('ein Filter ohne Treffer behauptet nicht, es sei nichts geschehen', de, async ($, on) => {
+    engine(on)
+    await agents($, 2)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.press({ key: 'logfilter:advisor' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toMatch(/0 Einträge/)
+    expect(text).not.toMatch(/noch nichts geschehen/)
+    await ui.unmount()
+  })
+
   test('ohne Einträge steht dort, dass noch nichts geschehen ist', de, async ($, on) => {
     engine(on)
     await startSession($)
@@ -3394,7 +3407,50 @@ describe('Tab Dateien', () => {
   })
 })
 
+describe('Der ganze Kasten ist die Klickfläche', () => {
+  test('die Klickfläche eines Kastens umfasst alle seine Zeilen', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    const button = JSON.stringify(await ui.find({ key: 'select:sub-1' }))
+    for (const word of ['Explore', 'Haiku', 'Code lesen', 'liest auth.ts', 'läuft']) expect(button).toContain(word)
+    await ui.unmount()
+  })
+
+  test('jeder Kasten bleibt ein einziger Knopf', de, async ($, on) => {
+    engine(on)
+    await twoAgents($)
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    expect(text.split('"key":"select:sub-1"').length - 1).toBe(1)
+    expect(text.split('"type":"Button"').length - 1).toBe((await ui.findAll({ type: 'Button' })).length)
+    const buttons = (await ui.findAll({ type: 'Button' })).map(b => String(b.props.key ?? b.key ?? ''))
+    expect(buttons.filter(key => key.includes('sub-1'))).toEqual(['select:sub-1'])
+    await ui.unmount()
+  })
+
+  test('ein Druck auf die Klickfläche wählt den Agenten', de, async ($, on) => {
+    engine(on)
+    await twoAgents($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'select:sub-2' })
+    await ui.redraw()
+    expect(String((await ui.find({ key: 'select:sub-2' }))?.props.label ?? '')).toMatch(/^▸ /)
+    await ui.unmount()
+  })
+})
+
 describe('Tab Verbrauch', () => {
+  test('in der Tabelle steht die Aufgabe vor dem Agententyp, damit sie in schmalen Leisten lesbar bleibt', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(69))
+    await ui.press({ key: 'tab:usage' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('Code lesen · Explore')
+    await ui.unmount()
+  })
+
   test('zeigt die Limits, den Kontext der Hauptsitzung und je Agent Modell, Kontext und Werkzeuge', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
@@ -3547,6 +3603,124 @@ describe('Tab Berichte', () => {
     await ui.press({ key: 'tab:reports' })
     await ui.redraw()
     expect(await screen(ui)).toMatch(/noch keine Unteragenten/)
+    await ui.unmount()
+  })
+
+  test('die Reiterchen zeigen, welcher Agent fertig ist und welcher läuft', de, async ($, on) => {
+    engine(on)
+    history(on)
+    await twoAgents($)
+    await $.turn.complete({ answer: 'Fertig 1', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:reports' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain(' ● Agent A ')
+    expect(text).toContain(' ◐ Agent B ')
+    expect(text).not.toContain('● general-purpose')
+    await ui.unmount()
+  })
+
+  test('endet ein anderer Agent, bleibt der gezeigte Bericht im Volltext stehen', de, async ($, on) => {
+    engine(on)
+    history(on)
+    await twoAgents($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:reports' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('Ein langer Absatz. (sub-2)')
+    await $.turn.complete({ answer: 'Fertig 1', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('Ein langer Absatz. (sub-2)')
+    expect(text).not.toMatch(/lädt/)
+    await ui.unmount()
+  })
+
+  test('startet ein neuer Agent, bleibt der gezeigte Bericht im Volltext stehen', de, async ($, on) => {
+    engine(on)
+    history(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:reports' })
+    await ui.redraw()
+    await $.agent.spawn({ prompt: 'B', description: 'Agent B', subagentType: 'general-purpose' } as never)
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('Ein langer Absatz. (sub-1)')
+    expect(text).not.toMatch(/lädt/)
+    await ui.unmount()
+  })
+
+  test('wird der gezeigte Agent entfernt, lädt der Tab den Bericht des nächsten', { options: { language: 'de', intro: false, maxAgents: 5 } }, async ($, on) => {
+    engine(on)
+    history(on)
+    await startSession($)
+    await $.turn.start({ text: 'Bau das', turnId: 't1' })
+    await step($)
+    for (const name of ['A', 'B', 'C', 'D', 'E']) await $.agent.spawn({ prompt: name, description: `Agent ${name}`, subagentType: 'general-purpose' } as never)
+    await $.turn.complete({ answer: 'A fertig', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:reports' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('Ein langer Absatz. (sub-1)')
+    await $.agent.spawn({ prompt: 'F', description: 'Agent F', subagentType: 'general-purpose' } as never)
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).not.toContain('(sub-1)')
+    expect(text).toContain('Ein langer Absatz. (sub-6)')
+    expect(text).not.toMatch(/lädt/)
+    await ui.unmount()
+  })
+
+  test('antwortet eine ältere Anfrage zuletzt, bleibt die neuere Antwort stehen', de, async ($, on) => {
+    engine(on)
+    let release: () => void = () => undefined
+    const hold = new Promise<void>(resolve => {
+      release = resolve
+    })
+    let calls = 0
+    on('session.messages', async () => {
+      calls += 1
+      const mine = calls
+      if (mine === 1) await hold
+      return { value: [{ role: 'user', text: 'Auftrag', toolUses: [] }, { role: 'assistant', text: mine === 1 ? 'ALTER Zwischenstand' : 'NEUE Endantwort', toolUses: [] }] } as never
+    })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:reports' })
+    for (let i = 0; i < 40; i++) await Promise.resolve()
+    await $.turn.complete({ answer: 'Endantwort', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('NEUE Endantwort')
+    release()
+    for (let i = 0; i < 40; i++) await Promise.resolve()
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('NEUE Endantwort')
+    expect(text).not.toContain('ALTER Zwischenstand')
+    await ui.unmount()
+  })
+
+  test('nach einer abgelehnten Übergabe zählt der neuere Text', de, async ($, on) => {
+    engine(on)
+    on('session.messages', () =>
+      ({
+        value: [
+          { role: 'user', text: 'Auftrag', toolUses: [] },
+          { role: 'assistant', text: 'Ich bin fertig.', toolUses: [{ tool_use_id: 'u1', tool: 'SubagentHandback', input: { message: 'ENTWURF: fertig' } }] },
+          { role: 'user', text: '', toolUses: [] },
+          { role: 'assistant', text: 'NEUER TEXT nach der Korrektur', toolUses: [{ tool_use_id: 'u2', tool: 'Read', input: { file_path: '/x' } }] },
+        ],
+      }) as never,
+    )
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:reports' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('NEUER TEXT nach der Korrektur')
+    expect(text).not.toContain('ENTWURF')
     await ui.unmount()
   })
 })

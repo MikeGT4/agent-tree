@@ -156,10 +156,10 @@ describe('Datenmodell', () => {
     ])
   })
 
-  test('das Protokoll hält die neuesten 200 Einträge', () => {
+  test('das Protokoll hält die neuesten 150 Einträge', () => {
     let s = createTree(0)
     for (let i = 0; i < 250; i++) s = spawned(s, spawn(`p${i}`), i)
-    expect(s.log.length).toBe(200)
+    expect(s.log.length).toBe(150)
     expect(line(s.log.at(-1))).toContain('Auftrag p249')
   })
 

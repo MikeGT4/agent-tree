@@ -137,6 +137,7 @@ export type AgentTreeState = {
   startedAt: number
   tab?: AgentTreeTab
   reportsSeen?: number
+  reportOf?: string
   logFilter?: AgentTreeLogSource
   choices?: AgentTreeChoices
   detail?: AgentTreeDetail

@@ -4,7 +4,7 @@ import type { Elements } from 'claude-code'
 import type { AgentTreeLogSource, AgentTreeNode, AgentTreeReport, AgentTreeState, AgentTreeTab } from '../types'
 import { frameEdges, restyleLine } from './looks.ts'
 import type { Glyphs, Palette } from './looks.ts'
-import { LOG_SOURCES, MAIN, TABS, clashShown, clockTime, contextLevel, contextPercent, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
+import { LOG_SOURCES, MAIN, TABS, clashShown, clockTime, contextLevel, contextPercent, cut, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
 import { logLine } from './words.ts'
 import type { Lang, Words } from './words.ts'
 
@@ -131,6 +131,17 @@ export type ViewInput = {
   lang: Lang
 }
 
+export const TAB_AGENTS = 40
+export const FILES_BUDGET = 16000
+export const FILE_NAME_LIMIT = 48
+export const CLASHES_SHOWN = 10
+
+function moreLine(ui: Ui, o: ViewInput, hidden: readonly AgentTreeNode[]) {
+  const { Text } = ui
+  if (hidden.length === 0) return null
+  return <Text color={o.palette.dim}>{o.w.more(hidden.length, hidden.filter(n => n.status === 'running').length)}</Text>
+}
+
 export function drawLog(ui: Ui, o: ViewInput & { filter?: (source: string) => void }) {
   const { Box, Text, Button } = ui
   const filter = o.filter
@@ -161,26 +172,26 @@ export function drawLog(ui: Ui, o: ViewInput & { filter?: (source: string) => vo
         {LOG_SOURCES.map(source => chip(source, o.w.source[source], active === source))}
       </Box>
       {rows.length === 0 ? (
-        <Text color={o.palette.dim}>{o.w.logEmpty}</Text>
+        active ? null : (
+          <Text color={o.palette.dim}>{o.w.logEmpty}</Text>
+        )
       ) : (
         rows.map((row, i) => (
-          <Box key={`log-row:${i}:${row.at}`} flexDirection="row">
-            <Box width={10} flexShrink={0}>
-              <Text color={o.palette.dim}>{clockTime(row.at)}</Text>
-            </Box>
-            <Box width={9} flexShrink={0}>
-              <Text bold color={sourceColor(row.source)}>
-                {o.w.source[row.source]}
-              </Text>
-            </Box>
-            <Box flexGrow={1} flexShrink={1}>
-              <Text wrap="wrap">{logLine(row, o.lang)}</Text>
-            </Box>
-          </Box>
+          <Text key={`log-row:${i}`} wrap="wrap">
+            <Text color={o.palette.dim}>{`${clockTime(row.at)}  `}</Text>
+            <Text bold color={sourceColor(row.source)}>
+              {o.w.source[row.source].padEnd(9)}
+            </Text>
+            {logLine(row, o.lang)}
+          </Text>
         ))
       )}
     </Box>
   )
+}
+
+function shortName(name: string): string {
+  return [...name].length > FILE_NAME_LIMIT ? `${cut(name, FILE_NAME_LIMIT - 1)}…` : name
 }
 
 export function drawFiles(ui: Ui, o: ViewInput) {
@@ -196,20 +207,41 @@ export function drawFiles(ui: Ui, o: ViewInput) {
     if (seen.has(key)) continue
     seen.add(key)
     const [first = n.id, second = clash.with] = pair.split('|')
-    clashes.push(`${clash.file} · ${nameOf(first)} + ${nameOf(second)}`)
+    clashes.push(`${shortName(clash.file)} · ${nameOf(first)} + ${nameOf(second)}`)
   }
-  const list = (label: string, names: readonly string[] | undefined) => `${label} (${names?.length ?? 0})${names?.length ? `: ${[...names].reverse().join(' · ')}` : ''}`
-  const withFiles = o.s.agents.filter(n => n.changed?.length || n.read?.length)
+  const everyone = o.s.agents.filter(n => n.changed?.length || n.read?.length)
+  const withFiles = everyone.slice(-TAB_AGENTS)
+  let budget = FILES_BUDGET
+  const fitted = (names: readonly string[] | undefined): string[] => {
+    const kept: string[] = []
+    for (const name of [...(names ?? [])].reverse()) {
+      const text = shortName(name)
+      if (budget < text.length + 3) break
+      budget -= text.length + 3
+      kept.push(text)
+    }
+    return kept
+  }
+  const newestFirst = [...withFiles].reverse()
+  const changedOf = new Map(newestFirst.map(n => [n.id, fitted(n.changed)]))
+  const readOf = new Map(newestFirst.map(n => [n.id, fitted(n.read)]))
+  const list = (label: string, names: readonly string[] | undefined, kept: readonly string[]) => {
+    const total = names?.length ?? 0
+    const rest = total - kept.length
+    const shown = [...kept, ...(rest > 0 ? [`+${rest}`] : [])]
+    return `${label} (${total})${shown.length ? `: ${shown.join(' · ')}` : ''}`
+  }
   return (
     <Box key="files-view" flexDirection="column" width={o.width} marginTop={1}>
       {clashes.length ? (
         <Box key="files-clash" flexDirection="column" width={o.width}>
           <Text bold color={o.palette.warn}>{`⚠ ${o.w.filesClash}`}</Text>
-          {clashes.map(line => (
-            <Text key={`clash:${line}`} color={o.palette.warn} wrap="wrap">
+          {clashes.slice(0, CLASHES_SHOWN).map((line, i) => (
+            <Text key={`clash:${i}`} color={o.palette.warn} wrap="wrap">
               {line}
             </Text>
           ))}
+          {clashes.length > CLASHES_SHOWN ? <Text color={o.palette.warn}>{`+${clashes.length - CLASHES_SHOWN}`}</Text> : null}
         </Box>
       ) : null}
       {withFiles.length === 0 ? (
@@ -220,13 +252,14 @@ export function drawFiles(ui: Ui, o: ViewInput) {
             <Text bold color={o.palette.agent} wrap="truncate-end">
               {`${typeLabel(n.type)} · ${n.description}`}
             </Text>
-            <Text wrap="wrap">{list(o.w.changedFiles, n.changed)}</Text>
+            <Text wrap="wrap">{list(o.w.changedFiles, n.changed, changedOf.get(n.id) ?? [])}</Text>
             <Text color={o.palette.dim} wrap="wrap">
-              {list(o.w.readFiles, n.read)}
+              {list(o.w.readFiles, n.read, readOf.get(n.id) ?? [])}
             </Text>
           </Box>
         ))
       )}
+      {moreLine(ui, o, everyone.slice(0, everyone.length - withFiles.length))}
     </Box>
   )
 }
@@ -245,7 +278,8 @@ export type UsageInput = ViewInput & {
 
 export function drawUsage(ui: Ui, o: UsageInput) {
   const { Box, Text } = ui
-  const rows = usageRows(o.s)
+  const sorted = usageRows(o.s)
+  const rows = sorted.slice(0, TAB_AGENTS)
   const levelColor = (percent: number | undefined) => {
     const level = percent === undefined ? 'ok' : contextLevel(percent)
     return level === 'alert' ? o.palette.failed : level === 'warn' ? o.palette.warn : o.palette.agent
@@ -302,7 +336,7 @@ export function drawUsage(ui: Ui, o: UsageInput) {
             return (
               <Box key={`usage:${n.id}`} flexDirection="row" columnGap={1}>
                 <Box key={`usage-name:${n.id}`} flexGrow={1} flexShrink={1}>
-                  <Text wrap="truncate-end">{`${typeLabel(n.type)} · ${n.description}`}</Text>
+                  <Text wrap="truncate-end">{`${n.description} · ${typeLabel(n.type)}`}</Text>
                 </Box>
                 {cell(`usage-model:${n.id}`, 12, modelLabel(n.model) || '·')}
                 {cell(`usage-context:${n.id}`, 14, context, levelColor(percent))}
@@ -311,6 +345,7 @@ export function drawUsage(ui: Ui, o: UsageInput) {
               </Box>
             )
           })}
+          {moreLine(ui, o, sorted.slice(TAB_AGENTS))}
         </Box>
       )}
     </Box>
@@ -366,11 +401,14 @@ export function drawReports(ui: Ui, o: ReportsInput) {
       </Box>
     )
   }
+  const mark = (n: AgentTreeNode) => (n.status === 'running' ? (o.glyphs.spinner[0] ?? '') : o.glyphs.marks[n.status])
+  const recent = o.s.agents.slice(-TAB_AGENTS)
+  const chips = recent.some(n => n.id === node.id) ? recent : [node, ...recent.slice(1)]
   const chip = (n: AgentTreeNode) => {
     const chosen = n.id === node.id
     const shown = (
       <Text bold={chosen} inverse={chosen} color={chosen ? o.palette.main : o.palette.dim}>
-        {` ${typeLabel(n.type)} · ${[...n.description].slice(0, 24).join('')} `}
+        {` ${mark(n)} ${[...n.description].slice(0, 24).join('')} `}
       </Text>
     )
     return pick ? (
@@ -388,8 +426,9 @@ export function drawReports(ui: Ui, o: ReportsInput) {
   return (
     <Box key="reports-view" flexDirection="column" width={o.width} marginTop={1}>
       <Box key="report-agents" flexDirection="row" flexWrap="wrap" columnGap={1} width={o.width}>
-        {o.s.agents.map(chip)}
+        {chips.map(chip)}
       </Box>
+      {moreLine(ui, o, o.s.agents.filter(n => !chips.includes(n)))}
       <Box key="report-body" flexDirection="column" width={o.width} marginTop={1}>
         <Text bold color={o.palette.agent} wrap="truncate-end">
           {`${typeLabel(node.type)} · ${node.description} · ${modelLabel(node.model) || o.w.model} · ${o.w.status[node.status]} · ${fmtShortDuration((node.endedAt ?? o.now) - node.startedAt)}`}
