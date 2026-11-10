@@ -6,9 +6,9 @@ Seitenleiste für Claude Code, die die Agenten einer Sitzung als lebenden Baum z
 
 Laufende Unteragenten stoppen und korrigieren, ihr Modell und ihre Denkstufe wechseln, die Denkstufe der Hauptsitzung einstellen, den Berater umschalten, das Aussehen ändern, die Limits sehen.
 
-<img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.5.4/readme-agent-tree-4.gif" width="560" alt="Demo der Funktionen oben">
-
 Tabs: ganzer Bericht jedes Agenten, Dateien, Verlauf, Verbrauch.
+
+<img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.7.1/readme-agent-tree-5.gif" width="560" alt="Demo der Funktionen oben">
 
 ## Installation
 
