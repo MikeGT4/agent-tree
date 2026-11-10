@@ -198,6 +198,14 @@ async function screen(ui: { drawn: () => Promise<unknown> }): Promise<string> {
   return JSON.stringify(await ui.drawn())
 }
 
+function outsideMark(text: string): string {
+  const start = text.indexOf('{"type":"Box","props":{"key":"mark"')
+  if (start < 0) return text
+  let end = start
+  for (let i = 0; i < 6; i++) end = text.indexOf(']}', end) + 2
+  return text.slice(0, start) + text.slice(end)
+}
+
 type Pressable = { press: (target: { key: string }) => Promise<unknown>; drawn: () => Promise<unknown> }
 
 async function steer(ui: Pressable, key: string) {
@@ -567,7 +575,7 @@ describe('Agent Tree', () => {
     for (let i = 1; i <= 3; i++) {
       await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: `sub-${i}`, reason: 'answer' })
     }
-    const ui = await $.ui.mount(pane(90, 41))
+    const ui = await $.ui.mount(pane(90, 42))
     expect(await screen(ui)).toMatch(/Prüfung 6/)
     expect(await screen(ui)).not.toMatch(/Prüfung 1/)
     expect(await screen(ui)).toMatch(/\+3 weitere beendet/)
@@ -945,7 +953,7 @@ describe('Agent Tree', () => {
     await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(39))
-    expect(await screen(ui)).not.toMatch(plantDots)
+    expect(outsideMark(await screen(ui))).not.toMatch(plantDots)
     await ui.unmount()
   })
 
@@ -1087,7 +1095,7 @@ describe('Agent Tree', () => {
     await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(90, 13))
-    expect(brailleCount(await screen(ui))).toBe(0)
+    expect(brailleCount(outsideMark(await screen(ui)))).toBe(0)
     await ui.unmount()
   })
 
@@ -1174,7 +1182,7 @@ describe('Agent Tree', () => {
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))
     const text = await screen(ui)
-    for (const word of [/Main session/, /Sub-agents/, /Session log/, /Calls 1/, /Sub-agent model: Default ▾/, /to sub-agents/]) expect(text).toMatch(word)
+    for (const word of [/Main session/, /Reports/, /Session log/, /Calls 1/, /Sub-agent model: Default ▾/, /to sub-agents/]) expect(text).toMatch(word)
     expect(text).not.toMatch(/Hauptsitzung|Unteragenten|Sitzungsprotokoll|Aufrufe/)
     expect(seen.status.at(-1)).toBe('Sub-agents [1/1] · advisor [1×]')
     await ui.unmount()
@@ -1851,7 +1859,7 @@ describe('Aussehen in der Leiste', () => {
     await ui.press({ key: 'look:colors:light' })
     await ui.redraw()
     expect(await screen(ui)).toContain(PALETTES.light.agent)
-    expect(await screen(ui)).not.toContain(PALETTES.original.agent)
+    expect(outsideMark(await screen(ui))).not.toContain(PALETTES.original.agent)
     await ui.unmount()
   })
 
@@ -2360,7 +2368,7 @@ describe('Zweites /clear, Intro, Aussehen und Eingaben', () => {
     const first = await $.ui.mount(pane(90))
     await clock.advance(2500)
     await first.redraw()
-    expect(blocks(await screen(first))).toBe(0)
+    expect(blocks(outsideMark(await screen(first)))).toBe(0)
     await first.unmount()
     await clearSession($, seen)
     await $.turn.start({ text: 'Weiter', turnId: 't2' })
@@ -2368,7 +2376,7 @@ describe('Zweites /clear, Intro, Aussehen und Eingaben', () => {
     const ui = await $.ui.mount(pane(90))
     await clock.advance(300)
     await ui.redraw()
-    expect(blocks(await screen(ui))).toBe(0)
+    expect(blocks(outsideMark(await screen(ui)))).toBe(0)
     await ui.unmount()
   })
 
@@ -3208,5 +3216,101 @@ describe('Platz und Hebel in der Leiste', () => {
     await agents($, 1)
     await $.tool.call({ tool: 'Edit', file_path: '/p/neu/api.ts', agentId: 'sub-1' } as never)
     expect(clashOf(tree(), 'sub-1')).toBeUndefined()
+  })
+})
+
+describe('Tabs', () => {
+  const TAB_KEYS = ['tab:tree', 'tab:reports', 'tab:files', 'tab:log', 'tab:usage', 'tab:help']
+
+  test('die Leiste zeigt sechs Tabs als Reiter, der Baum ist gewählt', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    for (const key of TAB_KEYS) expect(await ui.find({ key })).toBeDefined()
+    const text = await screen(ui)
+    for (const word of ['Baum', 'Berichte', 'Dateien', 'Verlauf', 'Verbrauch', 'Hilfe']) expect(text).toContain(word)
+    expect(text).toContain('"key":"tab-tops"')
+    expect(text).toContain('"key":"main"')
+    await ui.unmount()
+  })
+
+  test('ein anderer Tab nimmt den Baum weg, der Tab Baum holt ihn zurück', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:help' })
+    await ui.redraw()
+    expect(await screen(ui)).not.toContain('"key":"main"')
+    await ui.press({ key: 'tab:tree' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('"key":"main"')
+    await ui.unmount()
+  })
+
+  test('bei schmaler Leiste wird aus den Reitern ein Streifen', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(46))
+    for (const key of TAB_KEYS) expect(await ui.find({ key })).toBeDefined()
+    expect(await screen(ui)).not.toContain('"key":"tab-tops"')
+    await ui.unmount()
+  })
+
+  test('bei niedriger Leiste wird aus den Reitern ein Streifen', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90, 30))
+    for (const key of TAB_KEYS) expect(await ui.find({ key })).toBeDefined()
+    expect(await screen(ui)).not.toContain('"key":"tab-tops"')
+    await ui.unmount()
+  })
+
+  test('vor dem Titel steht das kleine Logo', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    expect(text).toContain('"key":"mark"')
+    expect(text.indexOf('"key":"mark"')).toBeLessThan(text.indexOf('AGENT TREE'))
+    await ui.unmount()
+  })
+
+  test('die Farblegende steht im Tab Hilfe und nicht mehr im Kopf', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).not.toContain('"key":"legend"')
+    await ui.press({ key: 'tab:help' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('"key":"legend"')
+    await ui.unmount()
+  })
+
+  test('am Tab Dateien steht ein Warnzeichen, solange zwei Agenten dieselbe Datei ändern', de, async ($, on) => {
+    engine(on)
+    await twoAgents($)
+    const ui = await $.ui.mount(pane(90))
+    expect(JSON.stringify(await ui.find({ key: 'tab:files' }))).not.toContain('⚠')
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/index.ts', agentId: 'sub-1' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/index.ts', agentId: 'sub-2' } as never)
+    await ui.redraw()
+    expect(JSON.stringify(await ui.find({ key: 'tab:files' }))).toContain('⚠')
+    await ui.unmount()
+  })
+
+  test('am Tab Berichte steht ein Punkt, bis die neue Antwort gesehen ist', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect(JSON.stringify(await ui.find({ key: 'tab:reports' }))).not.toContain('●')
+    await $.turn.complete({ answer: 'Fertig.', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    await ui.redraw()
+    expect(JSON.stringify(await ui.find({ key: 'tab:reports' }))).toContain('●')
+    await ui.press({ key: 'tab:reports' })
+    await ui.redraw()
+    await ui.press({ key: 'tab:tree' })
+    await ui.redraw()
+    expect(JSON.stringify(await ui.find({ key: 'tab:reports' }))).not.toContain('●')
+    await ui.unmount()
   })
 })

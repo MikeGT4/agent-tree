@@ -62,6 +62,7 @@ import {
   stopRequested,
   stopSent,
   synced,
+  tabChosen,
   toolKind,
   toolLabel,
   toolRan,
@@ -540,6 +541,11 @@ function actionsFor($: EngineInterface): TreeActions {
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
     restyle: (row, id) => void restyle($, row, id).catch(ignore),
     restyleDefault: () => void resetLook($).catch(ignore),
+    tab: id => {
+      void clock($)
+        .then(now => change($, t => tabChosen(t, id, now)))
+        .catch(ignore)
+    },
   }
 }
 

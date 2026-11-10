@@ -20,6 +20,16 @@ export const LOGO_COLORS: Readonly<Record<string, string>> = { O: '#E6845D', G: 
 export const LOGO_EMPTY = '#252532'
 export const LOGO_FLASH = '#F4F4FC'
 export const LOGO_TITLE = LOGO_COLORS.O ?? '#E6845D'
+
+export type LogoMarkCell = { top?: string; bottom?: string }
+
+export function logoMark(): LogoMarkCell[] {
+  return [2, 4, 6, 8, 10].map(column => {
+    const top = LOGO_COLORS[LOGO_MAP[2][column] ?? '']
+    const bottom = LOGO_COLORS[LOGO_MAP[6][column] ?? '']
+    return { ...(top ? { top } : {}), ...(bottom ? { bottom } : {}) }
+  })
+}
 const FLASH_MS = 80
 const GREEN_FROM = 760
 

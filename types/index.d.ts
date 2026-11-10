@@ -124,8 +124,12 @@ export type AgentTreeDetail = {
   state: 'loading' | 'ready' | 'denied'
 }
 
+export type AgentTreeTab = 'tree' | 'reports' | 'files' | 'log' | 'usage' | 'help'
+
 export type AgentTreeState = {
   startedAt: number
+  tab?: AgentTreeTab
+  reportsSeen?: number
   choices?: AgentTreeChoices
   detail?: AgentTreeDetail
   stopping?: string[]

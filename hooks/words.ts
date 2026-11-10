@@ -1,5 +1,5 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
-import type { AgentTreeCorrectionState, AgentTreeLogEntry, AgentTreeLogSource, AgentTreePhase, AgentTreeStatus } from '../types'
+import type { AgentTreeCorrectionState, AgentTreeLogEntry, AgentTreeLogSource, AgentTreePhase, AgentTreeStatus, AgentTreeTab } from '../types'
 import type { LookRow } from './looks.ts'
 import { DEFAULT_LOOK, LOOK_OPTIONS } from './looks.ts'
 import { effortLabel, familyLabel, fmtDuration, fmtTokens, toolKind } from './model.ts'
@@ -56,6 +56,7 @@ export type Words = {
   effortNextMessage: string
   newAgents: string
   help: readonly string[]
+  tabs: Record<AgentTreeTab, string>
   task: string
   reply: string
   loading: string
@@ -221,6 +222,7 @@ export const WORDS: Record<Lang, Words> = {
     effortNextMessage: 'gilt, sobald es eine neue Nachricht bekommt (nur Modelle mit Denkstufe)',
     newAgents: 'neue Unteragenten',
     help: ['ctrl+x tab: Leiste', 'Kasten: wählen', 's: stoppen', 'e: Denkstufe', 'm: Modell', 'a: Aussehen', 'Tab: wandern'],
+    tabs: { tree: 'Baum', reports: 'Berichte', files: 'Dateien', log: 'Verlauf', usage: 'Verbrauch', help: 'Hilfe' },
     task: 'Auftrag',
     reply: 'Antwort',
     loading: 'lädt …',
@@ -393,6 +395,7 @@ export const WORDS: Record<Lang, Words> = {
     effortNextMessage: 'applies once it gets a new message (models with effort only)',
     newAgents: 'new sub-agents',
     help: ['ctrl+x tab: pane', 'box: select', 's: stop', 'e: effort', 'm: model', 'a: look', 'Tab: move'],
+    tabs: { tree: 'Tree', reports: 'Reports', files: 'Files', log: 'Log', usage: 'Usage', help: 'Help' },
     task: 'Task',
     reply: 'Answer',
     loading: 'loading …',

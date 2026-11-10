@@ -11,6 +11,7 @@ import type {
   AgentTreeNode,
   AgentTreeState,
   AgentTreeStatus,
+  AgentTreeTab,
 } from '../types'
 import {
   EFFORT_LEVELS,
@@ -40,12 +41,17 @@ import {
   phaseOf,
   resetTime,
   typeLabel,
+  hasClash,
+  hasNewReport,
+  tabOf,
+  TABS,
 } from './model.ts'
 import type { Feedback } from './model.ts'
 import { LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, lightColor, lookFrom, restyleLine } from './looks.ts'
 import type { Glyphs, LookRow, Palette } from './looks.ts'
 import { WORDS, activityText, familyOr, logLine, lookOptionLabel, toolText, wordsFor } from './words.ts'
 import type { Lang, Words } from './words.ts'
+import { drawMark, drawTabBar, tabNames, tabRows } from './tabs.tsx'
 
 export { WORDS, logLine, wordsFor }
 export type { Lang }
@@ -120,6 +126,7 @@ export type TreeActions = {
   restyle: (row: LookRow, id: string) => void
   restyleDefault: () => void
   deselect: () => void
+  tab: (id: AgentTreeTab) => void
 }
 
 export type TreeLook = {
@@ -140,6 +147,7 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   if (key === 'picker:close' || key === 'detail:close' || key === 'look:close') actions.close()
   else if (key === 'advisor:toggle') actions.advisor()
   else if (key === 'actions:close') actions.deselect()
+  else if (kind === 'tab' && TABS.some(t => t === rest)) actions.tab(rest as AgentTreeTab)
   else if (kind === 'look') return lookKey(actions, rest)
   else if (kind === 'select') actions.select(rest)
   else if (kind === 'pick' || kind === 'level') actions.pick(rest)
@@ -221,6 +229,7 @@ export type RowPlanInput = {
   limitRows?: number
   actionRows?: number
   hintRows?: number
+  tabRows?: number
 }
 
 export type RowPlan = { shown: number; logRows: number; advisor?: false }
@@ -269,7 +278,7 @@ function treeRows(o: RowPlanInput, shown: number): number {
 const LOG_FRAME_ROWS = 4
 
 function usedRows(o: RowPlanInput, shown: number, logRows: number | undefined): number {
-  const header = (o.tight ? 1 : 3) + (o.pickerRows ?? 0)
+  const header = 1 + (o.tabRows ?? (o.tight ? 1 : 3)) + (o.pickerRows ?? 0)
   const tree = treeRows(o, shown)
   const body = o.wide ? Math.max(o.advisorRows, tree) : o.advisorRows + tree
   const log = logRows === undefined ? 0 : LOG_FRAME_ROWS + logRows
@@ -532,6 +541,8 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const detail = s.detail
   const tight = height !== undefined && height < TIGHT_BELOW
   const wide = width >= WIDE_FROM && !tight
+  const tab = tabOf(s)
+  const names = tabNames(w.tabs, { ...(hasClash(s) ? { files: '⚠' } : {}), ...(hasNewReport(s) ? { reports: glyphs.marks.done } : {}) })
   const treeWidth = Math.max(1, oddFloor(wide ? width - ADVISOR_WIDTH - 2 : width))
   const perRow = Math.max(1, Math.floor((treeWidth + AGENT_GAP) / (AGENT_WIDTH + AGENT_GAP)))
   const asRows = tight || perRow < 2
@@ -635,6 +646,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     limitRows: s.main.limits?.length ? 1 : 0,
     actionRows,
     hintRows,
+    tabRows: tabRows(names, width, tight),
     labelRows: actions
       ? wrappedLines(
           [
@@ -881,20 +893,26 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   }
 
   const verb = phase === 'idle' ? w.idle : w.working
-  const header = tight ? (
-    <Box key="head" flexDirection="column" alignItems="center" width={width}>
-      <Text bold size={SIZE.title} wrap="truncate-end">
-        {`AGENT TREE${mainModel ? ` · ${mainModel.toUpperCase()}` : ''} · ${verb}`}
-      </Text>
+  const header = (
+    <Box key="head" flexDirection="row" justifyContent="center" columnGap={1} width={width}>
+      {drawMark(ui)}
+      <Box key="title" flexShrink={1}>
+        {tight ? (
+          <Text bold size={SIZE.title} wrap="truncate-end">
+            {`AGENT TREE${mainModel ? ` · ${mainModel.toUpperCase()}` : ''} · ${verb}`}
+          </Text>
+        ) : (
+          <Text bold size={SIZE.title} wrap="truncate-end">
+            {'AGENT TREE'}
+            {mainModel ? <Text color={palette.main}>{` · ${mainModel.toUpperCase()} ${verb}`}</Text> : null}
+            {advisorModel && wide ? <Text color={palette.advisor}>{` · ${w.advisorOnCall(advisorModel.toUpperCase())}`}</Text> : null}
+          </Text>
+        )}
+      </Box>
     </Box>
-  ) : (
-    <Box key="head" flexDirection="column" alignItems="center" width={width}>
-      <Text bold size={SIZE.title} wrap="truncate-end">
-        {'AGENT TREE'}
-        {mainModel ? <Text color={palette.main}>{` · ${mainModel.toUpperCase()} ${verb}`}</Text> : null}
-        {advisorModel && wide ? <Text color={palette.advisor}>{` · ${w.advisorOnCall(advisorModel.toUpperCase())}`}</Text> : null}
-      </Text>
-      <Text color={palette.dim}>{restyleLine('─', glyphs).repeat(Math.max(1, width - 2))}</Text>
+  )
+  const legend = (
+    <Box key="legend" justifyContent="center" width={width}>
       <Text size={SIZE.note} wrap="truncate-end">
         <Text color={palette.main}>{glyphs.marks.legend}</Text>
         {` ${w.main}${legendEffort && s.main.effort ? ` · ${s.main.effort}` : ''}   `}
@@ -905,6 +923,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       </Text>
     </Box>
   )
+  const tabBar = drawTabBar(ui, { names, tab, width, tight, palette, glyphs, ...(actions ? { press: (id: AgentTreeTab) => actions.tab(id) } : {}) })
 
   const mainSent = s.main.effortless ? undefined : s.main.effort
   const mainChosen = choices.mainEffort
@@ -1362,9 +1381,20 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       </Box>
     ) : null
 
+  if (tab !== 'tree') {
+    return (
+      <Box flexDirection="column" width={width}>
+        {header}
+        {tabBar}
+        {tab === 'help' ? legend : null}
+      </Box>
+    )
+  }
+
   return (
     <Box flexDirection="column" width={width}>
       {header}
+      {tabBar}
       {agentPicker ? null : pickerRow}
       {lookRow}
       {wide ? (

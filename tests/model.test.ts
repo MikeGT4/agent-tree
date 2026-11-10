@@ -365,6 +365,7 @@ describe('Datenmodell', () => {
       look: () => undefined,
       restyle: () => undefined,
       restyleDefault: () => undefined,
+      tab: () => undefined,
       deselect: () => void calls.push('deselect'),
       write: () => undefined,
     }
@@ -388,11 +389,11 @@ describe('Datenmodell', () => {
 
   test('Zeilenplan: Kästen, Zeilen und Protokoll teilen sich die Höhe', () => {
     const wide = { wide: true, tight: false, asRows: false, perRow: 3, advisorRows: 15, earlier: false }
-    expect(planRows({ ...wide, height: 40, total: 6 })).toEqual({ shown: 3, logRows: 3 })
+    expect(planRows({ ...wide, height: 41, total: 6 })).toEqual({ shown: 3, logRows: 3 })
     expect(planRows({ ...wide, height: 60, total: 6 })).toEqual({ shown: 6, logRows: 6 })
     expect(planRows({ ...wide, height: undefined, total: 12 })).toEqual({ shown: 9, logRows: 6 })
     const tight = { wide: false, tight: true, asRows: true, perRow: 3, advisorRows: 4, earlier: false }
-    expect(planRows({ ...tight, height: 30, total: 6 })).toEqual({ shown: 2, logRows: 2 })
+    expect(planRows({ ...tight, height: 31, total: 6 })).toEqual({ shown: 2, logRows: 2 })
     expect(planRows({ ...tight, height: 30, total: 0 })).toEqual({ shown: 0, logRows: 6 })
   })
 
@@ -717,7 +718,7 @@ describe('Korrekturen', () => {
 describe('Stopp am Kasten', () => {
   test('pressKey kennt halt', () => {
     const stopped: string[] = []
-    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, deselect: () => {}, write: () => {} }
+    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), advisor: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, deselect: () => {}, write: () => {}, tab: () => {} }
     expect(pressKey(actions, 'halt:sub-1')).toBe(true)
     expect(stopped).toEqual(['sub-1'])
   })
@@ -837,7 +838,7 @@ describe('Aussehen', () => {
     const ui = { Box: 'Box', Text: 'Text', Button: 'Button' } as never
     const s = detailOpened(spawned(createTree(0), spawn('sub-1'), 1), 'sub-1')
     const noop = () => {}
-    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, deselect: noop, write: noop }
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, deselect: noop, write: noop, tab: noop }
     const text = JSON.stringify(drawTree(ui, s, 90, 60, { frame: 0, animate: false, now: 5000, actions }))
     expect(text).not.toMatch(/say:sub-1/)
   })
@@ -1250,7 +1251,7 @@ describe('Zeilenplan bei wenig Höhe', () => {
   })
 
   test('mit offenen Details zählen Limits und Hilfezeile nicht', () => {
-    expect(planRows({ ...narrow, height: 48, detailRows: 7 })).toEqual({ shown: 3, logRows: 0 })
+    expect(planRows({ ...narrow, height: 49, detailRows: 7 })).toEqual({ shown: 3, logRows: 0 })
   })
 
   test('reicht es dann noch nicht, weicht der Beraterkasten', () => {
@@ -1269,7 +1270,7 @@ describe('Aktionszeile schließen', () => {
   test('pressKey kennt das Schließen der Aktionszeile', () => {
     const calls: string[] = []
     const noop = () => {}
-    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop, deselect: () => void calls.push('deselect') }
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop, tab: noop, deselect: () => void calls.push('deselect') }
     expect(pressKey(actions, 'actions:close')).toBe(true)
     expect(calls).toEqual(['deselect'])
   })

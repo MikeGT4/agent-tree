@@ -11,6 +11,7 @@ import type {
   AgentTreePhase,
   AgentTreeState,
   AgentTreeStatus,
+  AgentTreeTab,
 } from '../types'
 
 export const LOG_LIMIT = 40
@@ -115,6 +116,23 @@ export function lookOpened(s: AgentTreeState): AgentTreeState {
 
 export function closed(s: AgentTreeState): AgentTreeState {
   return { ...s, detail: undefined, lookOpen: undefined, choices: { ...choicesOf(s), picker: undefined } }
+}
+
+export const TABS: readonly AgentTreeTab[] = ['tree', 'reports', 'files', 'log', 'usage', 'help']
+
+export function tabOf(s: AgentTreeState): AgentTreeTab {
+  return s.tab ?? 'tree'
+}
+
+export function tabChosen(s: AgentTreeState, tab: string, now = 0): AgentTreeState {
+  const known = TABS.find(t => t === tab)
+  if (!known) return s
+  const seen = known === 'reports' || tabOf(s) === 'reports' ? { reportsSeen: now } : {}
+  return { ...closed(s), tab: known, ...seen }
+}
+
+export function hasNewReport(s: AgentTreeState): boolean {
+  return tabOf(s) !== 'reports' && s.agents.some(n => n.endedAt !== undefined && n.endedAt > (s.reportsSeen ?? 0))
 }
 
 export function correctionSent(
@@ -741,6 +759,10 @@ export function clashed(s: AgentTreeState, agentId: string, clash: { file: strin
     else delete next.clash
     return next
   })
+}
+
+export function hasClash(s: AgentTreeState): boolean {
+  return s.agents.some(n => clashShown(s, n.id) !== undefined)
 }
 
 export function clashShown(s: AgentTreeState, agentId: string): AgentTreeNode['clash'] {
