@@ -30,7 +30,7 @@ Berichte: Aufgabe und ganze Antwort jedes Agenten.
 
 ![Dateien](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-de-4.png)
 
-Dateien: geändert und gelesen je Agent, doppelt geänderte oben.
+Dateien: geändert und gelesen je Agent, doppelte oben.
 
 ![Verbrauch](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-de-5.png)
 
@@ -39,6 +39,8 @@ Verbrauch: Limits, Kontext, Werkzeugaufrufe, Laufzeit.
 ![Verlauf](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-de-6.png)
 
 Verlauf: jedes Ereignis, nach Quelle.
+
+![Hilfe](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/guide-de-7.png)
 
 Hilfe: Tasten, Zeichen, Befehle.
 

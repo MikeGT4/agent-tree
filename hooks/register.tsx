@@ -1025,6 +1025,7 @@ export const register: Register = (on, options) => {
       appearance: look,
       canAdvise: advisorCommand,
       reports,
+      docked: e.props.placement === 'dock',
     })
   })
 

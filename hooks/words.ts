@@ -59,6 +59,8 @@ export type Words = {
   tabs: Record<AgentTreeTab, string>
   fullReport: string
   helpKeys: string
+  helpSize: string
+  helpSizeLines: readonly string[]
   helpGlyphs: string
   helpCommands: string
   helpGuide: string
@@ -236,6 +238,8 @@ export const WORDS: Record<Lang, Words> = {
     tabs: { tree: 'Baum', reports: 'Berichte', files: 'Dateien', log: 'Verlauf', usage: 'Verbrauch', help: 'Hilfe' },
     fullReport: 'ganzer Bericht ›',
     helpKeys: 'Tasten',
+    helpSize: 'Größe',
+    helpSizeLines: ['Linke Kante der Leiste mit der Maus ziehen: breiter oder schmaler.', 'Die Breite bleibt für neue Sitzungen.'],
     helpGlyphs: 'Zeichen',
     helpCommands: 'Befehle',
     helpGuide: 'Anleitung',
@@ -420,6 +424,8 @@ export const WORDS: Record<Lang, Words> = {
     tabs: { tree: 'Tree', reports: 'Reports', files: 'Files', log: 'Log', usage: 'Usage', help: 'Help' },
     fullReport: 'full report ›',
     helpKeys: 'Keys',
+    helpSize: 'Size',
+    helpSizeLines: ['Drag the left edge of the pane with the mouse: wider or narrower.', 'The width is kept for new sessions.'],
     helpGlyphs: 'Glyphs',
     helpCommands: 'Commands',
     helpGuide: 'Guide',

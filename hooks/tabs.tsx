@@ -129,6 +129,7 @@ export type ViewInput = {
   glyphs: Glyphs
   w: Words
   lang: Lang
+  docked?: boolean
 }
 
 export const TAB_AGENTS = 40
@@ -376,6 +377,7 @@ export function drawHelp(ui: Ui, o: ViewInput) {
   return (
     <Box key="help-view" flexDirection="column" width={o.width}>
       {section('help-keys', o.w.helpKeys, o.w.help)}
+      {o.docked ? section('help-size', o.w.helpSize, o.w.helpSizeLines) : null}
       {section('help-glyphs', o.w.helpGlyphs, glyphLines)}
       {section('help-commands', o.w.helpCommands, [`/agent-tree ${o.w.commandHint}`])}
       {section('help-guide', o.w.helpGuide, [o.w.guideUrl])}

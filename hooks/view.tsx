@@ -141,6 +141,7 @@ export type TreeLook = {
   actions?: TreeActions
   appearance?: AgentTreeLook
   canAdvise?: boolean
+  docked?: boolean
   reports?: Record<string, AgentTreeReport>
 }
 
@@ -1425,7 +1426,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         {header}
         {tabBar}
         {tab === 'help' ? legend : null}
-        {tab === 'help' ? drawHelp(ui, { s, width, palette, glyphs, w, lang }) : null}
+        {tab === 'help' ? drawHelp(ui, { s, width, palette, glyphs, w, lang, docked: look.docked }) : null}
         {tab === 'reports'
           ? drawReports(ui, {
               s,

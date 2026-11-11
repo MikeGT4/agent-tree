@@ -34,11 +34,13 @@ Files: changed and read per agent, shared first.
 
 ![Usage](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-5.png)
 
-Usage: limits, context, tool calls, time.
+Usage: limits, context, tools, time.
 
 ![Log](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-6.png)
 
 Log: every event, by source.
+
+![Help](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/guide-7.png)
 
 Help: keys, signs, commands.
 

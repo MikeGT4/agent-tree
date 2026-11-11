@@ -30,6 +30,6 @@ Once a day, in interactive sessions, it runs Claude Code's `plugin list --json`,
 
 Its hooks act only after you act in the pane; typing only ends the start intro.
 
-[Guide](docs/GUIDE.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/agent-tree-guide.pdf)
+[Guide](docs/GUIDE.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/agent-tree-guide.pdf)
 
 MIT, © 2026 Mike Pollow, Digitalroots
