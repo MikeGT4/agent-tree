@@ -1887,11 +1887,14 @@ describe('Fast Mode per Knopf', () => {
     await ui.unmount()
   })
 
-  test('ein getipptes /fast kommt ohne neuen Zug in der Leiste an', de, async ($, on) => {
+  test('ein getipptes /fast lässt das Mod unberührt, der Knopf folgt mit dem nächsten Zug', de, async ($, on) => {
     engine(on, [], { fast: false })
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))
     await $.command.run({ command: 'fast', args: 'on', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect((await ui.find({ key: 'fast:toggle' }))?.props.label).toBe('↯ Fast Mode: aus')
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
     for (let i = 0; i < 3; i++) await ui.redraw()
     expect((await ui.find({ key: 'fast:toggle' }))?.props.label).toBe('↯ Fast Mode: an')
     await ui.unmount()

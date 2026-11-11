@@ -786,12 +786,6 @@ export const register: Register = (on, options) => {
     return { text: w.opened(s.agents.length) }
   }).catch(() => ({ text: wordsFor(lang).commandFailed }))
 
-  on('command.run', { command: 'fast' }, async ($, e, next) => {
-    const result = await next(e)
-    await readFast($).catch(() => undefined)
-    return result
-  }).catch(($, e, next) => next(e))
-
   on('turn.start', async ($, e, next) => {
     await takeOver($).catch(() => undefined)
     const result = await next(e)
