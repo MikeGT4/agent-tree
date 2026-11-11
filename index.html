@@ -1,0 +1,156 @@
+<!doctype html>
+<!-- © 2026 Mike Pollow, Digitalroots. Alle Rechte vorbehalten. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Tree: side pane for Claude Code sub-agents</title>
+<meta name="description" content="Agent Tree is a free side pane for Claude Code. It shows a session's agents as a live tree, warns when two agents change one file and lets you stop, correct or re-model each one.">
+<meta name="theme-color" content="#000000">
+<link rel="canonical" href="https://mikegt4.github.io/agent-tree/">
+<link rel="alternate" hreflang="en" href="https://mikegt4.github.io/agent-tree/">
+<link rel="alternate" hreflang="de" href="https://mikegt4.github.io/agent-tree/de/">
+<link rel="alternate" hreflang="x-default" href="https://mikegt4.github.io/agent-tree/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Agent Tree: see every sub-agent, live, next to your chat">
+<meta property="og:description" content="A free side pane for Claude Code that shows a session's agents as a live tree.">
+<meta property="og:url" content="https://mikegt4.github.io/agent-tree/">
+<meta property="og:image" content="https://mikegt4.github.io/agent-tree/assets/media/vorschau.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="assets/media/favicon.png">
+<link rel="preload" href="assets/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<a class="sprung" href="#inhalt">Skip to content</a>
+<header class="kopf">
+  <a class="marke" href="./">
+    <img src="assets/media/logo.png" width="39" height="39" alt="">
+    <span class="marke-name">Agent Tree</span>
+    <span class="marke-fuer">for Claude Code</span>
+  </a>
+  <nav class="wege" aria-label="Main">
+    <a href="https://github.com/MikeGT4/agent-tree/blob/main/docs/GUIDE.md">Guide</a>
+    <a href="https://github.com/MikeGT4/agent-tree">GitHub</a>
+    <a href="de/" lang="de" hreflang="de">Deutsch</a>
+  </nav>
+</header>
+<main id="inhalt" data-pause="Pause recording" data-weiter="Play recording">
+  <section class="auftakt">
+    <div class="auftakt-text">
+      <h1><span>See every sub-agent</span> <span class="akzent">live, next to your chat!</span></h1>
+      <p class="einstieg">A side pane for Claude Code that shows a session's agents as a live tree.</p>
+      <div class="befehl">
+        <code id="befehl-oben">claude plugin install agent-tree <span class="zusammen">--marketplace MikeGT4/agent-tree</span></code>
+        <button type="button" class="knopf" data-kopie="befehl-oben" data-fertig="Copied">Copy install command</button>
+        <p class="rand">Free, MIT. Needs Claude Code 2.1.292+.</p>
+      </div>
+    </div>
+    <div class="buehne buehne-auftakt">
+      <div class="buehne-innen">
+      <div class="schilder" aria-hidden="true">
+        <div class="schild-feld"><span class="schild">Your chat</span></div>
+        <div class="schild-feld schild-feld-leiste"><span class="schild schild-orange">Agent Tree</span></div>
+      </div>
+      <figure class="fenster fenster-terminal">
+        <div class="fensterleiste" aria-hidden="true"><i></i><i></i><i></i></div>
+        <video class="film" muted loop playsinline preload="none" width="2448" height="1464" poster="assets/media/terminal-poster.webp" aria-label="Recording of a terminal: Claude Code on the left, Agent Tree on the right showing three running sub-agents">
+          <source src="assets/media/terminal.mp4" type="video/mp4">
+        </video>
+      </figure>
+      <figure class="fenster fenster-leiste">
+        <div class="fensterleiste" aria-hidden="true"><i></i><i></i><i></i></div>
+        <video class="film" muted loop playsinline preload="none" width="768" height="1152" poster="assets/media/leiste-poster.webp" aria-label="Recording of the Agent Tree pane with three running sub-agents">
+          <source src="assets/media/leiste.mp4" type="video/mp4">
+        </video>
+      </figure>
+      </div>
+    </div>
+  </section>
+
+  <div class="szenen">
+    <section class="szene">
+      <div class="titel">
+        <h2><span>Two agents, one file?</span> <span class="akzent">Agent Tree warns you!</span></h2>
+        <p>One box per sub-agent. It shows task, current step and context.</p>
+      </div>
+      <figure class="fenster">
+        <div class="fensterleiste" aria-hidden="true"><i></i><i></i><i></i></div>
+        <video class="film film-breit" muted loop playsinline preload="none" width="2448" height="1464" poster="assets/media/warnung-breit-poster.webp" data-ruhebild="assets/media/warnung-breit-nah.webp" aria-label="Recording: the whole terminal, then a zoom into Agent Tree. Two of the three agent boxes get a warning sign, and the Files tab lists the file both agents change">
+          <source src="assets/media/warnung-breit.mp4" type="video/mp4">
+        </video>
+        <video class="film film-hoch" muted loop playsinline preload="none" width="1188" height="1440" poster="assets/media/warnung-hoch-poster.webp" aria-label="Recording: the whole terminal, then Agent Tree alone. Two of the three agent boxes get a warning sign, and the Files tab lists the file both agents change">
+          <source src="assets/media/warnung-hoch.mp4" type="video/mp4">
+        </video>
+      </figure>
+    </section>
+    <section class="szene">
+      <div class="titel">
+        <h2><span>Click a box,</span> <span class="akzent">switch its model!</span></h2>
+        <p>Stop one agent, not the whole session.</p>
+      </div>
+      <figure class="fenster">
+        <div class="fensterleiste" aria-hidden="true"><i></i><i></i><i></i></div>
+        <video class="film film-breit" muted loop playsinline preload="none" width="2448" height="1464" poster="assets/media/hebel-breit-poster.webp" data-ruhebild="assets/media/hebel-breit-nah.webp" aria-label="Recording: the whole terminal, then a zoom into Agent Tree. A click selects an agent box, its model is switched, then another agent is stopped">
+          <source src="assets/media/hebel-breit.mp4" type="video/mp4">
+        </video>
+        <video class="film film-hoch" muted loop playsinline preload="none" width="1188" height="1098" poster="assets/media/hebel-hoch-poster.webp" aria-label="Recording: the whole terminal, then Agent Tree alone. A click selects an agent box, its model is switched, then another agent is stopped">
+          <source src="assets/media/hebel-hoch.mp4" type="video/mp4">
+        </video>
+      </figure>
+    </section>
+    <section class="szene">
+      <div class="titel">
+        <h2><span>Read every answer</span> <span class="akzent">in full!</span></h2>
+        <p>Tabs: each agent's full report, files, log, usage.</p>
+      </div>
+      <figure class="fenster">
+        <div class="fensterleiste" aria-hidden="true"><i></i><i></i><i></i></div>
+        <video class="film film-breit" muted loop playsinline preload="none" width="2448" height="1464" poster="assets/media/berichte-breit-poster.webp" data-ruhebild="assets/media/berichte-breit-nah.webp" aria-label="Recording: the whole terminal, then a zoom into Agent Tree. The Reports tab opens and shows an agent's task and its complete answer">
+          <source src="assets/media/berichte-breit.mp4" type="video/mp4">
+        </video>
+        <video class="film film-hoch" muted loop playsinline preload="none" width="1188" height="1440" poster="assets/media/berichte-hoch-poster.webp" aria-label="Recording: the whole terminal, then Agent Tree alone. The Reports tab opens and shows an agent's task and its complete answer">
+          <source src="assets/media/berichte-hoch.mp4" type="video/mp4">
+        </video>
+      </figure>
+    </section>
+    <section class="szene">
+      <div class="titel titel-allein">
+        <h2><span>Five styles, four color schemes,</span> <span class="akzent">pick your look!</span></h2>
+      </div>
+      <figure class="fenster">
+        <div class="fensterleiste" aria-hidden="true"><i></i><i></i><i></i></div>
+        <video class="film film-breit" muted loop playsinline preload="none" width="2448" height="1464" poster="assets/media/aussehen-breit-poster.webp" data-ruhebild="assets/media/aussehen-breit-nah.webp" aria-label="Recording: the whole terminal, then a zoom into Agent Tree. The Look menu redraws the tree in three styles and two color schemes">
+          <source src="assets/media/aussehen-breit.mp4" type="video/mp4">
+        </video>
+        <video class="film film-hoch" muted loop playsinline preload="none" width="1188" height="1440" poster="assets/media/aussehen-hoch-poster.webp" aria-label="Recording: the whole terminal, then Agent Tree alone. The Look menu redraws the tree in three styles and two color schemes">
+          <source src="assets/media/aussehen-hoch.mp4" type="video/mp4">
+        </video>
+      </figure>
+    </section>
+  </div>
+
+  <section class="einbau">
+    <div class="einbau-text">
+      <h2><span>Get it now!</span> <span class="akzent">It takes one line!</span></h2>
+      <div class="befehl">
+        <code id="befehl-unten">claude plugin install agent-tree <span class="zusammen">--marketplace MikeGT4/agent-tree</span></code>
+        <button type="button" class="knopf" data-kopie="befehl-unten" data-fertig="Copied">Copy install command</button>
+      </div>
+      <p>Then start Claude Code; the pane opens.</p>
+      <p>Checks for updates daily, sends nothing else. <a href="privacy.html">Privacy</a></p>
+    </div>
+    <img class="siegel" src="assets/media/logo.png" width="104" height="104" alt="" loading="lazy">
+  </section>
+</main>
+<footer class="fuss">
+  <p>MIT, © 2026 Mike Pollow, Digitalroots</p>
+  <nav class="wege" aria-label="More">
+    <a href="legal.html">Legal notice</a>
+    <a href="privacy.html">Privacy</a>
+  </nav>
+</footer>
+<p class="meldung" role="status" aria-live="polite"></p>
+<script src="assets/site.js" defer></script>
+</body>
+</html>

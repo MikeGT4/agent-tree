@@ -1,0 +1,659 @@
+/* © 2026 Mike Pollow, Digitalroots. Alle Rechte vorbehalten. */
+@font-face {
+  font-family: "Schibsted Grotesk";
+  src: url("fonts/schibsted-grotesk.woff2") format("woff2");
+  font-weight: 400 900;
+  font-display: swap;
+}
+
+:root {
+  --schwarz: #000;
+  --buehne: #707688;
+  --fenster: #14141b;
+  --leiste: #1c1c26;
+  --rahmen: #34343f;
+  --weiss: #f0f0f6;
+  --lesetext: #c9cad4;
+  --ruhig: #a9aab6;
+  --orange: #e6845d;
+  --tinte: #14141b;
+  --breite: 1240px;
+  --rand: clamp(20px, 4vw, 56px);
+  --aus: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--schwarz);
+  color: var(--weiss);
+  color-scheme: dark;
+  scrollbar-color: #50536a var(--schwarz);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 1.55;
+  letter-spacing: -0.011em;
+}
+
+::selection {
+  background: var(--orange);
+  color: var(--tinte);
+}
+
+a {
+  color: var(--weiss);
+  text-underline-offset: 3px;
+}
+
+a:focus-visible,
+.knopf:focus-visible {
+  outline: 2px solid var(--weiss);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.sprung {
+  position: absolute;
+  left: -999px;
+  top: 12px;
+  background: var(--weiss);
+  color: var(--tinte);
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.sprung:focus {
+  left: 12px;
+}
+
+.meldung {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 32px;
+  flex-wrap: wrap;
+  max-width: var(--breite);
+  margin: 0 auto;
+  padding: 22px var(--rand);
+}
+
+.marke {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-decoration: none;
+}
+
+.marke-name {
+  font-size: 1.3rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.marke-fuer {
+  color: var(--ruhig);
+  font-size: 1rem;
+}
+
+.wege {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  font-size: 1rem;
+}
+
+.wege a {
+  text-decoration: none;
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-weight: 650;
+  text-wrap: balance;
+}
+
+h1 span,
+h2 span {
+  display: block;
+}
+
+.akzent {
+  color: var(--orange);
+}
+
+h1 {
+  font-size: clamp(2.5rem, 5.1vw, 4.4rem);
+  line-height: 1.04;
+  letter-spacing: -0.024em;
+}
+
+h2 {
+  font-size: clamp(1.75rem, 2.7vw, 2.4rem);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+
+p {
+  margin: 0;
+  color: var(--lesetext);
+}
+
+.rand {
+  color: var(--ruhig);
+  font-size: 1rem;
+}
+
+.auftakt-text {
+  max-width: var(--breite);
+  margin: 0 auto;
+  padding: clamp(20px, 2.4vw, 32px) var(--rand) clamp(32px, 3vw, 40px);
+}
+
+.einstieg {
+  max-width: 40em;
+  margin-top: 16px;
+  font-size: clamp(1.15rem, 1.55vw, 1.4rem);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.befehl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-top: 24px;
+}
+
+.befehl code {
+  display: block;
+  max-width: 100%;
+  padding: 12px 16px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: nowrap;
+  background: #101016;
+  border: 1px solid var(--rahmen);
+  border-radius: 8px;
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.92rem;
+  letter-spacing: 0;
+}
+
+.zusammen {
+  white-space: nowrap;
+}
+
+.knopf {
+  min-height: 48px;
+  min-width: 13.2em;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--orange);
+  color: var(--tinte);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform 120ms var(--aus), background-color 120ms ease;
+}
+
+.knopf:active {
+  transform: translateY(1px) scale(0.985);
+  transition-duration: 90ms;
+}
+
+.befehl + p {
+  margin-top: 16px;
+}
+
+.buehne,
+.szenen {
+  background: var(--buehne);
+}
+
+.buehne-auftakt {
+  padding: clamp(24px, 2.6vw, 36px) 0 0;
+}
+
+.buehne-innen {
+  max-width: var(--breite);
+  margin: 0 auto;
+  padding: 0 var(--rand);
+}
+
+.schilder {
+  display: grid;
+  grid-template-columns: 67.6fr 32.4fr;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.schild-feld {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--weiss);
+}
+
+.schild-feld::after {
+  content: "";
+  width: 100%;
+  height: 9px;
+  border: 4px solid currentColor;
+  border-bottom: 0;
+}
+
+.schild-feld-leiste {
+  color: var(--orange);
+}
+
+.schild {
+  padding: 6px 16px;
+  border-radius: 10px;
+  background: var(--weiss);
+  color: var(--tinte);
+  font-size: clamp(0.82rem, 1.5vw, 1.35rem);
+  font-weight: 680;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.schild-orange {
+  background: var(--orange);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .schild,
+  .schild-feld::after {
+    animation: auftritt 520ms var(--aus) 240ms backwards;
+  }
+
+  .schild-feld-leiste .schild,
+  .schild-feld-leiste::after {
+    animation-delay: 330ms;
+  }
+
+  .schild-feld::after {
+    transform-origin: center;
+    animation-name: klammer;
+  }
+}
+
+@keyframes auftritt {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes klammer {
+  from {
+    opacity: 0;
+    transform: scaleX(0.86);
+  }
+}
+
+.fenster {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--fenster);
+  box-shadow: 0 22px 44px -14px rgb(18 20 28 / 0.6);
+}
+
+.fensterleiste {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 12px;
+  background: var(--leiste);
+}
+
+.fensterleiste::after {
+  content: "acme-shop";
+  position: absolute;
+  left: 50%;
+  color: #8d8e9b;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 30px;
+  letter-spacing: 0;
+  transform: translateX(-50%);
+}
+
+.fensterleiste i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #ff5f57;
+}
+
+.fensterleiste i:nth-child(2) {
+  background: #febc2e;
+}
+
+.fensterleiste i:nth-child(3) {
+  background: #28c840;
+}
+
+.film {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.fenster-leiste,
+.film-hoch {
+  display: none;
+}
+
+.halt {
+  position: absolute;
+  top: 1px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ruhig);
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.halt::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+
+.halt svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+.halt:focus-visible {
+  outline: 2px solid var(--weiss);
+  outline-offset: 1px;
+}
+
+.szenen {
+  padding-bottom: clamp(88px, 9.5vw, 144px);
+}
+
+.szene {
+  max-width: var(--breite);
+  margin: 0 auto;
+  padding: clamp(88px, 9.5vw, 144px) var(--rand) 0;
+}
+
+.titel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: end;
+  gap: 14px 56px;
+  padding: 30px 38px 32px;
+  border-radius: 12px;
+  background: var(--schwarz);
+}
+
+.titel-allein {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.titel h2 {
+  font-size: clamp(1.75rem, 3.05vw, 2.75rem);
+  line-height: 1.06;
+}
+
+.titel p {
+  max-width: 24em;
+  padding-bottom: 0.16em;
+  font-size: clamp(1.06rem, 1.5vw, 1.28rem);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.szene .fenster {
+  margin-top: 16px;
+}
+
+.einbau {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 32px;
+  max-width: var(--breite);
+  margin: 0 auto;
+  padding: clamp(64px, 8vw, 120px) var(--rand) clamp(40px, 5vw, 72px);
+}
+
+.siegel {
+  width: clamp(150px, 12.5vw, 180px);
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.einbau h2 {
+  font-size: clamp(1.9rem, 3.6vw, 3.25rem);
+  line-height: 1.05;
+}
+
+.einbau .befehl {
+  margin-top: 28px;
+}
+
+.einbau p {
+  max-width: 36em;
+}
+
+.einbau p + p {
+  margin-top: 10px;
+}
+
+.recht {
+  max-width: var(--breite);
+  margin: 0 auto;
+  padding: clamp(28px, 4vw, 56px) var(--rand) clamp(56px, 7vw, 96px);
+}
+
+.recht h1 {
+  font-size: clamp(2rem, 3.6vw, 3.25rem);
+  line-height: 1.05;
+  letter-spacing: -0.024em;
+}
+
+.recht h2 {
+  margin-top: 2.2em;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.55;
+  letter-spacing: -0.011em;
+}
+
+.recht p {
+  max-width: 34em;
+  margin-top: 0.5em;
+}
+
+.recht a {
+  color: inherit;
+  text-decoration-thickness: 1px;
+}
+
+.firmenschild {
+  display: inline-block;
+  padding: 10px 14px 9px 8px;
+  border-radius: 10px;
+  background: var(--weiss);
+  line-height: 0;
+}
+
+.firmenschild img {
+  width: 148px;
+  height: auto;
+}
+
+.tarn {
+  display: none;
+}
+
+.fuss {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px 32px;
+  max-width: var(--breite);
+  margin: 0 auto;
+  padding: 28px var(--rand) 44px;
+  font-size: 1rem;
+}
+
+.fuss p {
+  color: var(--ruhig);
+}
+
+.wege a,
+.einbau a {
+  padding-bottom: 3px;
+  background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
+  text-decoration: none;
+  transition: background-size 150ms var(--aus);
+}
+
+.einbau a {
+  background-size: 100% 1px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .knopf:hover {
+    background: #f09a76;
+    transform: translateY(-1px);
+  }
+
+  .knopf:hover:active {
+    transform: translateY(1px) scale(0.985);
+  }
+
+  .wege a:hover {
+    background-size: 100% 1px;
+  }
+
+  .einbau a:hover,
+  .recht a:hover {
+    color: var(--orange);
+  }
+
+  .halt:hover {
+    background: rgb(255 255 255 / 0.1);
+    color: var(--weiss);
+  }
+}
+
+@media (max-width: 899px) {
+  .titel {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 26px 28px 28px;
+  }
+
+  .einbau {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .siegel {
+    display: none;
+  }
+}
+
+@media (max-width: 759px) {
+  body {
+    font-size: 17px;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  .schild {
+    padding: 4px 8px;
+    border-radius: 8px;
+  }
+
+  .schild-feld {
+    gap: 7px;
+  }
+
+  .schild-feld::after {
+    height: 7px;
+    border-width: 3px;
+  }
+
+  .fenster-leiste {
+    display: block;
+    width: min(100%, 420px);
+    margin: 28px auto 0;
+  }
+
+  .fenster-terminal .halt,
+  .film-breit {
+    display: none;
+  }
+
+  .film-hoch {
+    display: block;
+  }
+
+  .szene .fenster {
+    width: min(100%, 460px);
+    margin-inline: auto;
+  }
+
+  .titel {
+    padding: 22px 20px 24px;
+    border-radius: 10px;
+  }
+
+  .befehl code {
+    padding: 10px 14px;
+    white-space: normal;
+  }
+
+  .befehl .knopf {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .knopf,
+  .halt,
+  .wege a,
+  .einbau a {
+    transition: none;
+  }
+}
