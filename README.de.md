@@ -8,7 +8,7 @@ Laufende Unteragenten stoppen und korrigieren, ihr Modell und ihre Denkstufe wec
 
 Tabs: ganzer Bericht jedes Agenten, Dateien, Verlauf, Verbrauch.
 
-<img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.7.1/readme-agent-tree-5.gif" width="560" alt="Demo der Funktionen oben">
+<img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.7.1/readme-agent-tree-6.gif" width="560" alt="Demo der Funktionen oben">
 
 ## Installation
 

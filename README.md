@@ -8,7 +8,7 @@ Stop and correct running sub-agents, switch their model and effort, set the main
 
 Tabs: each agent's full report, files, log, usage.
 
-<img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.7.1/readme-agent-tree-5.gif" width="560" alt="Demo of the functions above">
+<img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.7.1/readme-agent-tree-6.gif" width="560" alt="Demo of the functions above">
 
 ## Install
 
