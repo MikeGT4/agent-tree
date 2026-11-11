@@ -92,6 +92,7 @@ export type AgentTreeMain = {
   returnedTokens: number
   costUsd?: number
   limits?: AgentTreeLimit[]
+  fast?: boolean
 }
 
 export type AgentTreeLimit = {

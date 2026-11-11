@@ -77,6 +77,7 @@ import {
   typeLabel,
   wasStopSent,
   withAdvisorModel,
+  withFast,
   withLimits,
 } from './model.ts'
 import { drawTree, pressKey, statusText } from './view.tsx'
@@ -550,6 +551,40 @@ async function toggleAdvisor($: EngineInterface): Promise<void> {
   await readAdvisor($)
 }
 
+async function fastHeld($: EngineInterface): Promise<boolean | undefined> {
+  const rows = await $.config.list()
+  const value = rows.find(row => row.key === 'fast')?.value
+  return typeof value === 'boolean' ? value : undefined
+}
+
+async function readFast($: EngineInterface): Promise<void> {
+  const held = await fastHeld($)
+  await change($, s => withFast(s, held))
+}
+
+async function fastSettled($: EngineInterface, wanted: boolean): Promise<boolean> {
+  for (let i = 0; i < 8; i++) {
+    const held = await fastHeld($).catch(() => undefined)
+    if (held === wanted) return true
+    await $.clock.sleep(250).catch(() => undefined)
+  }
+  return false
+}
+
+async function toggleFast($: EngineInterface): Promise<void> {
+  const wanted = (await latest($)).main.fast !== true
+  const ran = await $.command.run({ command: 'fast', args: wanted ? 'on' : 'off' }).then(
+    () => true,
+    () => false,
+  )
+  if (!ran) {
+    $.ui.toast(wordsFor(lang).fastUnavailable)
+    return
+  }
+  if (!(await fastSettled($, wanted))) $.ui.toast(wordsFor(lang).fastUnchanged)
+  await readFast($)
+}
+
 async function settleUnread($: EngineInterface, s: AgentTreeState, agentId: string, now: number): Promise<void> {
   const texts = (await read($, unreadTexts))[agentId] ?? []
   await forget($, agentId)
@@ -584,6 +619,7 @@ function actionsFor($: EngineInterface): TreeActions {
     },
     write: agentId => void startWrite($, agentId).catch(ignore),
     advisor: () => void toggleAdvisor($).catch(ignore),
+    fast: () => void toggleFast($).catch(ignore),
     deselect: () => void change($, t => deselected(t)).catch(ignore),
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
     restyle: (row, id) => void restyle($, row, id).catch(ignore),
@@ -688,6 +724,7 @@ export const register: Register = (on, options) => {
     const listed = await $.command.list().catch(() => undefined)
     advisorCommand = !listed || listed.some(c => c.name === 'advisor')
     await readAdvisor($).catch(() => undefined)
+    await readFast($).catch(() => undefined)
     await catchUp($, await clock($), keep).catch(() => undefined)
     await maybeStartIntro($, e.isInteractive !== false).catch(() => undefined)
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
@@ -749,12 +786,19 @@ export const register: Register = (on, options) => {
     return { text: w.opened(s.agents.length) }
   }).catch(() => ({ text: wordsFor(lang).commandFailed }))
 
+  on('command.run', { command: 'fast' }, async ($, e, next) => {
+    const result = await next(e)
+    await readFast($).catch(() => undefined)
+    return result
+  }).catch(($, e, next) => next(e))
+
   on('turn.start', async ($, e, next) => {
     await takeOver($).catch(() => undefined)
     const result = await next(e)
     const now = await clock($)
     await change($, s => turnStarted(s, { text: e.text, agentId: e.agentId }, now)).catch(() => undefined)
     if (!e.agentId) await readAdvisor($).catch(() => undefined)
+    if (!e.agentId) await readFast($).catch(() => undefined)
     if (!e.agentId) await restoreLook($).catch(() => undefined)
     return result
   })

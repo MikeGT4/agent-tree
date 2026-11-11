@@ -552,6 +552,14 @@ export function withAdvisorModel(s: AgentTreeState, model: string | undefined): 
   return { ...s, advisor: { ...s.advisor, model } }
 }
 
+export function withFast(s: AgentTreeState, fast: boolean | undefined): AgentTreeState {
+  if (s.main.fast === fast) return s
+  const main = { ...s.main }
+  if (fast === undefined) delete main.fast
+  else main.fast = fast
+  return { ...s, main }
+}
+
 export function turnStarted(s: AgentTreeState, input: { text: string; agentId?: string }, now: number): AgentTreeState {
   if (input.agentId !== undefined) {
     const node = findAgent(s, input.agentId)
@@ -970,7 +978,7 @@ export function freshTree(from: AgentTreeState, now: number): AgentTreeState {
     ...(from.corrections ? { corrections: without(from.corrections, gone) } : {}),
     ...(from.selected === MAIN || from.selected === NEW_AGENTS || (from.selected !== undefined && alive.has(from.selected)) ? { selected: from.selected } : {}),
   }
-  return from.main.limits ? withLimits(fresh, from.main.limits) : fresh
+  return withFast(from.main.limits ? withLimits(fresh, from.main.limits) : fresh, from.main.fast)
 }
 
 export function resetTime(kind: string, iso: string | undefined, locale: string): string | undefined {

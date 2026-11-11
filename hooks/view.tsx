@@ -51,7 +51,7 @@ import {
 import type { Feedback } from './model.ts'
 import { LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, lightColor, lookFrom, restyleLine } from './looks.ts'
 import type { Glyphs, LookRow, Palette } from './looks.ts'
-import { WORDS, activityText, familyOr, logLine, lookOptionLabel, toolText, wordsFor } from './words.ts'
+import { WORDS, activityText, familyOr, helpItems, logLine, lookOptionLabel, toolText, wordsFor } from './words.ts'
 import type { Lang, Words } from './words.ts'
 import { drawFiles, drawHelp, drawLog, drawReports, drawTabBar, drawUsage, tabNames, tabRows } from './tabs.tsx'
 
@@ -124,6 +124,7 @@ export type TreeActions = {
   stop: (agentId: string) => void
   write: (agentId: string) => void
   advisor: () => void
+  fast: () => void
   look: () => void
   restyle: (row: LookRow, id: string) => void
   restyleDefault: () => void
@@ -152,6 +153,7 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   const rest = key.slice(colon + 1)
   if (key === 'picker:close' || key === 'detail:close' || key === 'look:close') actions.close()
   else if (key === 'advisor:toggle') actions.advisor()
+  else if (key === 'fast:toggle') actions.fast()
   else if (key === 'actions:close') actions.deselect()
   else if (kind === 'tab' && TABS.some(t => t === rest)) actions.tab(rest as AgentTreeTab)
   else if (kind === 'logfilter') actions.logFilter(rest)
@@ -598,6 +600,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     if (main) return t.mainEffortPending(level)
     return f.phase === 'done' ? t.effortDone(level) : t.effortPending(level)
   }
+  const fastLabel = s.main.fast === undefined ? undefined : s.main.fast ? w.fastOn : w.fastOff
   const chosenOne = actions ? selectionOf(s) : undefined
   const selection =
     chosenOne?.kind === 'agent' && !current.some(g => g.kind === 'agent' && g.node.id === chosenOne.node.id)
@@ -668,6 +671,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             current.length ? `${glyphs.node} ${w.toAgents}` : w.noAgents,
             ` · m: ${w.subModel}: ${familyOr(choices.newAgents, w.standard)}${choices.newEffort ? ` · ${effortLabel(choices.newEffort)}` : ''} ▾`,
             ` · a: ${w.look} ▾`,
+            ...(fastLabel ? [` · f: ${fastLabel}`] : []),
           ],
           treeWidth,
           0,
@@ -1049,6 +1053,13 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const lookButton = actions ? <Button key="look:open" plain hotkey="a" label={`${w.look} ▾`} onPress={() => actions.look()} /> : null
 
+  const fastButton =
+    actions && fastLabel ? (
+      <Button key="fast:toggle" plain hotkey="f" label={fastLabel} onPress={() => actions.fast()}>
+        <Text color={s.main.fast ? palette.main : undefined}>{fastLabel}</Text>
+      </Button>
+    ) : null
+
   const pickNew = actions ? (
     <Button key="pick:new" plain hotkey="m" label={`${w.subModel}: ${familyOr(choices.newAgents, w.standard)}${choices.newEffort ? ` · ${effortLabel(choices.newEffort)}` : ''} ▾`} onPress={() => actions.pick(NEW_AGENTS)} />
   ) : null
@@ -1068,6 +1079,12 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         <Box key="look-group" flexDirection="row">
           <Text color={palette.dim}>{' · '}</Text>
           {lookButton}
+        </Box>
+      ) : null}
+      {fastButton ? (
+        <Box key="fast-group" flexDirection="row">
+          <Text color={palette.dim}>{' · '}</Text>
+          {fastButton}
         </Box>
       ) : null}
     </Box>
@@ -1110,6 +1127,12 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             <Box key="look-group" flexDirection="row">
               <Text color={palette.dim}>{' · '}</Text>
               {lookButton}
+            </Box>
+          ) : null}
+          {fastButton ? (
+            <Box key="fast-group" flexDirection="row">
+              <Text color={palette.dim}>{' · '}</Text>
+              {fastButton}
             </Box>
           ) : null}
         </Box>
@@ -1483,7 +1506,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       {detailBox ? null : limitRow}
       {tight || detailBox ? null : (
         <Text key="help" size={SIZE.note} color={palette.dim} wrap="truncate-end">
-          {helpLine(w.help, width)}
+          {helpLine(helpItems(w, s.main.fast !== undefined), width)}
         </Text>
       )}
     </Box>

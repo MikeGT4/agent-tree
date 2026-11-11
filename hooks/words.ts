@@ -59,6 +59,7 @@ export type Words = {
   tabs: Record<AgentTreeTab, string>
   fullReport: string
   helpKeys: string
+  helpFast: string
   helpSize: string
   helpSizeLines: readonly string[]
   helpGlyphs: string
@@ -145,6 +146,10 @@ export type Words = {
   advisorOff: string
   advisorUnavailable: string
   advisorUnchanged: string
+  fastOn: string
+  fastOff: string
+  fastUnavailable: string
+  fastUnchanged: string
   starHint: string
   updateInstalled: (version: string) => string
   updateFailed: (version: string, command: string) => string
@@ -238,6 +243,7 @@ export const WORDS: Record<Lang, Words> = {
     tabs: { tree: 'Baum', reports: 'Berichte', files: 'Dateien', log: 'Verlauf', usage: 'Verbrauch', help: 'Hilfe' },
     fullReport: 'ganzer Bericht ›',
     helpKeys: 'Tasten',
+    helpFast: 'f: Fast Mode',
     helpSize: 'Größe',
     helpSizeLines: ['Linke Kante der Leiste mit der Maus ziehen: breiter oder schmaler.', 'Die Breite bleibt für neue Sitzungen.'],
     helpGlyphs: 'Zeichen',
@@ -327,6 +333,10 @@ export const WORDS: Record<Lang, Words> = {
     advisorOff: 'ausschalten',
     advisorUnavailable: 'Agent Tree: /advisor ist in dieser Sitzung nicht verfügbar',
     advisorUnchanged: 'Agent Tree: Claude Code hat den Berater nicht umgestellt, den Grund nennt der Verlauf',
+    fastOn: '↯ Fast Mode: an',
+    fastOff: '↯ Fast Mode: aus',
+    fastUnavailable: 'Agent Tree: /fast ist in dieser Sitzung nicht verfügbar',
+    fastUnchanged: 'Agent Tree: Claude Code hat den Fast Mode nicht umgestellt, der Grund steht im Verlauf',
     starHint: 'Gefällt dir Agent Tree? Ein Stern auf GitHub hilft: github.com/MikeGT4/agent-tree',
     updateInstalled: version => `Agent Tree ${version} ist installiert und lädt beim nächsten Start`,
     updateFailed: (version, command) => `Agent Tree ${version} ist da, aktualisieren mit: ${command}`,
@@ -424,6 +434,7 @@ export const WORDS: Record<Lang, Words> = {
     tabs: { tree: 'Tree', reports: 'Reports', files: 'Files', log: 'Log', usage: 'Usage', help: 'Help' },
     fullReport: 'full report ›',
     helpKeys: 'Keys',
+    helpFast: 'f: fast mode',
     helpSize: 'Size',
     helpSizeLines: ['Drag the left edge of the pane with the mouse: wider or narrower.', 'The width is kept for new sessions.'],
     helpGlyphs: 'Glyphs',
@@ -512,6 +523,10 @@ export const WORDS: Record<Lang, Words> = {
     advisorOff: 'turn off',
     advisorUnavailable: 'Agent Tree: /advisor is not available in this session',
     advisorUnchanged: 'Agent Tree: Claude Code did not switch the advisor, the transcript says why',
+    fastOn: '↯ Fast mode: on',
+    fastOff: '↯ Fast mode: off',
+    fastUnavailable: 'Agent Tree: /fast is not available in this session',
+    fastUnchanged: 'Agent Tree: Claude Code did not switch fast mode, the transcript says why',
     starHint: 'Like Agent Tree? A star on GitHub helps: github.com/MikeGT4/agent-tree',
     updateInstalled: version => `Agent Tree ${version} is installed and loads at the next start`,
     updateFailed: (version, command) => `Agent Tree ${version} is out, update with: ${command}`,
@@ -585,6 +600,10 @@ export function lookChoice(word: string, name: string): { row: LookRow; id?: str
     [option, lookOptionLabel(WORDS.de, row, option), lookOptionLabel(WORDS.en, row, option)].some(label => fold(label) === wanted),
   )
   return id ? { row, id } : { row }
+}
+
+export function helpItems(w: Words, fast: boolean): readonly string[] {
+  return fast ? [...w.help.slice(0, -1), w.helpFast, ...w.help.slice(-1)] : w.help
 }
 
 export function wordsFor(lang: string | undefined): Words {

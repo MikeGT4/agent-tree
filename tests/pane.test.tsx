@@ -13,7 +13,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; holdAppend?: Promise<void>; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; holdAppend?: Promise<void>; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; fast?: boolean; fastFails?: boolean } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -40,6 +40,11 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   on('command.list', () =>
     ({ value: refuse.noAdvisor ? [] : [{ name: 'advisor', description: 'Advisor', source: 'builtin' }] }) as never,
   )
+  const rows =
+    refuse.fast === undefined
+      ? []
+      : [{ key: 'fast', label: 'Fast mode (Opus 5.5)', kind: 'boolean', value: refuse.fast, provider: { plugin: 'engine', tier: 'core' }, isLocked: false }]
+  on('config.list', () => ({ value: rows.map(row => ({ ...row })) }) as never)
   const focused: string[] = []
   on('ui.focus', (_, e) => {
     focused.push(JSON.stringify(e))
@@ -57,6 +62,11 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
     if (refuse.command) throw new Error('refused')
     commands.push({ command: e.command, args: e.args })
     if (e.command === 'advisor' && refuse.advisorFails) return {} as never
+    if (e.command === 'fast') {
+      const row = rows.find(r => r.key === 'fast')
+      if (row && !refuse.fastFails) row.value = e.args === 'on'
+      return {} as never
+    }
     const apply = () => {
       if (e.command === 'advisor' && e.args === 'off') delete settings.advisorModel
       else if (e.command === 'advisor') settings.advisorModel = e.args
@@ -156,7 +166,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   const storeGetFails = () => {
     storeBroken = true
   }
-  return { status, spawnModels, stepModels, stepEfforts, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts, storeGetFails, sessionReplaced, tree: () => lastTree }
+  return { status, spawnModels, stepModels, stepEfforts, appended, sent, storeSets, settings, commands, fills, focused, stored, toasts, rows, storeGetFails, sessionReplaced, tree: () => lastTree }
 }
 
 async function step($: Engine, options: { agentId?: string; advisor?: boolean; chunks?: unknown[]; noEffort?: boolean; model?: string } = {}) {
@@ -1797,6 +1807,143 @@ describe('Berater per Knopf', () => {
     await $.turn.start({ text: 'Weiter', turnId: 't2' })
     const ui = await $.ui.mount(pane(90))
     expect((await ui.find({ key: 'advisor:toggle' }))?.props.label).toBe('ausschalten')
+    await ui.unmount()
+  })
+})
+
+describe('Fast Mode per Knopf', () => {
+  test('der Knopf zeigt den Stand aus Claude Codes Einstellungsmenü und liegt auf der Taste f', de, async ($, on) => {
+    engine(on, [], { fast: false })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    const button = await ui.find({ key: 'fast:toggle' })
+    expect(button?.props.label).toBe('↯ Fast Mode: aus')
+    expect(button?.props.hotkey).toBe('f')
+    await ui.unmount()
+  })
+
+  test('ist der Fast Mode beim Start an, steht der Knopf auf an', de, async ($, on) => {
+    engine(on, [], { fast: true })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'fast:toggle' }))?.props.label).toBe('↯ Fast Mode: an')
+    await ui.unmount()
+  })
+
+  test('ohne Fast-Mode-Zeile in Claude Code zeigt die Leiste keinen Knopf', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await ui.find({ key: 'fast:toggle' })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('der Knopf schaltet den Fast Mode über /fast ein und wieder aus', de, async ($, on) => {
+    const seen = engine(on, [], { fast: false })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'fast:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.commands.at(-1)).toEqual({ command: 'fast', args: 'on' })
+    expect((await ui.find({ key: 'fast:toggle' }))?.props.label).toBe('↯ Fast Mode: an')
+    await ui.press({ key: 'fast:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.commands.at(-1)).toEqual({ command: 'fast', args: 'off' })
+    expect((await ui.find({ key: 'fast:toggle' }))?.props.label).toBe('↯ Fast Mode: aus')
+    expect(seen.toasts.join(' ')).not.toMatch(/Fast Mode/)
+    await ui.unmount()
+  })
+
+  test('stellt Claude Code nicht um, bleibt der Knopf beim alten Stand und eine Meldung erscheint', de, async ($, on) => {
+    const seen = engine(on, [], { fast: false, fastFails: true })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'fast:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.commands.at(-1)).toEqual({ command: 'fast', args: 'on' })
+    expect((await ui.find({ key: 'fast:toggle' }))?.props.label).toBe('↯ Fast Mode: aus')
+    expect(seen.toasts.join(' ')).toMatch(/Claude Code hat den Fast Mode nicht umgestellt/)
+    await ui.unmount()
+  })
+
+  test('lehnt Claude Code den Befehl /fast ab, erscheint eine Meldung', de, async ($, on) => {
+    const seen = engine(on, [], { fast: false, command: true })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'fast:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.toasts.join(' ')).toMatch(/\/fast ist in dieser Sitzung nicht verfügbar/)
+    expect((await ui.find({ key: 'fast:toggle' }))?.props.label).toBe('↯ Fast Mode: aus')
+    await ui.unmount()
+  })
+
+  test('ein Umschalten von Hand kommt beim nächsten Zug in der Leiste an', de, async ($, on) => {
+    const seen = engine(on, [], { fast: false })
+    await oneAgentWithAdvisor($)
+    for (const row of seen.rows) row.value = true
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'fast:toggle' }))?.props.label).toBe('↯ Fast Mode: an')
+    await ui.unmount()
+  })
+
+  test('ein getipptes /fast kommt ohne neuen Zug in der Leiste an', de, async ($, on) => {
+    engine(on, [], { fast: false })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await $.command.run({ command: 'fast', args: 'on', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect((await ui.find({ key: 'fast:toggle' }))?.props.label).toBe('↯ Fast Mode: an')
+    await ui.unmount()
+  })
+
+  test('verschwindet die Zeile aus dem Einstellungsmenü, verschwindet der Knopf', de, async ($, on) => {
+    const seen = engine(on, [], { fast: true })
+    await oneAgentWithAdvisor($)
+    seen.rows.length = 0
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    const ui = await $.ui.mount(pane(90))
+    expect(await ui.find({ key: 'fast:toggle' })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('auf Englisch heißt der Stand on und off', { options: { language: 'en', intro: false } }, async ($, on) => {
+    engine(on, [], { fast: false })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'fast:toggle' }))?.props.label).toBe('↯ Fast mode: off')
+    await ui.press({ key: 'fast:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect((await ui.find({ key: 'fast:toggle' }))?.props.label).toBe('↯ Fast mode: on')
+    await ui.unmount()
+  })
+
+  test('die Hilfe führt die Taste f, sobald es den Knopf gibt', de, async ($, on) => {
+    engine(on, [], { fast: false })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:help' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('f: Fast Mode')
+    await ui.unmount()
+  })
+
+  test('ohne den Knopf führt die Hilfe die Taste f nicht', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:help' })
+    await ui.redraw()
+    expect(await screen(ui)).not.toContain('f: Fast Mode')
+    await ui.unmount()
+  })
+
+  test('nach /clear bleibt der Knopf mit seinem Stand stehen', de, async ($, on) => {
+    engine(on, [], { fast: true })
+    await oneAgentWithAdvisor($)
+    await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'fast:toggle' }))?.props.label).toBe('↯ Fast Mode: an')
     await ui.unmount()
   })
 })
