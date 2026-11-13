@@ -20,7 +20,7 @@ export type UpdateHost = {
   save: (value: unknown) => Promise<void>
   listPlugins: () => Promise<string | undefined>
   fetchLatest: () => Promise<{ ok: boolean; text: string } | undefined>
-  update: () => Promise<{ exitCode: number; stdout: string } | undefined>
+  install: () => Promise<{ exitCode: number; stdout: string } | undefined>
 }
 
 type UpdateState = { checkedAt?: number; tried?: string }
@@ -89,7 +89,7 @@ export async function checkForUpdate(host: UpdateHost, enabled: boolean, now: nu
   if (!isNewer(latest, install.version)) return { kind: 'current' }
   if (latest === state.tried) return { kind: 'skipped' }
   await host.save({ checkedAt: now, tried: latest })
-  const result = await host.update()
+  const result = await host.install()
   if (result?.exitCode === 0 && ALREADY_LATEST.test(result.stdout)) return { kind: 'current' }
   if (result?.exitCode === 0) return { kind: 'installed', version: latest }
   return { kind: 'failed', version: latest, command: UPDATE_COMMAND }

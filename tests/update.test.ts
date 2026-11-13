@@ -39,7 +39,7 @@ function fake(o: Fake = {}): { host: UpdateHost; calls: Calls } {
       calls.fetched++
       return { ok: o.ok !== false, text: JSON.stringify({ name: 'agent-tree', version: o.latest ?? '0.4.0' }) }
     },
-    update: async () => {
+    install: async () => {
       calls.updated++
       return { exitCode: o.exitCode ?? 0, stdout: o.stdout ?? 'Restart to apply changes.' }
     },

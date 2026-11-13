@@ -171,7 +171,7 @@ async function handOver($: EngineInterface, from: Carried): Promise<void> {
   const now = await clock($)
   if (round !== generation) return
   try {
-    await write($, () => freshTree(from.tree, now))
+    await commitTree($, () => freshTree(from.tree, now))
   } catch {
     return
   }
@@ -332,10 +332,10 @@ async function clock($: EngineInterface): Promise<number> {
 
 async function change($: EngineInterface, apply: (s: AgentTreeState) => AgentTreeState): Promise<AgentTreeState> {
   await takeOver($)
-  return write($, apply)
+  return commitTree($, apply)
 }
 
-async function write($: EngineInterface, apply: (s: AgentTreeState) => AgentTreeState): Promise<AgentTreeState> {
+async function commitTree($: EngineInterface, apply: (s: AgentTreeState) => AgentTreeState): Promise<AgentTreeState> {
   const next = await update($, tree, apply)
   const ending = carried?.sessionId
   if (ending !== undefined && (await $.session.id().catch(() => undefined)) === ending) {
@@ -361,7 +361,7 @@ async function forget($: EngineInterface, agentId: string): Promise<void> {
   await update($, unreadTexts, texts => withoutTexts(texts, id => id === agentId))
 }
 
-async function restyle($: EngineInterface, row: LookRow, id: string): Promise<void> {
+async function applyLook($: EngineInterface, row: LookRow, id: string): Promise<void> {
   const saved = await $.store.get(LOOK_KEY).then(
     value => ({ value }),
     () => undefined,
@@ -665,7 +665,7 @@ function actionsFor($: EngineInterface): TreeActions {
     fast: () => void toggleFast($).catch(ignore),
     deselect: () => void change($, t => deselected(t)).catch(ignore),
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
-    restyle: (row, id) => void restyle($, row, id).catch(ignore),
+    restyle: (row, id) => void applyLook($, row, id).catch(ignore),
     restyleDefault: () => void resetLook($).catch(ignore),
     logFilter: source => void change($, t => logFiltered(t, source)).catch(ignore),
     tab: id => {
@@ -717,7 +717,7 @@ function hostOf($: EngineInterface): UpdateHost {
     fetchLatest: () =>
       $.http.fetch('https://raw.githubusercontent.com/MikeGT4/agent-tree/main/.claude-plugin/plugin.json', { method: 'GET' })
         .catch(() => undefined),
-    update: () =>
+    install: () =>
       $.process.run(['claude', 'plugin', 'update', 'agent-tree'], { timeoutMs: 120_000 })
         .then(result => ({ exitCode: result.exitCode, stdout: result.stdout }))
         .catch(() => undefined),
@@ -803,7 +803,7 @@ export const register: Register = (on, options) => {
       const id = choice.id
       const choices = (LOOK_OPTIONS[row] as readonly string[]).map(option => lookOptionLabel(w, row, option)).join(', ')
       if (!id) return { text: w.lookUnknown(names.join(' '), w.lookRow[row], choices) }
-      await restyle($, row, id)
+      await applyLook($, row, id)
       return { text: w.lookSet(w.lookRow[row], lookOptionLabel(w, row, id)) }
     }
     if ((word === 'aussehen' || word === 'look') && /^(?:zurück|zurueck|reset|standard|default)$/i.test(names.join(' '))) {
