@@ -12,6 +12,6 @@ Claude Code's plugin storage keeps your look, model and effort choices, update s
 
 ## Hooks
 
-They act only after you act in the pane: a model or effort pick, a stop, a message to an agent (noted in the transcript), the advisor and fast mode buttons (`/advisor`, `/fast`). Typing in the prompt only ends the start intro, text unchanged.
+They act only after you act in the pane: a model or effort pick, a stop, a message to an agent (noted in the transcript), and buttons that run `/advisor`, `/fast` or `/model`. Typing in the prompt only ends the start intro, text unchanged.
 
 Questions: github.com/MikeGT4/agent-tree/issues

@@ -1,7 +1,7 @@
 {
   "name": "agent-tree",
   "displayName": "Agent Tree",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "description": "Terminal side pane that shows a session's agents as a live tree: what each one does, how full its context is, which file two of them change. Tabs open each agent's full report, files, log and usage. Stop one, send it new instructions, switch its model and effort.",
   "author": {
     "name": "Mike Pollow, Digitalroots"

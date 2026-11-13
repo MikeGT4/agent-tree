@@ -4,7 +4,7 @@
 
 A side pane for Claude Code that shows a session's agents as a live tree.
 
-Stop and correct running sub-agents, switch their model and effort, set the main session's effort, toggle the advisor, change the look, watch your limits.
+Stop and correct running sub-agents, switch model and effort for them and the main session, toggle the advisor, change the look, watch your limits.
 
 Tabs: each agent's full report, files, log, usage.
 
@@ -22,7 +22,7 @@ Then start Claude Code; the pane opens.
 
 Inside a session: `/plugin install agent-tree --marketplace MikeGT4/agent-tree`
 
-Needs Claude Code 2.1.292+, tested with 2.1.322.
+Needs Claude Code 2.1.292+, tested with 2.1.323.
 
 ## What it runs
 
