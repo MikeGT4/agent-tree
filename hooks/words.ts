@@ -53,6 +53,9 @@ export type Words = {
   effortFor: string
   mainEffortFor: string
   mainEffortHint: readonly string[]
+  mainModelFor: string
+  mainModelHint: string
+  mainModelUnavailable: string
   effortNextMessage: string
   newAgents: string
   help: readonly string[]
@@ -237,6 +240,9 @@ export const WORDS: Record<Lang, Words> = {
     effortFor: 'Denkstufe:',
     mainEffortFor: 'Denkstufe der Hauptsitzung:',
     mainEffortHint: ['ab deiner nächsten Nachricht ·', 'Standard = Einstellung von Claude Code ·', 'bleibt für neue Sitzungen'],
+    mainModelFor: 'Modell der Hauptsitzung:',
+    mainModelHint: 'Modell: wie /model, gilt auch für neue Sitzungen',
+    mainModelUnavailable: 'Agent Tree: /model ist in dieser Sitzung nicht verfügbar',
     effortNextMessage: 'gilt, sobald es eine neue Nachricht bekommt (nur Modelle mit Denkstufe)',
     newAgents: 'neue Unteragenten',
     help: ['ctrl+x tab: Leiste', 'Kasten: wählen', 's: stoppen', 'e: Denkstufe', 'm: Modell', 'a: Aussehen', 'Tab: wandern'],
@@ -428,6 +434,9 @@ export const WORDS: Record<Lang, Words> = {
     effortFor: 'Effort:',
     mainEffortFor: 'Main session effort:',
     mainEffortHint: ['from your next message ·', "Default = Claude Code's setting ·", 'kept for new sessions'],
+    mainModelFor: 'Main session model:',
+    mainModelHint: 'Model: like /model, also saved for new sessions',
+    mainModelUnavailable: 'Agent Tree: /model is not available in this session',
     effortNextMessage: 'applies once it gets a new message (models with effort only)',
     newAgents: 'new sub-agents',
     help: ['ctrl+x tab: pane', 'box: select', 's: stop', 'e: effort', 'm: model', 'a: look', 'Tab: move'],

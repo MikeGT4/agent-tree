@@ -552,6 +552,35 @@ export function withAdvisorModel(s: AgentTreeState, model: string | undefined): 
   return { ...s, advisor: { ...s.advisor, model } }
 }
 
+export type MainModels = { offer: string[]; held: string | undefined }
+
+export type ModelMenuRow = { kind?: unknown; value?: unknown; options?: readonly string[]; isLocked?: unknown }
+
+export const MENU_DEFAULT = 'default'
+
+export function mainModelsFrom(row: ModelMenuRow | undefined): MainModels | undefined {
+  if (!row || row.isLocked === true || row.kind !== 'choice' || !row.options) return undefined
+  const options = row.options
+  const offer = MODEL_FAMILIES.filter(family => options.includes(family))
+  if (offer.length === 0) return undefined
+  const value = typeof row.value === 'string' ? row.value : ''
+  const held = options.includes(value) ? offer.find(family => value === family || value === `${family}[1m]`) : MENU_DEFAULT
+  return { offer, held }
+}
+
+export function withMainModels(s: AgentTreeState, models: MainModels | undefined): AgentTreeState {
+  const main = { ...s.main }
+  delete main.modelOffer
+  delete main.modelHeld
+  if (models) main.modelOffer = models.offer
+  if (models?.held !== undefined) main.modelHeld = models.held
+  return { ...s, main }
+}
+
+export function withMainModel(s: AgentTreeState, model: string | undefined): AgentTreeState {
+  return model && model !== s.main.model ? { ...s, main: { ...s.main, model } } : s
+}
+
 export function withFast(s: AgentTreeState, fast: boolean | undefined): AgentTreeState {
   if (s.main.fast === fast) return s
   const main = { ...s.main }
@@ -978,7 +1007,8 @@ export function freshTree(from: AgentTreeState, now: number): AgentTreeState {
     ...(from.corrections ? { corrections: without(from.corrections, gone) } : {}),
     ...(from.selected === MAIN || from.selected === NEW_AGENTS || (from.selected !== undefined && alive.has(from.selected)) ? { selected: from.selected } : {}),
   }
-  return withFast(from.main.limits ? withLimits(fresh, from.main.limits) : fresh, from.main.fast)
+  const kept = withFast(from.main.limits ? withLimits(fresh, from.main.limits) : fresh, from.main.fast)
+  return from.main.modelOffer ? withMainModel(withMainModels(kept, { offer: from.main.modelOffer, held: from.main.modelHeld }), from.main.model) : kept
 }
 
 export function resetTime(kind: string, iso: string | undefined, locale: string): string | undefined {

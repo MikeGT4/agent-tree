@@ -72,10 +72,13 @@ import {
   trimmed,
   turnStarted,
   withFast,
+  mainModelsFrom,
+  withMainModel,
+  withMainModels,
   typeLabel,
   wasStopSent,
 } from '../hooks/model.ts'
-import { AGENT_WIDTH, connector, drawTree, helpLine, limitSegments, litCells, lookLines, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
+import { AGENT_WIDTH, connector, drawTree, helpLine, limitSegments, litCells, lookLines, mainPickerLines, pickerLines, planRows, pressKey, runningMark, shimmer, statusText, statusWithMark, timelineBar } from '../hooks/view.tsx'
 import { activityText, lookChoice, logLine, resolveLang, toolText, WORDS } from '../hooks/words.ts'
 import { contrast, DEFAULT_LOOK, frameEdges, isLookChoice, lightColor, lookFrom, LOOK_OPTIONS, PALETTES, restyleLine, STYLES } from '../hooks/looks.ts'
 
@@ -1331,5 +1334,40 @@ describe('Dateinamen, Auswahlwechsel und offene Wahl', () => {
   test('die Hinweiszeile der Wahl zählt ihre Umbrüche', () => {
     expect(pickerLines('x', 60, 'de', true) - pickerLines('x', 60, 'de', false)).toBe(2)
     expect(pickerLines('x', 200, 'de', true) - pickerLines('x', 200, 'de', false)).toBe(1)
+  })
+})
+
+describe('Modell der Hauptsitzung', () => {
+  const row = (value: string, extra: Record<string, unknown> = {}) => ({ kind: 'choice', value, options: ['default', 'sonnet', 'opus', 'haiku', 'fable', 'best', 'fable[1m]'], isLocked: false, ...extra })
+
+  test('die Menüzeile ergibt die angebotenen Familien in fester Reihenfolge und den gehaltenen Stand', () => {
+    expect(mainModelsFrom(row('Default (recommended)'))).toEqual({ offer: ['haiku', 'sonnet', 'opus', 'fable'], held: 'default' })
+    expect(mainModelsFrom(row('sonnet'))).toEqual({ offer: ['haiku', 'sonnet', 'opus', 'fable'], held: 'sonnet' })
+    expect(mainModelsFrom(row('fable[1m]'))).toEqual({ offer: ['haiku', 'sonnet', 'opus', 'fable'], held: 'fable' })
+    expect(mainModelsFrom(row('best'))).toEqual({ offer: ['haiku', 'sonnet', 'opus', 'fable'], held: undefined })
+  })
+
+  test('gesperrt, ohne Wahlliste oder ohne bekannte Familie gibt es kein Angebot', () => {
+    expect(mainModelsFrom(undefined)).toBeUndefined()
+    expect(mainModelsFrom(row('sonnet', { isLocked: true }))).toBeUndefined()
+    expect(mainModelsFrom(row('sonnet', { kind: 'text' }))).toBeUndefined()
+    expect(mainModelsFrom(row('sonnet', { options: undefined }))).toBeUndefined()
+    expect(mainModelsFrom(row('x', { options: ['default', 'best'] }))).toBeUndefined()
+  })
+
+  test('Angebot und Stand überstehen einen Neuaufbau des Baums', () => {
+    const s = withMainModel(withMainModels(createTree(0), { offer: ['sonnet', 'opus'], held: 'opus' }), 'claude-opus-5-5')
+    const fresh = freshTree(s, 5)
+    expect([fresh.main.modelOffer, fresh.main.modelHeld, fresh.main.model]).toEqual([['sonnet', 'opus'], 'opus', 'claude-opus-5-5'])
+    expect(freshTree(withMainModel(createTree(0), 'claude-opus-5-5'), 5).main.model).toBeUndefined()
+    const gone = withMainModels(s, undefined)
+    expect([gone.main.modelOffer, gone.main.modelHeld]).toEqual([undefined, undefined])
+  })
+
+  test('die Modellzeile zählt in der Höhe der Auswahl mit', () => {
+    const offer = ['haiku', 'sonnet', 'opus', 'fable']
+    expect(mainPickerLines(200, 'de', offer) - mainPickerLines(200, 'de')).toBe(2)
+    expect(mainPickerLines(40, 'de', offer)).toBeGreaterThan(mainPickerLines(40, 'de') + 2)
+    expect(mainPickerLines(200, 'de', [])).toBe(mainPickerLines(200, 'de'))
   })
 })

@@ -42,6 +42,8 @@ import {
   logFiltered,
   limitsFrom,
   MAIN,
+  MENU_DEFAULT,
+  mainModelsFrom,
   mainStepEffort,
   measured,
   pathKey,
@@ -78,8 +80,11 @@ import {
   wasStopSent,
   withAdvisorModel,
   withFast,
+  withMainModel,
+  withMainModels,
   withLimits,
 } from './model.ts'
+import type { MainModels } from './model.ts'
 import { drawTree, pressKey, statusText } from './view.tsx'
 import type { TreeActions } from './view.tsx'
 import { familyOr, lookChoice, lookOptionLabel, resolveLang, wordsFor } from './words.ts'
@@ -585,6 +590,44 @@ async function toggleFast($: EngineInterface): Promise<void> {
   await readFast($)
 }
 
+async function mainModelsHeld($: EngineInterface): Promise<MainModels | undefined> {
+  const rows = await $.config.list()
+  return mainModelsFrom(rows.find(row => row.key === 'model'))
+}
+
+async function readMainModels($: EngineInterface): Promise<void> {
+  const held = await mainModelsHeld($)
+  await change($, s => withMainModels(s, held))
+  if (!held || (await latest($)).main.model !== undefined) return
+  const model = await $.session.model().catch(() => undefined)
+  await change($, s => (s.main.model === undefined ? withMainModel(s, typeof model === 'string' ? model : undefined) : s))
+}
+
+async function mainModelSettled($: EngineInterface, wanted: string): Promise<void> {
+  for (let i = 0; i < 8; i++) {
+    const held = await mainModelsHeld($).catch(() => undefined)
+    if (held?.held === wanted) return
+    await $.clock.sleep(250).catch(() => undefined)
+  }
+}
+
+async function chooseMainModel($: EngineInterface, family: string | undefined): Promise<void> {
+  await change($, t => closed(t))
+  const wanted = family ?? MENU_DEFAULT
+  const ran = await $.command.run({ command: 'model', args: wanted }).then(
+    () => true,
+    () => false,
+  )
+  if (!ran) {
+    $.ui.toast(wordsFor(lang).mainModelUnavailable)
+    return
+  }
+  await mainModelSettled($, wanted)
+  await readMainModels($)
+  const model = await $.session.model().catch(() => undefined)
+  await change($, s => withMainModel(s, typeof model === 'string' ? model : undefined))
+}
+
 async function settleUnread($: EngineInterface, s: AgentTreeState, agentId: string, now: number): Promise<void> {
   const texts = (await read($, unreadTexts))[agentId] ?? []
   await forget($, agentId)
@@ -607,7 +650,7 @@ function actionsFor($: EngineInterface): TreeActions {
   return {
     select: target => void change($, t => selectionToggled(t, target)).catch(ignore),
     pick: target => void change($, t => pickerOpened(t, target)).catch(ignore),
-    choose: (target, family) => void chooseModel($, target, family).catch(ignore),
+    choose: (target, family) => void (target === MAIN ? chooseMainModel($, family) : chooseModel($, target, family)).catch(ignore),
     effort: (target, effort) => void chooseEffort($, target, effort).catch(ignore),
     close: () => void change($, t => closed(t)).catch(ignore),
     detail: agentId => void openDetail($, agentId).catch(ignore),
@@ -725,6 +768,7 @@ export const register: Register = (on, options) => {
     advisorCommand = !listed || listed.some(c => c.name === 'advisor')
     await readAdvisor($).catch(() => undefined)
     await readFast($).catch(() => undefined)
+    await readMainModels($).catch(() => undefined)
     await catchUp($, await clock($), keep).catch(() => undefined)
     await maybeStartIntro($, e.isInteractive !== false).catch(() => undefined)
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
@@ -793,6 +837,7 @@ export const register: Register = (on, options) => {
     await change($, s => turnStarted(s, { text: e.text, agentId: e.agentId }, now)).catch(() => undefined)
     if (!e.agentId) await readAdvisor($).catch(() => undefined)
     if (!e.agentId) await readFast($).catch(() => undefined)
+    if (!e.agentId) await readMainModels($).catch(() => undefined)
     if (!e.agentId) await restoreLook($).catch(() => undefined)
     return result
   })

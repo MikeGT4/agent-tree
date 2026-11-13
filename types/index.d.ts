@@ -93,6 +93,8 @@ export type AgentTreeMain = {
   costUsd?: number
   limits?: AgentTreeLimit[]
   fast?: boolean
+  modelOffer?: string[]
+  modelHeld?: string
 }
 
 export type AgentTreeLimit = {

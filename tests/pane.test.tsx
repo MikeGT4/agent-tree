@@ -13,7 +13,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; holdAppend?: Promise<void>; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; fast?: boolean; fastFails?: boolean } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; holdAppend?: Promise<void>; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; fast?: boolean; fastFails?: boolean; model?: string; modelOptions?: string[]; modelFails?: boolean; modelLocked?: boolean } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -40,10 +40,27 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   on('command.list', () =>
     ({ value: refuse.noAdvisor ? [] : [{ name: 'advisor', description: 'Advisor', source: 'builtin' }] }) as never,
   )
-  const rows =
+  const rows: { key: string; label: string; kind: string; value: unknown; options?: string[]; provider: { plugin: string; tier: string }; isLocked: boolean }[] =
     refuse.fast === undefined
       ? []
       : [{ key: 'fast', label: 'Fast mode (Opus 5.5)', kind: 'boolean', value: refuse.fast, provider: { plugin: 'engine', tier: 'core' }, isLocked: false }]
+  const menuDefault = 'Default (recommended)'
+  const modelIds: Record<string, string> = { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5', fable: 'claude-fable-5-2' }
+  if (refuse.model !== undefined) {
+    rows.push({
+      key: 'model',
+      label: 'Model',
+      kind: 'choice',
+      value: refuse.model === 'default' ? menuDefault : refuse.model,
+      options: refuse.modelOptions ?? ['default', 'sonnet', 'opus', 'haiku', 'fable', 'best', 'sonnet[1m]', 'opus[1m]', 'fable[1m]', 'opusplan'],
+      provider: { plugin: 'engine', tier: 'core' },
+      isLocked: refuse.modelLocked === true,
+    })
+    on('session.model', () => {
+      const held = String(rows.find(r => r.key === 'model')?.value)
+      return { value: modelIds[held] ?? 'claude-opus-5-5' } as never
+    })
+  }
   on('config.list', () => ({ value: rows.map(row => ({ ...row })) }) as never)
   const focused: string[] = []
   on('ui.focus', (_, e) => {
@@ -65,6 +82,11 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
     if (e.command === 'fast') {
       const row = rows.find(r => r.key === 'fast')
       if (row && !refuse.fastFails) row.value = e.args === 'on'
+      return {} as never
+    }
+    if (e.command === 'model') {
+      const row = rows.find(r => r.key === 'model')
+      if (row && !refuse.modelFails) row.value = e.args === 'default' ? menuDefault : e.args
       return {} as never
     }
     const apply = () => {
@@ -2193,6 +2215,174 @@ describe('Stern-Hinweis', () => {
     const e = engine(on)
     for (let i = 0; i < 3; i++) await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
     expect(star(e.toasts)).toEqual([])
+  })
+})
+
+describe('Modell der Hauptsitzung', () => {
+  const settle = async (ui: { redraw: () => Promise<unknown> }) => {
+    for (let i = 0; i < 3; i++) await ui.redraw()
+  }
+
+  test('die Überschrift des Hauptkastens öffnet die Auswahl mit Modellzeile und Denkstufen', de, async ($, on) => {
+    engine(on, [], { model: 'default' })
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    const ui = await $.ui.mount(pane(90))
+    const title = await ui.find({ key: 'model:main' })
+    expect(title?.props.label).toBe('Opus 5.5 · Hauptsitzung ▾')
+    expect(title?.props.hotkey).toBeUndefined()
+    await ui.press({ key: 'model:main' })
+    await settle(ui)
+    expect(await screen(ui)).toMatch(/Modell der Hauptsitzung:/)
+    for (const key of ['choose:main:default', 'choose:main:haiku', 'choose:main:sonnet', 'choose:main:opus', 'choose:main:fable', 'effort:main:default', 'effort:main:max', 'picker:close']) {
+      expect(await ui.find({ key })).toBeDefined()
+    }
+    expect((await ui.find({ key: 'choose:main:default' }))?.props.variant).toBe('primary')
+    expect((await ui.find({ key: 'choose:main:opus' }))?.props.variant).toBeUndefined()
+    expect(await screen(ui)).toMatch(/wie \/model/)
+    await ui.unmount()
+  })
+
+  test('ohne Modellzeile in Claude Codes Einstellungsmenü bleibt die Überschrift Text', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await ui.find({ key: 'model:main' })).toBeUndefined()
+    expect(await screen(ui)).toMatch(/Opus 5\.5 · Hauptsitzung/)
+    expect(await screen(ui)).not.toMatch(/Hauptsitzung ▾/)
+    await ui.unmount()
+  })
+
+  test('eine gesperrte Modellzeile ergibt keine Auswahl', de, async ($, on) => {
+    engine(on, [], { model: 'default', modelLocked: true })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await ui.find({ key: 'model:main' })).toBeUndefined()
+    await steer(ui, 'pick:main')
+    expect(await ui.find({ key: 'choose:main:sonnet' })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('die Wahl geht als /model an Claude Code, die Überschrift folgt und die Auswahl schließt', de, async ($, on) => {
+    const seen = engine(on, [], { model: 'default' })
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'pick:main')
+    await ui.press({ key: 'choose:main:sonnet' })
+    await settle(ui)
+    expect(seen.commands.at(-1)).toEqual({ command: 'model', args: 'sonnet' })
+    expect((await ui.find({ key: 'model:main' }))?.props.label).toBe('Sonnet 5.5 · Hauptsitzung ▾')
+    expect(await ui.find({ key: 'choose:main:sonnet' })).toBeUndefined()
+    expect(seen.toasts.join(' ')).not.toMatch(/Modell/)
+    await steer(ui, 'pick:main')
+    expect((await ui.find({ key: 'choose:main:sonnet' }))?.props.variant).toBe('primary')
+    expect((await ui.find({ key: 'choose:main:default' }))?.props.variant).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('Standard schickt /model default', de, async ($, on) => {
+    const seen = engine(on, [], { model: 'haiku' })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'model:main' }))?.props.label).toBe('Haiku 5.5 · Hauptsitzung ▾')
+    await steer(ui, 'pick:main')
+    expect((await ui.find({ key: 'choose:main:haiku' }))?.props.variant).toBe('primary')
+    await ui.press({ key: 'choose:main:default' })
+    await settle(ui)
+    expect(seen.commands.at(-1)).toEqual({ command: 'model', args: 'default' })
+    expect((await ui.find({ key: 'model:main' }))?.props.label).toBe('Opus 5.5 · Hauptsitzung ▾')
+    expect(seen.toasts.join(' ')).not.toMatch(/Modell/)
+    await ui.unmount()
+  })
+
+  test('die Auswahl bietet nur Modelle an, die Claude Codes Menü führt', de, async ($, on) => {
+    engine(on, [], { model: 'default', modelOptions: ['default', 'sonnet', 'opus', 'opus[1m]'] })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'pick:main')
+    expect(await ui.find({ key: 'choose:main:sonnet' })).toBeDefined()
+    expect(await ui.find({ key: 'choose:main:opus' })).toBeDefined()
+    expect(await ui.find({ key: 'choose:main:haiku' })).toBeUndefined()
+    expect(await ui.find({ key: 'choose:main:fable' })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('eine Fassung mit großem Kontextfenster hebt ihre Familie hervor', de, async ($, on) => {
+    engine(on, [], { model: 'fable[1m]' })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'pick:main')
+    expect((await ui.find({ key: 'choose:main:fable' }))?.props.variant).toBe('primary')
+    expect((await ui.find({ key: 'choose:main:default' }))?.props.variant).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('stellt Claude Code das Modell nicht um, bleiben Überschrift und Hervorhebung beim alten Stand', de, async ($, on) => {
+    const seen = engine(on, [], { model: 'default', modelFails: true })
+    await startSession($)
+    await $.turn.start({ text: 'Los', turnId: 't1' })
+    await step($)
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'pick:main')
+    await ui.press({ key: 'choose:main:sonnet' })
+    await settle(ui)
+    expect(seen.commands.at(-1)).toEqual({ command: 'model', args: 'sonnet' })
+    expect((await ui.find({ key: 'model:main' }))?.props.label).toBe('Opus 5.5 · Hauptsitzung ▾')
+    await steer(ui, 'pick:main')
+    expect((await ui.find({ key: 'choose:main:default' }))?.props.variant).toBe('primary')
+    expect((await ui.find({ key: 'choose:main:sonnet' }))?.props.variant).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('lehnt Claude Code den Befehl /model ab, erscheint eine Meldung', de, async ($, on) => {
+    const seen = engine(on, [], { model: 'default', command: true })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'pick:main')
+    await ui.press({ key: 'choose:main:sonnet' })
+    await settle(ui)
+    expect(seen.toasts.join(' ')).toMatch(/\/model ist in dieser Sitzung nicht verfügbar/)
+    await ui.unmount()
+  })
+
+  test('ein Wechsel von Hand kommt beim nächsten Zug in der Auswahl an', de, async ($, on) => {
+    const seen = engine(on, [], { model: 'default' })
+    await startSession($)
+    for (const row of seen.rows) if (row.key === 'model') row.value = 'opus'
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'pick:main')
+    expect((await ui.find({ key: 'choose:main:opus' }))?.props.variant).toBe('primary')
+    await ui.unmount()
+  })
+
+  test('die Wahl für einen Unteragenten schickt kein /model', de, async ($, on) => {
+    const seen = engine(on, [], { model: 'default' })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'pick:new')
+    await ui.press({ key: 'choose:new:sonnet' })
+    await settle(ui)
+    expect(seen.commands.filter(c => c.command === 'model')).toEqual([])
+    await ui.unmount()
+  })
+
+  test('englisch heißt die Zeile Main session model', { options: { language: 'en', intro: false } }, async ($, on) => {
+    engine(on, [], { model: 'default' })
+    await startSession($)
+    await $.turn.start({ text: 'Go', turnId: 't1' })
+    await step($)
+    const ui = await $.ui.mount(pane(90))
+    expect((await ui.find({ key: 'model:main' }))?.props.label).toBe('Opus 5.5 · Main session ▾')
+    await steer(ui, 'pick:main')
+    expect(await screen(ui)).toMatch(/Main session model:/)
+    expect(await screen(ui)).toMatch(/like \/model/)
+    await ui.unmount()
   })
 })
 

@@ -26,6 +26,7 @@ import {
   contextPercent,
   windowOf,
   MAIN,
+  MENU_DEFAULT,
   MODEL_FAMILIES,
   NEW_AGENTS,
   choicesOf,
@@ -475,10 +476,11 @@ function textRows(text: string, width: number): number {
   return rows
 }
 
-export function mainPickerLines(width: number, lang: Lang = 'de'): number {
+export function mainPickerLines(width: number, lang: Lang = 'de', offer?: readonly string[]): number {
   const w = wordsFor(lang)
   const efforts = wrappedLines([w.mainEffortFor, `[ ${w.standard} ]`, ...EFFORT_LEVELS.map(level => `[ ${effortLabel(level)} ]`), '[ × ]'], width)
-  return efforts + wrappedLines(w.mainEffortHint, width)
+  const models = offer?.length ? wrappedLines([w.mainModelFor, `[ ${w.standard} ]`, ...offer.map(family => `[ ${familyLabel(family)} ]`)], width) + textRows(w.mainModelHint, width) : 0
+  return models + efforts + wrappedLines(w.mainEffortHint, width)
 }
 
 function lookLabelWidth(w: Words): number {
@@ -658,7 +660,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     total: current.length,
     advisorRows: wide ? ADVISOR_BASE_ROWS + recentCalls.length : ADVISOR_COMPACT_ROWS,
     earlier: earlier > 0,
-    pickerRows: (pickerTarget && actions ? 1 + (pickerTarget === MAIN ? mainPickerLines(width, lang) : pickerLines(pickerName, width, lang, pickerTarget !== NEW_AGENTS)) : 0) + (s.lookOpen && actions ? lookLines(width, lang) : 0),
+    pickerRows: (pickerTarget && actions ? 1 + (pickerTarget === MAIN ? mainPickerLines(width, lang, s.main.modelOffer) : pickerLines(pickerName, width, lang, pickerTarget !== NEW_AGENTS)) : 0) + (s.lookOpen && actions ? lookLines(width, lang) : 0),
     detailRows: detailNode && actions ? DETAIL_ROWS : 0,
     helpRows: tight ? 0 : 1,
     limitRows: s.main.limits?.length ? 1 : 0,
@@ -976,11 +978,24 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const roundLine = s.main.turn ? `${w.round} ${s.main.turn}${s.main.costUsd !== undefined ? ` · ${w.cost(s.main.costUsd)}` : ''}` : w.noRound
 
+  const mainOffer = s.main.modelOffer ?? []
+  const mainTitle = [mainModel, w.main].filter(Boolean).join(' · ')
+
   const mainBox = (
     <Box key="main" width={mainWidth} flexShrink={0} {...frameProps(palette.main)} flexDirection="column" alignItems="center">
-      <Text bold size={SIZE.title} color={palette.main} wrap="truncate-end">
-        {[mainModel, w.main].filter(Boolean).join(' · ')}
-      </Text>
+      {actions && mainOffer.length > 0 ? (
+        <Box key="main-title" justifyContent="center" width={Math.max(1, mainWidth - 2)}>
+          <Button key="model:main" plain label={`${mainTitle} ▾`} onPress={() => actions.pick(MAIN)}>
+            <Text bold size={SIZE.title} color={palette.main} wrap="truncate-end">
+              {`${mainTitle} ▾`}
+            </Text>
+          </Button>
+        </Box>
+      ) : (
+        <Text bold size={SIZE.title} color={palette.main} wrap="truncate-end">
+          {mainTitle}
+        </Text>
+      )}
       <Text wrap="truncate-end">{w.phase[phase]}</Text>
       {actions ? (
         <Box key="main-effort" justifyContent="center" width={Math.max(1, mainWidth - 2)}>
@@ -1248,6 +1263,20 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const mainPicker =
     pickerTarget === MAIN && actions ? (
       <Box key="picker" flexDirection="column" width={width} marginTop={1}>
+        {mainOffer.length > 0 ? (
+          <Box key="picker-main-models" flexDirection="row" flexWrap="wrap" columnGap={1}>
+            <Text color={palette.main}>{w.mainModelFor}</Text>
+            <Button key="choose:main:default" label={w.standard} variant={s.main.modelHeld === MENU_DEFAULT ? 'primary' : undefined} onPress={() => actions.choose(MAIN, undefined)} />
+            {mainOffer.map(family => (
+              <Button key={`choose:main:${family}`} label={familyLabel(family)} variant={s.main.modelHeld === family ? 'primary' : undefined} onPress={() => actions.choose(MAIN, family)} />
+            ))}
+          </Box>
+        ) : null}
+        {mainOffer.length > 0 ? (
+          <Text key="picker-main-model-hint" color={palette.dim} wrap="wrap">
+            {w.mainModelHint}
+          </Text>
+        ) : null}
         <Box key="picker-main" flexDirection="row" flexWrap="wrap" columnGap={1}>
           <Text color={palette.main}>{w.mainEffortFor}</Text>
           <Button key="effort:main:default" hotkey="0" label={w.standard} variant={mainChosen === undefined ? 'primary' : undefined} onPress={() => actions.effort(MAIN, undefined)} />
