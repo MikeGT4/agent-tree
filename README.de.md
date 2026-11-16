@@ -32,4 +32,4 @@ Seine Hooks greifen nur, wenn du in der Leiste handelst; Tippen beendet nur das 
 
 [Anleitung](docs/GUIDE.de.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/agent-tree-anleitung.pdf)
 
-MIT, © 2026 Mike Pollow, Digitalroots
+MIT, © 2026 Mike Pollow, [Digitalroots](https://www.digitalroots.de/leistungen/software/agent-tree/)

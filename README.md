@@ -32,4 +32,4 @@ Its hooks act only after you act in the pane; typing only ends the start intro.
 
 [Guide](docs/GUIDE.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/agent-tree-guide.pdf)
 
-MIT, © 2026 Mike Pollow, Digitalroots
+MIT, © 2026 Mike Pollow, [Digitalroots](https://www.digitalroots.de/en/leistungen/software/agent-tree/)
