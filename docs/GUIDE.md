@@ -30,7 +30,7 @@ Reports: each agent's task and full answer.
 
 ![Files](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-4.png)
 
-Files: changed and read per agent, shared first.
+Files: changed and read per agent, shared first. Read files show estimated tokens (~), heaviest first.
 
 ![Usage](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-5.png)
 

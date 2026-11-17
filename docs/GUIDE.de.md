@@ -30,7 +30,7 @@ Berichte: Aufgabe und ganze Antwort jedes Agenten.
 
 ![Dateien](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-de-4.png)
 
-Dateien: geändert und gelesen je Agent, doppelte oben.
+Dateien: geändert und gelesen je Agent, doppelte oben. Gelesene mit geschätzten Tokens (~), die schwerste zuerst.
 
 ![Verbrauch](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-de-5.png)
 
