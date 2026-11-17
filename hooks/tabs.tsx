@@ -213,10 +213,12 @@ export function drawFiles(ui: Ui, o: ViewInput) {
   const everyone = o.s.agents.filter(n => n.changed?.length || n.read?.length)
   const withFiles = everyone.slice(-TAB_AGENTS)
   let budget = FILES_BUDGET
-  const fitted = (names: readonly string[] | undefined): string[] => {
+  const fitted = (names: readonly string[] | undefined, tokens?: Record<string, number>): string[] => {
     const kept: string[] = []
-    for (const name of [...(names ?? [])].reverse()) {
-      const text = shortName(name)
+    const order = tokens ? [...(names ?? [])].sort((x, y) => (tokens[x] ?? 0) - (tokens[y] ?? 0)) : [...(names ?? [])]
+    for (const name of order.reverse()) {
+      const estimate = tokens?.[name]
+      const text = estimate === undefined ? shortName(name) : `${shortName(name)} ~${fmtTokens(estimate, o.w.decimal)}`
       if (budget < text.length + 3) break
       budget -= text.length + 3
       kept.push(text)
@@ -225,12 +227,13 @@ export function drawFiles(ui: Ui, o: ViewInput) {
   }
   const newestFirst = [...withFiles].reverse()
   const changedOf = new Map(newestFirst.map(n => [n.id, fitted(n.changed)]))
-  const readOf = new Map(newestFirst.map(n => [n.id, fitted(n.read)]))
-  const list = (label: string, names: readonly string[] | undefined, kept: readonly string[]) => {
+  const readOf = new Map(newestFirst.map(n => [n.id, fitted(n.read, n.readTokens)]))
+  const list = (label: string, names: readonly string[] | undefined, kept: readonly string[], tokens?: Record<string, number>) => {
     const total = names?.length ?? 0
     const rest = total - kept.length
     const shown = [...kept, ...(rest > 0 ? [`+${rest}`] : [])]
-    return `${label} (${total})${shown.length ? `: ${shown.join(' · ')}` : ''}`
+    const sum = tokens ? Object.values(tokens).reduce((a, b) => a + b, 0) : 0
+    return `${label} (${total}${sum ? `, ~${fmtTokens(sum, o.w.decimal)}` : ''})${shown.length ? `: ${shown.join(' · ')}` : ''}`
   }
   return (
     <Box key="files-view" flexDirection="column" width={o.width} marginTop={1}>
@@ -255,7 +258,7 @@ export function drawFiles(ui: Ui, o: ViewInput) {
             </Text>
             <Text wrap="wrap">{list(o.w.changedFiles, n.changed, changedOf.get(n.id) ?? [])}</Text>
             <Text color={o.palette.dim} wrap="wrap">
-              {list(o.w.readFiles, n.read, readOf.get(n.id) ?? [])}
+              {list(o.w.readFiles, n.read, readOf.get(n.id) ?? [], n.readTokens)}
             </Text>
           </Box>
         ))

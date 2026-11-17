@@ -909,10 +909,25 @@ export function toolRan(s: AgentTreeState, input: { agentId?: string; label: str
   return fileNoted(counted, input.agentId, input.kind, input.file)
 }
 
-export function fileNoted(s: AgentTreeState, agentId: string, kind: ToolKind | undefined, file: string | undefined): AgentTreeState {
+export function fileNoted(s: AgentTreeState, agentId: string, kind: ToolKind | undefined, file: string | undefined, output?: string): AgentTreeState {
   const name = file === undefined ? '' : lastSegment(file)
   if (!name || (kind !== 'read' && kind !== 'change') || !findAgent(s, agentId)) return s
-  return withAgent(s, agentId, n => (kind === 'read' ? { ...n, read: remembered(n.read, name) } : { ...n, changed: remembered(n.changed, name) }))
+  if (kind === 'change') return withAgent(s, agentId, n => ({ ...n, changed: remembered(n.changed, name) }))
+  return withAgent(s, agentId, n => {
+    const names = remembered(n.read, name)
+    if (output === undefined && !n.readTokens) return { ...n, read: names }
+    return { ...n, read: names, readTokens: tokensKept(n.readTokens, names, name, output) }
+  })
+}
+
+function tokensKept(before: Record<string, number> | undefined, kept: readonly string[], name: string, output: string | undefined): Record<string, number> | undefined {
+  const after: Record<string, number> = {}
+  for (const file of kept) {
+    const known = before?.[file]
+    if (known !== undefined) after[file] = known
+  }
+  if (output !== undefined) after[name] = (after[name] ?? 0) + estimateTokens(output)
+  return Object.keys(after).length ? after : undefined
 }
 
 function statusOf(input: CompleteInput): AgentTreeStatus {

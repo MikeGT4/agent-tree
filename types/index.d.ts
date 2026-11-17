@@ -22,6 +22,7 @@ export type AgentTreeNode = {
   lastTool?: string
   tools?: string[]
   read?: string[]
+  readTokens?: Record<string, number>
   changed?: string[]
   clash?: { file: string; with: string }
   modelSince?: number

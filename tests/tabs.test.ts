@@ -247,6 +247,22 @@ describe('Größe der gezeichneten Tabs', () => {
     expect(drawn).toContain('datei-30.ts')
   })
 
+  test('gelesene Dateien stehen mit geschätzten Tokens da, die schwerste zuerst', () => {
+    let s = many(2)
+    s = fileNoted(s, 'a1', 'read', 'klein.ts', 'x'.repeat(40))
+    s = fileNoted(s, 'a1', 'read', 'package-lock.json', 'x'.repeat(48000))
+    s = fileNoted(s, 'a1', 'read', 'mittel.ts', 'x'.repeat(4000))
+    const drawn = JSON.stringify(drawTree(ui, tabChosen(s, 'files', 9), 90, 60, { frame: 0, animate: false, now: 9000, actions }))
+    expect(drawn).toContain('Gelesen (3, ~13k): package-lock.json ~12k · mittel.ts ~1k · klein.ts ~10')
+  })
+
+  test('ohne Schätzung bleibt die Zeile der gelesenen Dateien wie bisher', () => {
+    const s = fileNoted(many(2), 'a1', 'read', 'datei.ts')
+    const drawn = JSON.stringify(drawTree(ui, tabChosen(s, 'files', 9), 90, 60, { frame: 0, animate: false, now: 9000, actions }))
+    expect(drawn).toContain('Gelesen (1): datei.ts')
+    expect(drawn).not.toContain('~')
+  })
+
   test('zweihundert Agenten im Verbrauch bleiben unter der Grenze', () => {
     expect(size(many(200), 'usage')).toBeLessThan(60000)
   })

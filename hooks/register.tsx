@@ -1007,7 +1007,8 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     await noted
     if (succeeded(result)) {
-      await change($, s => fileNoted(s, agentId, kind, file)).catch(() => undefined)
+      const output = kind === 'read' ? (result as { text?: unknown }).text : undefined
+      await change($, s => fileNoted(s, agentId, kind, file, typeof output === 'string' ? output : undefined)).catch(() => undefined)
       if (path) await noteChange($, agentId, path).catch(() => undefined)
     }
     return result

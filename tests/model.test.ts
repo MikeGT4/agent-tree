@@ -55,6 +55,7 @@ import {
   toolKind,
   fileNameOf,
   FILES_KEPT,
+  fileNoted,
   CONTEXT_ALERT,
   MAIN,
   NEW_AGENTS,
@@ -1050,6 +1051,29 @@ describe('Dateien und Tätigkeit je Agent', () => {
     for (let i = 0; i <= FILES_KEPT; i++) s = toolRan(s, { agentId: 'a1', label: `Edit f${i}.ts`, kind: 'change', file: `f${i}.ts` }, 2 + i)
     expect(s.agents[0]?.changed?.length).toBe(FILES_KEPT)
     expect(s.agents[0]?.changed?.[0]).toBe('f1.ts')
+  })
+
+  test('fileNoted schätzt die Tokens einer gelesenen Datei aus dem Ergebnistext und zählt jedes Lesen dazu', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = fileNoted(s, 'a1', 'read', 'package-lock.json', 'x'.repeat(4000))
+    s = fileNoted(s, 'a1', 'read', 'api.ts', 'x'.repeat(40))
+    s = fileNoted(s, 'a1', 'read', 'package-lock.json', 'x'.repeat(400))
+    expect(s.agents[0]?.readTokens).toEqual({ 'package-lock.json': 1100, 'api.ts': 10 })
+  })
+
+  test('fileNoted schätzt nichts für geänderte Dateien und nichts ohne Ergebnistext', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = fileNoted(s, 'a1', 'change', 'api.ts', 'x'.repeat(400))
+    s = fileNoted(s, 'a1', 'read', 'b.ts')
+    expect(s.agents[0]?.readTokens).toBeUndefined()
+    expect(s.agents[0]?.read).toEqual(['b.ts'])
+  })
+
+  test('fileNoted vergisst die Schätzung einer Datei, die aus der Liste fällt', () => {
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    for (let i = 0; i <= FILES_KEPT; i++) s = fileNoted(s, 'a1', 'read', `f${i}.ts`, 'abcd')
+    expect(Object.keys(s.agents[0]?.readTokens ?? {}).length).toBe(FILES_KEPT)
+    expect(s.agents[0]?.readTokens?.['f0.ts']).toBeUndefined()
   })
 
   test('toolRan speichert keinen Pfad', () => {
