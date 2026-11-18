@@ -514,7 +514,8 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
   const note = w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text)
   await appendRow($, note)
   const parent = node.parentId ? current.agents.find(n => n.id === node.parentId) : undefined
-  if (parent?.status === 'running') await appendRow($, note, parent.id)
+  if (parent?.status === 'running' && codeMode) await $.session.send({ to: { agentId: parent.id }, text: note }).catch(() => undefined)
+  else if (parent?.status === 'running') await appendRow($, note, parent.id)
   return true
 }
 
@@ -639,6 +640,7 @@ async function settleUnread($: EngineInterface, s: AgentTreeState, agentId: stri
   const waiting = pendingCorrection(s, agentId)
   const node = s.agents.find(n => n.id === agentId)
   if (!waiting || !node) return
+  if (codeMode && waiting.via === 'send') return
   const w = wordsFor(lang)
   if (node.status === 'done' && waiting.via === 'append' && texts.length) {
     await change($, t => correctionResent(t, agentId, now))

@@ -1429,6 +1429,44 @@ describe('Korrektur', () => {
     await ui.unmount()
   })
 
+  test('Code Mode: der laufende Eltern-Agent erfährt die Korrektur per send, nicht per append', de, async ($, on) => {
+    const seen = engine(on, [], { codeMode: true })
+    await oneAgentWithAdvisor($)
+    await $.agent.spawn({ prompt: 'Prüfe.', description: 'Unterauftrag', subagentType: 'general-purpose', parentAgentId: 'sub-1' } as never)
+    await step($, { agentId: 'sub-2' })
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'detail:sub-2')
+    await ui.redraw()
+    await sayCommand($, 'Nur lesen', 'sub-2')
+    await ui.unmount()
+    expect(seen.appended.some(row => row.agentId === 'sub-1' || row.agentId === 'sub-2')).toBe(false)
+    expect(seen.sent.map(row => JSON.stringify(row.to))).toEqual(['"sub-2"', '"sub-1"'])
+    expect(seen.sent[1]?.text).toContain('Nur lesen')
+  })
+
+  test('Code Mode: endet der Agent vor dem Lesen, bleibt die Korrektur geschickt und wird nicht nachgeschickt', de, async ($, on) => {
+    const seen = engine(on, [], { codeMode: true })
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Nur lesen')
+    await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).not.toMatch(/nicht zugestellt/)
+    expect(text).toMatch(/Korrektur: geschickt/)
+    expect(seen.sent.length).toBe(1)
+    expect(seen.status.some(line => /nicht zugestellt/.test(line))).toBe(false)
+    await ui.unmount()
+  })
+
+  test('Code Mode: auch der kompakte Titel trägt das Kennzeichen', de, async ($, on) => {
+    engine(on, [], { codeMode: true })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90, 30))
+    expect(await screen(ui)).toMatch(/CODE MODE/)
+    await ui.unmount()
+  })
+
   test('ohne Code Mode kein Kennzeichen und kein Codeschritt', de, async ($, on) => {
     engine(on, [], { codeMode: false, stepTools: ['REPL'] })
     await oneAgentWithAdvisor($)

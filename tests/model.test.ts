@@ -237,6 +237,7 @@ describe('Datenmodell', () => {
     const marked = codeModeSeen(tree, true)
     expect([marked.codeMode, codeModeSeen(marked, true)]).toEqual([true, marked])
     expect(codeModeSeen(marked, false).codeMode).toBeUndefined()
+    expect([freshTree(marked, 2).codeMode, freshTree(tree, 2).codeMode]).toEqual([true, undefined])
     let s = spawned(createTree(0), spawn('a1'), 1)
     s = codeBlocksRan(s, 'a1', ['REPL', 'Poll', 'REPL'], 2)
     expect([s.agents[0]?.toolCount, s.agents[0]?.lastTool]).toEqual([2, 'REPL'])

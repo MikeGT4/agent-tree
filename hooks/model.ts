@@ -1034,6 +1034,7 @@ export function freshTree(from: AgentTreeState, now: number): AgentTreeState {
     ...(from.stopping ? { stopping: from.stopping.filter(id => alive.has(id)) } : {}),
     ...(from.stopSent ? { stopSent: from.stopSent.filter(id => alive.has(id)) } : {}),
     ...(from.corrections ? { corrections: without(from.corrections, gone) } : {}),
+    ...(from.codeMode ? { codeMode: true } : {}),
     ...(from.selected === MAIN || from.selected === NEW_AGENTS || (from.selected !== undefined && alive.has(from.selected)) ? { selected: from.selected } : {}),
   }
   const kept = withFast(from.main.limits ? withLimits(fresh, from.main.limits) : fresh, from.main.fast)

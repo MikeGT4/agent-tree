@@ -943,7 +943,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       <Box key="title" flexShrink={1}>
         {tight ? (
           <Text bold size={SIZE.title} wrap="truncate-end">
-            {`AGENT TREE${mainModel ? ` · ${mainModel.toUpperCase()}` : ''} · ${verb}`}
+            {`AGENT TREE${mainModel ? ` · ${mainModel.toUpperCase()}` : ''} · ${verb}${s.codeMode ? ` · ${w.codeModeTag}` : ''}`}
           </Text>
         ) : (
           <Text bold size={SIZE.title} wrap="truncate-end">
