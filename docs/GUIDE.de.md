@@ -18,7 +18,7 @@ Kasten je Unteragent: Aufgabe, aktueller Schritt, Kontext (gelb ab 70 %, rot ab 
 
 Kasten anklicken, oder ctrl+x tab, Tab, Enter: Stoppen (s), Schreiben, Modell, Denkstufe, Details.
 
-Schreiben füllt deine Eingabe, der Agent liest sie beim nächsten Schritt.
+Schreiben füllt deine Eingabe, der Agent liest sie beim nächsten Schritt. Ohne Code Mode gibt er nicht ab, bevor er sie gelesen hat.
 
 e: Denkstufe der Hauptsitzung, m: neue Unteragenten, a: Aussehen.
 

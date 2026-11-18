@@ -2,7 +2,7 @@
 import { isNewer } from './update.ts'
 import type { Lang } from './words.ts'
 
-export const VERSION = '0.7.8'
+export const VERSION = '0.7.9'
 export const SEEN_VERSION_KEY = 'seenVersion'
 export const NOTICE_MS = 3000
 export const NOTICE_LINES = 3
@@ -15,6 +15,10 @@ export const NEWS: Readonly<Record<string, Readonly<Record<Lang, readonly string
   '0.7.8': {
     de: ['Zeigt nach einem Update, was neu ist'],
     en: ['Shows what is new after an update'],
+  },
+  '0.7.9': {
+    de: ['Nachrichten an laufende Agenten kommen zuverlässig an'],
+    en: ['Messages to running agents arrive reliably'],
   },
 }
 

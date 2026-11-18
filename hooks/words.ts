@@ -115,7 +115,6 @@ export type Words = {
   codeModeTag: string
   mainNote: (agent: string, text: string) => string
   mainNoteLost: (agent: string) => string
-  resendFrame: (text: string) => string
   correctionWaiting: (tool: string) => string
   correctionFailedStatus: string
   correctionLabel: string
@@ -311,7 +310,6 @@ export const WORDS: Record<Lang, Words> = {
     mainNote: (agent, text) =>
       `Der Nutzer hat dem Unteragenten ${agent} über Agent Tree geschrieben: „${text}“. Sein Ergebnis kann deshalb vom Auftrag abweichen.`,
     mainNoteLost: agent => `Hinweis: Die Nachricht des Nutzers an ${agent} ist nicht mehr angekommen; sein Ergebnis berücksichtigt sie nicht.`,
-    resendFrame: text => `Diese Nachricht kam vor deinem Abschluss an und blieb ungelesen:\n\n${text}`,
     correctionWaiting: tool =>
       `Bevor du abschließt: Der Nutzer hat dir eine neue Nachricht geschrieben, sie steht oben. Setz sie um und ruf danach ${tool} erneut auf, mit einem Bericht, der sie berücksichtigt.`,
     correctionFailedStatus: 'Agent Tree: Korrektur nicht zugestellt',
@@ -512,7 +510,6 @@ export const WORDS: Record<Lang, Words> = {
     mainNote: (agent, text) =>
       `The user wrote to the sub-agent ${agent} via Agent Tree: "${text}". Its result may differ from the task for that reason.`,
     mainNoteLost: agent => `Note: the user's message to ${agent} did not arrive; its result does not reflect it.`,
-    resendFrame: text => `This message arrived before you finished and was not read:\n\n${text}`,
     correctionWaiting: tool => `Before you finish: the user sent you a new message, shown above. Act on it, then call ${tool} again with a report that reflects it.`,
     correctionFailedStatus: 'Agent Tree: correction not delivered',
     correctionLabel: 'Correction',

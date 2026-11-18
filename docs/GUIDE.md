@@ -18,7 +18,7 @@ One box per sub-agent: task, current step, context (yellow from 70%, red from 85
 
 Click a box, or ctrl+x tab, Tab, Enter: Stop (s), Write, Model, Effort, Details.
 
-Write fills your prompt, read at the agent's next step.
+Write fills your prompt, read at the agent's next step. Outside Code Mode the agent does not hand back before it has read it.
 
 e: main session effort, m: new sub-agents, a: look.
 
