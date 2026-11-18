@@ -48,6 +48,10 @@ Help: keys, signs, commands.
 
 When Claude Code runs in Code Mode, the title shows "CODE MODE". Each code block an agent runs counts as a step ("runs code"), and the calls inside it appear one by one. Stop: the running call finishes, and every further call from the agent's code is refused, even if the code outlives the agent. Write: the message reaches the running agent. If it ends before reading it, the message stays "sent"; after a stop it counts as "not delivered".
 
+## After an update
+
+When Agent Tree starts in a new version for the first time, a card shows in the pane for 3 seconds: the old and new version number and what is new. Click "continue" or type to close it earlier. A first install shows no card.
+
 ## What it gives you
 
 Stop one agent, not the whole session.

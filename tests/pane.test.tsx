@@ -876,6 +876,80 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
+  test('nach einem Update steht nach dem Intro 3 s die Karte mit dem Neuen, dann die Leiste', introOn, async ($, on) => {
+    const { clock } = await introStart($, on, { seenVersion: '0.7.7' })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(2200)
+    await ui.redraw()
+    const card = await screen(ui)
+    expect(card).toMatch(/AGENT TREE 0\.7\.8/)
+    expect(card).toMatch(/wurde aktualisiert/)
+    expect(card).toMatch(/0\.7\.7 /)
+    expect(card).toMatch(/Zeigt nach einem Update, was neu ist/)
+    expect(card).not.toMatch(/Läuft im Code Mode/)
+    expect(card).not.toMatch(/Sitzungsprotokoll/)
+    await clock.advance(3100)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('ohne Intro kommt die Karte direkt, weiter führt zur Leiste', de, async ($, on) => {
+    await introStart($, on, { seenVersion: '0.7.6' })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    const card = await screen(ui)
+    expect(card).toMatch(/AGENT TREE 0\.7\.8/)
+    expect(card).toMatch(/Läuft im Code Mode von Claude Code/)
+    await ui.press({ key: 'notice:skip' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('bei einer Erstinstallation keine Karte, die Version wird gemerkt', de, async ($, on) => {
+    const { seen } = await introStart($, on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    expect(seen.storeSets).toContainEqual({ key: 'seenVersion', value: '0.7.8' })
+    await ui.unmount()
+  })
+
+  test('bei gleicher Version keine Karte und kein neuer Eintrag', de, async ($, on) => {
+    const { seen } = await introStart($, on, { seenVersion: '0.7.8' })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    expect(seen.storeSets.some(set => set.key === 'seenVersion')).toBe(false)
+    await ui.unmount()
+  })
+
+  test('ein bisheriger Nutzer ohne gemerkte Version sieht die Karte ohne alte Nummer', de, async ($, on) => {
+    await introStart($, on, { star: 2 })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    const card = await screen(ui)
+    expect(card).toMatch(/AGENT TREE 0\.7\.8/)
+    expect(card).not.toMatch(/0\.7\.7 /)
+    expect(card).not.toMatch(/▶/)
+    await ui.unmount()
+  })
+
+  test('Tippen beendet die Karte', de, async ($, on) => {
+    await introStart($, on, { seenVersion: '0.7.7' })
+    on('prompt.edit', (_$, e) => ({ text: e.text.slice(0, e.start) + e.inputText + e.text.slice(e.end), cursor: e.start + e.inputText.length }))
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/AGENT TREE 0\.7\.8/)
+    const host = $.prompt as unknown as { edit: (input: unknown) => Promise<unknown> }
+    await host.edit({ origin: { kind: 'composer' }, text: '', cursor: 0, start: 0, end: 0, inputText: 'h' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
   test('ab Werk kommt das Logo', { options: { language: 'de' } }, async ($, on) => {
     const { clock } = await introStart($, on)
     await startSession($)

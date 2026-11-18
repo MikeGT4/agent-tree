@@ -5,6 +5,9 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { AgentTreeLook, AgentTreeReport, AgentTreeState } from '../types'
 import { INTRO_MS } from './logo.ts'
 import { drawIntro } from './intro.tsx'
+import { drawNotice } from './notice.tsx'
+import { NOTICE_MS, SEEN_VERSION_KEY, VERSION, noticeFor } from './news.ts'
+import type { UpdateNotice } from './news.ts'
 import { introInfo } from './intro-model.ts'
 import type { IntroInfo } from './intro-model.ts'
 import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES, lookFrom } from './looks.ts'
@@ -128,6 +131,11 @@ const changers: Map<string, { file: string; ids: Set<string> }> = new Map()
 let introRun = 0
 let introShown: IntroInfo | undefined
 let introModelSetting: string | undefined
+let notice: UpdateNotice | undefined
+let noticeTicker: Timer | undefined
+let noticeOpenedAt: number | undefined
+let noticeStartedAt: number | undefined
+let noticeRun = 0
 let animate = true
 let lang: Lang = 'en'
 let stoppingIds = new Set<string>()
@@ -311,6 +319,47 @@ async function endIntro($: EngineInterface): Promise<void> {
   introTicker.cancel()
   introTicker = undefined
   introRun++
+  startNotice($, await clock($))
+  await update($, introBeat, n => (n + 1) % 1_000_000)
+}
+
+async function prepareNotice($: EngineInterface): Promise<void> {
+  const seen = await $.store.get(SEEN_VERSION_KEY).catch(() => undefined)
+  const updated = await $.store.get(UPDATE_KEY).catch(() => undefined)
+  const starred = await $.store.get(STAR_KEY).catch(() => undefined)
+  notice = noticeFor(seen, VERSION, updated !== undefined || starred !== undefined, lang)
+  if (seen !== VERSION) await $.store.set(SEEN_VERSION_KEY, VERSION).catch(() => undefined)
+}
+
+function startNotice($: EngineInterface, now: number): void {
+  if (!notice || noticeTicker) return
+  const run = ++noticeRun
+  noticeOpenedAt = now
+  noticeStartedAt = undefined
+  try {
+    noticeTicker = $.clock.every(INTRO_FRAME_MS, () => {
+      void noticeTick($, run).catch(() => undefined)
+    })
+  } catch {
+    noticeTicker = undefined
+    notice = undefined
+  }
+}
+
+async function noticeTick($: EngineInterface, run: number): Promise<void> {
+  const now = await clock($)
+  if (run !== noticeRun) return
+  const over = noticeStartedAt === undefined ? now - (noticeOpenedAt ?? now) >= INTRO_WAIT_MS : now - noticeStartedAt >= NOTICE_MS
+  if (over) await endNotice($)
+  else await update($, introBeat, n => (n + 1) % 1_000_000)
+}
+
+async function endNotice($: EngineInterface): Promise<void> {
+  notice = undefined
+  if (!noticeTicker) return
+  noticeTicker.cancel()
+  noticeTicker = undefined
+  noticeRun++
   await update($, introBeat, n => (n + 1) % 1_000_000)
 }
 
@@ -780,7 +829,9 @@ export const register: Register = (on, options) => {
     await readFast($).catch(() => undefined)
     await readMainModels($).catch(() => undefined)
     await catchUp($, await clock($), keep).catch(() => undefined)
+    if (e.isInteractive !== false) await prepareNotice($).catch(() => undefined)
     await maybeStartIntro($, e.isInteractive !== false).catch(() => undefined)
+    if (!introTicker) startNotice($, await clock($))
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
     if (e.isInteractive !== false) {
       if (await starDue($)) $.ui.toast(wordsFor(lang).starHint)
@@ -1117,6 +1168,10 @@ export const register: Register = (on, options) => {
       )
       if (intro) return intro
     }
+    if (noticeTicker && notice) {
+      noticeStartedAt ??= now
+      return drawNotice({ Box, Text, Button } as never, e.props.bodyColumns, notice, now - noticeStartedAt, { palette: PALETTES[look.colors], animate, words: wordsFor(lang) }, () => void endNotice($).catch(() => undefined))
+    }
     return drawTree({ Box, Text, Button, Markdown } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {
       frame: tick,
       animate,
@@ -1136,12 +1191,17 @@ export const register: Register = (on, options) => {
       await endIntro($).catch(() => undefined)
       return { element: e.element }
     }
+    if (e.element.startsWith('notice:skip')) {
+      await endNotice($).catch(() => undefined)
+      return { element: e.element }
+    }
     return pressKey(actionsFor($), e.element) ? { element: e.element } : next(e)
   })
 
   on('prompt.edit', async ($, e, next) => {
     const result = await next(e)
     if (introTicker) void endIntro($).catch(() => undefined)
+    else if (noticeTicker) void endNotice($).catch(() => undefined)
     return result
   })
 }

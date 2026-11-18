@@ -48,6 +48,10 @@ Hilfe: Tasten, Zeichen, Befehle.
 
 Läuft Claude Code im Code Mode, steht „CODE MODE“ im Titel. Jeder Codeblock eines Agenten zählt als Schritt („führt Code aus“), die Aufrufe darin erscheinen einzeln. Stoppen: Der laufende Aufruf endet noch, jeder weitere aus dem Code des Agenten wird abgelehnt, auch wenn der Code den Agenten überdauert. Schreiben: Die Nachricht erreicht den laufenden Agenten. Endet er, bevor er sie liest, bleibt sie als „geschickt“ stehen; nach einem Stopp gilt sie als „nicht zugestellt“.
 
+## Nach einem Update
+
+Startet Agent Tree zum ersten Mal in einer neuen Version, steht für 3 Sekunden eine Karte in der Leiste: alte und neue Versionsnummer und was neu ist. Ein Klick auf „weiter“ oder Tippen schließt sie früher. Nach einer Erstinstallation kommt keine Karte.
+
 ## Was es dir bringt
 
 Einen Agenten stoppen statt der ganzen Sitzung.
