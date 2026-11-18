@@ -14,7 +14,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; holdAppend?: Promise<void>; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; fast?: boolean; fastFails?: boolean; model?: string; modelOptions?: string[]; modelFails?: boolean; modelLocked?: boolean; codeMode?: boolean; stepTools?: string[] } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; fast?: boolean; fastFails?: boolean; model?: string; modelOptions?: string[]; modelFails?: boolean; modelLocked?: boolean; codeMode?: boolean; stepTools?: string[] } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -112,7 +112,6 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   on('session.append', async (_, e, next) => {
     const row = e as unknown as Appended
     if (refuse.append && row.agentId) return { deny: 'no running loop' } as never
-    if (refuse.holdAppend && row.agentId) await refuse.holdAppend
     appended.push(row)
     return next(e)
   })
@@ -1519,7 +1518,7 @@ describe('Korrektur', () => {
     expect(seen.sent[1]?.text).toContain('Nur lesen')
   })
 
-  test('Code Mode: endet der Agent vor dem Lesen, bleibt die Korrektur geschickt und wird nicht nachgeschickt', de, async ($, on) => {
+  test('Code Mode: endet der Agent vor dem Lesen, geht die Korrektur einmal nach und bleibt geschickt', de, async ($, on) => {
     const seen = engine(on, [], { codeMode: true })
     await oneAgentWithAdvisor($)
     const ui = await openDetail($)
@@ -1529,7 +1528,8 @@ describe('Korrektur', () => {
     const text = await screen(ui)
     expect(text).not.toMatch(/nicht zugestellt/)
     expect(text).toMatch(/Korrektur: geschickt/)
-    expect(seen.sent.length).toBe(1)
+    expect(seen.sent.length).toBe(2)
+    expect(seen.sent[1]?.text).toMatch(/blieb ungelesen[\s\S]*Nur lesen/)
     expect(seen.status.some(line => /nicht zugestellt/.test(line))).toBe(false)
     await ui.unmount()
   })
@@ -1704,7 +1704,7 @@ describe('Korrektur', () => {
     const ui = await openDetail($)
     await sayCommand($, 'x'.repeat(5000))
     await ui.unmount()
-    expect(text(seen.appended[0])).toContain('x'.repeat(5000))
+    expect(seen.sent[0]?.text).toContain('x'.repeat(5000))
   })
 })
 
@@ -1737,10 +1737,10 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await sayCommand($, 'Nimm b.ts')
     await ui.unmount()
     await $.turn.complete(finished)
-    expect(seen.sent.length).toBe(1)
-    expect(seen.sent[0]?.text).toContain('Nimm b.ts')
+    expect(seen.sent.length).toBe(2)
+    expect(seen.sent[1]?.text).toMatch(/blieb ungelesen[\s\S]*Nimm b\.ts/)
     await $.turn.complete(finished)
-    expect(seen.sent.length).toBe(1)
+    expect(seen.sent.length).toBe(2)
   })
 
   test('nach einem angeforderten Stopp geht nichts weiter an den Agenten', de, async ($, on) => {
@@ -1768,17 +1768,45 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     expect(JSON.stringify(handback)).not.toMatch(/deny/)
   })
 
-  test('endet der Agent, bevor er die Korrektur liest, bleibt sie geschickt und nichts geht doppelt', de, async ($, on) => {
-    const seen = engine(on)
+  test('scheitert das Nachschicken, gilt die Korrektur als nicht zugestellt und die Hauptsitzung erfährt es', de, async ($, on) => {
+    const refuse = { send: false }
+    const seen = engine(on, [], refuse)
     await oneAgentWithAdvisor($)
     const ui = await openDetail($)
     await sayCommand($, 'Nimm b.ts')
+    refuse.send = true
     await $.turn.complete(finished)
     await ui.redraw()
-    expect(await screen(ui)).toMatch(/Korrektur: geschickt/)
-    expect(seen.sent.length).toBe(1)
-    expect(seen.appended.some(row => (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(false)
+    expect(await screen(ui)).toMatch(/Korrektur: nicht zugestellt/)
+    expect(seen.appended.some(row => !row.agentId && (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(true)
     await ui.unmount()
+  })
+
+  test('scheitert eine zweite Korrektur, geht beim Ende nur die erste nach', de, async ($, on) => {
+    const refuse = { send: false }
+    const seen = engine(on, [], refuse)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Erste Korrektur')
+    refuse.send = true
+    await sayCommand($, 'Zweite Korrektur')
+    refuse.send = false
+    await ui.unmount()
+    await $.turn.complete(finished)
+    expect(seen.sent.length).toBe(2)
+    expect(seen.sent[1]?.text).toContain('Erste Korrektur')
+    expect(seen.sent[1]?.text).not.toContain('Zweite Korrektur')
+  })
+
+  test('endet der Eltern-Agent, während die Korrektur an sein Kind läuft, bekommt er keine Notiz', de, async ($, on) => {
+    const refuse: { onSend?: () => Promise<unknown> } = {}
+    const seen = engine(on, [], refuse)
+    await oneAgentWithAdvisor($)
+    await $.agent.spawn({ prompt: 'Prüfe.', description: 'Unterauftrag', subagentType: 'general-purpose', parentAgentId: 'sub-1' } as never)
+    await step($, { agentId: 'sub-2' })
+    refuse.onSend = () => $.turn.complete(finished)
+    await sayCommand($, 'Nur lesen', 'sub-2')
+    expect(seen.sent.some(row => JSON.stringify(row.to).includes('sub-1'))).toBe(false)
   })
 
   test('nach einem Stopp bleibt keine ungelesene Korrektur als geschickt stehen', de, async ($, on) => {
@@ -1795,16 +1823,17 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await ui.unmount()
   })
 
-  test('mehrere Korrekturen gehen einzeln per send, beim Ende geht nichts nach', de, async ($, on) => {
+  test('mehrere Korrekturen gehen einzeln per send, ungelesene beim Ende zusammen nach', de, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
     const ui = await openDetail($)
     await sayCommand($, 'Erstens A')
     await sayCommand($, 'Zweitens B')
     await ui.unmount()
-    await $.turn.complete(finished)
-    expect(seen.sent.length).toBe(2)
     expect([seen.sent[0]?.text, seen.sent[1]?.text].join('|')).toMatch(/Erstens A[\s\S]*\|[\s\S]*Zweitens B/)
+    await $.turn.complete(finished)
+    expect(seen.sent.length).toBe(3)
+    expect(seen.sent[2]?.text).toMatch(/blieb ungelesen[\s\S]*Erstens A[\s\S]*Zweitens B/)
   })
 
   test('nach /agent-tree clear geht eine ungelesene Korrektur an einen laufenden Agenten nicht verloren', de, async ($, on) => {
@@ -1815,7 +1844,8 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await ui.unmount()
     await $.command.run({ command: 'agent-tree', args: 'clear', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
     await $.turn.complete(finished)
-    expect(seen.sent.length).toBe(1)
+    expect(seen.sent.length).toBe(2)
+    expect(seen.sent[1]?.text).toMatch(/blieb ungelesen[\s\S]*Nimm b\.ts/)
   })
 
   test('in der Zeilenansicht steht beim Stoppen „hält an“', de, async ($, on) => {
@@ -1859,12 +1889,11 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
   })
 
   test('scheitert eine zweite Korrektur, bleibt die erste offen', de, async ($, on) => {
-    const refuse = { append: false, send: false }
+    const refuse = { send: false }
     engine(on, [], refuse)
     await oneAgentWithAdvisor($)
     const ui = await openDetail($)
     await sayCommand($, 'Erste Korrektur')
-    refuse.append = true
     refuse.send = true
     await sayCommand($, 'Zweite Korrektur')
     await ui.redraw()

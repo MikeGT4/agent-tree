@@ -21,6 +21,7 @@ import {
   choicesOf,
   chosen,
   clashed,
+  correctionResent,
   CODE_TOOL,
   codeBlocksRan,
   codeModeOf,
@@ -410,6 +411,10 @@ async function remember($: EngineInterface, agentId: string, text: string): Prom
   await update($, unreadTexts, texts => ({ ...texts, [agentId]: [...(texts[agentId] ?? []), text] }))
 }
 
+async function unremember($: EngineInterface, agentId: string, text: string): Promise<void> {
+  await update($, unreadTexts, texts => ({ ...texts, [agentId]: (texts[agentId] ?? []).filter(kept => kept !== text) }))
+}
+
 async function forget($: EngineInterface, agentId: string): Promise<void> {
   await update($, unreadTexts, texts => withoutTexts(texts, id => id === agentId))
 }
@@ -550,7 +555,7 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
   if (!running) await change($, t => correctionSent(t, { agentId, text, via: 'send', recount: false }, now))
   const sent = await $.session.send({ to: { agentId }, text: framed }).catch(() => undefined)
   if (!sent?.isDelivered) {
-    await forget($, agentId)
+    await unremember($, agentId, framed)
     await change($, t => correctionFailed(t, { agentId, text, before }, now))
     $.ui.status(w.correctionFailedStatus)
     return false
@@ -558,7 +563,7 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
   await change($, t => (running ? correctionSent(t, { agentId, text, via: 'send' }, now) : correctionCounted(t, agentId)))
   const note = w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text)
   await appendRow($, note)
-  const parent = node.parentId ? current.agents.find(n => n.id === node.parentId) : undefined
+  const parent = node.parentId ? (await latest($)).agents.find(n => n.id === node.parentId) : undefined
   if (parent?.status === 'running') await $.session.send({ to: { agentId: parent.id }, text: note }).catch(() => undefined)
   return true
 }
@@ -684,8 +689,12 @@ async function settleUnread($: EngineInterface, s: AgentTreeState, agentId: stri
   const waiting = pendingCorrection(s, agentId)
   const node = s.agents.find(n => n.id === agentId)
   if (!waiting || !node) return
-  if (waiting.via === 'send' && node.status === 'done' && texts.length) return
   const w = wordsFor(lang)
+  if (node.status === 'done' && texts.length) {
+    await change($, t => correctionResent(t, agentId, now))
+    const sent = await $.session.send({ to: { agentId }, text: w.resendFrame(texts.join('\n\n')) }).catch(() => undefined)
+    if (sent?.isDelivered) return
+  }
   await change($, t => correctionFailed(t, { agentId, text: waiting.text, count: waiting.count }, now))
   $.ui.status(w.correctionFailedStatus)
   await appendRow($, w.mainNoteLost(`${typeLabel(node.type)} · ${node.description}`))

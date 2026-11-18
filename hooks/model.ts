@@ -178,6 +178,14 @@ export function correctionFailed(
   return logged(next, 'agent', 'correctionFailed', { type: node.type, text: cut(oneLine(input.text), LOG_EXCERPT) }, now)
 }
 
+export function correctionResent(s: AgentTreeState, agentId: string, now: number): AgentTreeState {
+  const node = findAgent(s, agentId)
+  const current = s.corrections?.[agentId]
+  if (!node || !current) return s
+  const correction: AgentTreeCorrection = { ...current, via: 'send', state: 'sent', at: now, held: undefined }
+  return logged({ ...s, corrections: { ...s.corrections, [agentId]: correction } }, 'agent', 'correctionResent', { type: node.type }, now)
+}
+
 export function correctionCounted(s: AgentTreeState, agentId: string): AgentTreeState {
   const current = s.corrections?.[agentId]
   if (!current) return s

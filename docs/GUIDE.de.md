@@ -18,7 +18,7 @@ Kasten je Unteragent: Aufgabe, aktueller Schritt, Kontext (gelb ab 70 %, rot ab 
 
 Kasten anklicken, oder ctrl+x tab, Tab, Enter: Stoppen (s), Schreiben, Modell, Denkstufe, Details.
 
-Schreiben füllt deine Eingabe, der Agent liest sie beim nächsten Schritt. Ohne Code Mode gibt er nicht ab, bevor er sie gelesen hat.
+Schreiben füllt deine Eingabe, der Agent liest sie beim nächsten Schritt. Ohne Code Mode hält Agent Tree seine Abgabe einmal an, bis er sie gelesen hat; endet er trotzdem vorher, schickt Agent Tree sie einmal nach.
 
 e: Denkstufe der Hauptsitzung, m: neue Unteragenten, a: Aussehen.
 
@@ -46,7 +46,7 @@ Hilfe: Tasten, Zeichen, Befehle und was zuletzt neu ist.
 
 ## Code Mode
 
-Läuft Claude Code im Code Mode, steht „CODE MODE“ im Titel. Jeder Codeblock eines Agenten zählt als Schritt („führt Code aus“), die Aufrufe darin erscheinen einzeln. Stoppen: Der laufende Aufruf endet noch, jeder weitere aus dem Code des Agenten wird abgelehnt, auch wenn der Code den Agenten überdauert. Schreiben: Die Nachricht erreicht den laufenden Agenten. Endet er, bevor er sie liest, bleibt sie als „geschickt“ stehen; nach einem Stopp gilt sie als „nicht zugestellt“.
+Läuft Claude Code im Code Mode, steht „CODE MODE“ im Titel. Jeder Codeblock eines Agenten zählt als Schritt („führt Code aus“), die Aufrufe darin erscheinen einzeln. Stoppen: Der laufende Aufruf endet noch, jeder weitere aus dem Code des Agenten wird abgelehnt, auch wenn der Code den Agenten überdauert. Schreiben: Die Nachricht erreicht den laufenden Agenten. Endet er, bevor er sie liest, schickt Agent Tree sie einmal nach; nach einem Stopp gilt sie als „nicht zugestellt“.
 
 ## Nach einem Update
 
