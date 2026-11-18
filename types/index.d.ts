@@ -151,6 +151,7 @@ export type AgentTreeState = {
   lookOpen?: boolean
   selected?: string
   orphans?: Record<string, AgentTreeOrphanEnd>
+  codeMode?: boolean
   main: AgentTreeMain
   agents: AgentTreeNode[]
   advisor: AgentTreeAdvisor

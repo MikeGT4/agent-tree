@@ -18,6 +18,10 @@ import {
   choicesOf,
   chosen,
   clashed,
+  CODE_TOOL,
+  codeBlocksRan,
+  codeModeOf,
+  codeModeSeen,
   fileNoted,
   closed,
   completed,
@@ -127,6 +131,7 @@ let introModelSetting: string | undefined
 let animate = true
 let lang: Lang = 'en'
 let stoppingIds = new Set<string>()
+let codeMode = false
 let stopSentIds = new Set<string>()
 let lastAdvisor = 'opus'
 let advisorCommand = true
@@ -491,8 +496,8 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
   }
   const before = current.corrections?.[agentId]
   const now = await clock($)
-  const framed = w.correctionFrame(text, HANDBACK)
-  if (node.status === 'running' && (await appendRow($, framed, agentId))) {
+  const framed = codeMode ? w.correctionFrameCode(text) : w.correctionFrame(text, HANDBACK)
+  if (!codeMode && node.status === 'running' && (await appendRow($, framed, agentId))) {
     await remember($, agentId, framed)
     await change($, t => correctionSent(t, { agentId, text, via: 'append' }, now))
   } else {
@@ -749,6 +754,9 @@ export const register: Register = (on, options) => {
     standing.clear()
     changers.clear()
     const result = await next(e)
+    const tools = await $.tool.list().catch(() => [])
+    codeMode = codeModeOf(tools.map(t => t.name))
+    await change($, s => codeModeSeen(s, codeMode)).catch(() => undefined)
     if (options.language !== 'de' && options.language !== 'en') {
       lang = resolveLang(options.language, await $.settings.read({ key: 'language' }).catch(() => undefined))
     }
@@ -851,9 +859,10 @@ export const register: Register = (on, options) => {
       const report = wordsFor(lang).stopAnswer(before.agents.find(n => n.id === agentId)?.toolCount ?? 0)
       const first = !wasStopSent(before, agentId)
       if (first) await change($, s => stopSent(s, agentId)).catch(() => undefined)
-      const stopReason = first ? ('tool_use' as const) : ('end_turn' as const)
+      const handsBack = first && !codeMode
+      const stopReason = handsBack ? ('tool_use' as const) : ('end_turn' as const)
       yield { kind: 'text' as const, index: 0, text: report }
-      if (first) {
+      if (handsBack) {
         yield { kind: 'tool' as const, index: 1, id: handbackId(), name: HANDBACK }
         yield { kind: 'input' as const, index: 1, json: JSON.stringify({ message: report }) }
       }
@@ -862,7 +871,7 @@ export const register: Register = (on, options) => {
         turnId: e.turnId,
         index: e.index,
         answer: report,
-        toolUses: first ? [{ name: HANDBACK, input: { message: report } }] : [],
+        toolUses: handsBack ? [{ name: HANDBACK, input: { message: report } }] : [],
         stopReason,
         usage: null,
       }
@@ -899,6 +908,8 @@ export const register: Register = (on, options) => {
       .filter(use => use.name === 'advisor')
       .map(use => ({ id: use.id, startedAt: use.startedAt, endedAt: use.endedAt }))
     const now = await clock($)
+    const used = (result.toolUses ?? []).map(use => use.name)
+    if (agentId && codeMode && used.includes(CODE_TOOL)) await change($, s => codeBlocksRan(s, agentId, used, now)).catch(() => undefined)
     await change($, s =>
       stepped(
         s,

@@ -44,6 +44,10 @@ Verlauf: jedes Ereignis, nach Quelle.
 
 Hilfe: Tasten, Zeichen, Befehle.
 
+## Code Mode
+
+Läuft Claude Code im Code Mode, steht „CODE MODE“ im Titel. Jeder Codeblock eines Agenten zählt als Schritt („führt Code aus“), die Aufrufe darin erscheinen einzeln. Stoppen und Schreiben funktionieren wie sonst: Ein gestoppter Agent beendet den laufenden Aufruf, alle weiteren im Code werden abgelehnt.
+
 ## Was es dir bringt
 
 Einen Agenten stoppen statt der ganzen Sitzung.

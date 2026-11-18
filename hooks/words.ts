@@ -107,6 +107,8 @@ export type Words = {
   introPlaying: string
   introSkip: string
   correctionFrame: (text: string, tool: string) => string
+  correctionFrameCode: (text: string) => string
+  codeModeTag: string
   mainNote: (agent: string, text: string) => string
   mainNoteLost: (agent: string) => string
   resendFrame: (text: string) => string
@@ -295,6 +297,9 @@ export const WORDS: Record<Lang, Words> = {
     introSkip: 'überspringen',
     correctionFrame: (text, tool) =>
       `Nachricht des Nutzers über Agent Tree: ${text}\n\nSie gilt ab jetzt für deinen Auftrag. Berücksichtige sie bei der weiteren Arbeit und in deinem Bericht über ${tool}.`,
+    correctionFrameCode: text =>
+      `Nachricht des Nutzers über Agent Tree: ${text}\n\nSie gilt ab jetzt für deinen Auftrag. Berücksichtige sie bei der weiteren Arbeit und in deinem Abschlussbericht.`,
+    codeModeTag: 'CODE MODE',
     mainNote: (agent, text) =>
       `Der Nutzer hat dem Unteragenten ${agent} über Agent Tree geschrieben: „${text}“. Sein Ergebnis kann deshalb vom Auftrag abweichen.`,
     mainNoteLost: agent => `Hinweis: Die Nachricht des Nutzers an ${agent} ist nicht mehr angekommen; sein Ergebnis berücksichtigt sie nicht.`,
@@ -304,7 +309,7 @@ export const WORDS: Record<Lang, Words> = {
     correctionFailedStatus: 'Agent Tree: Korrektur nicht zugestellt',
     correctionLabel: 'Korrektur',
     correction: { sent: 'geschickt', read: 'gelesen', failed: 'nicht zugestellt' },
-    toolWords: { SubagentHandback: 'Antwort übergeben' },
+    toolWords: { SubagentHandback: 'Antwort übergeben', REPL: 'führt Code aus' },
     activity: {
       read: x => `liest ${x}`,
       change: x => `ändert ${x}`,
@@ -489,6 +494,9 @@ export const WORDS: Record<Lang, Words> = {
     introSkip: 'skip',
     correctionFrame: (text, tool) =>
       `Message from the user via Agent Tree: ${text}\n\nIt applies to your task from now on. Take it into account in your remaining work and in your report via ${tool}.`,
+    correctionFrameCode: text =>
+      `Message from the user via Agent Tree: ${text}\n\nIt applies to your task from now on. Take it into account in your remaining work and in your final report.`,
+    codeModeTag: 'CODE MODE',
     mainNote: (agent, text) =>
       `The user wrote to the sub-agent ${agent} via Agent Tree: "${text}". Its result may differ from the task for that reason.`,
     mainNoteLost: agent => `Note: the user's message to ${agent} did not arrive; its result does not reflect it.`,
@@ -497,7 +505,7 @@ export const WORDS: Record<Lang, Words> = {
     correctionFailedStatus: 'Agent Tree: correction not delivered',
     correctionLabel: 'Correction',
     correction: { sent: 'sent', read: 'read', failed: 'not delivered' },
-    toolWords: { SubagentHandback: 'answer handed back' },
+    toolWords: { SubagentHandback: 'answer handed back', REPL: 'runs code' },
     activity: {
       read: x => `reads ${x}`,
       change: x => `edits ${x}`,

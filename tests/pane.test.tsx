@@ -13,7 +13,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; holdAppend?: Promise<void>; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; fast?: boolean; fastFails?: boolean; model?: string; modelOptions?: string[]; modelFails?: boolean; modelLocked?: boolean } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; holdAppend?: Promise<void>; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; fast?: boolean; fastFails?: boolean; model?: string; modelOptions?: string[]; modelFails?: boolean; modelLocked?: boolean; codeMode?: boolean; stepTools?: string[] } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -37,6 +37,10 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
     toasts.push((e as { text: string }).text)
     return { value: undefined } as never
   })
+  if (refuse.codeMode !== undefined) {
+    const names = refuse.codeMode ? ['Bash', 'Read', 'REPL', 'Poll'] : ['Bash', 'Read']
+    on('tool.list', () => ({ value: names.map(name => ({ name, description: name, isMcp: false })) }) as never)
+  }
   on('command.list', () =>
     ({ value: refuse.noAdvisor ? [] : [{ name: 'advisor', description: 'Advisor', source: 'builtin' }] }) as never,
   )
@@ -177,7 +181,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
       turnId: e.turnId,
       index: e.index,
       answer: '',
-      toolUses: [],
+      toolUses: e.agentId ? (refuse.stepTools ?? []).map(name => ({ name, input: {} })) : [],
       stopReason: 'end_turn' as const,
       usage: { ...usage, model: answering(e.model) },
       ...(e.messageCount === 99
@@ -1378,6 +1382,63 @@ describe('Korrektur', () => {
   }
 
   const text = (row: Appended | undefined) => row?.message.content[0]?.text ?? ''
+
+  test('Code Mode: der Stopp endet den Agenten ohne SubagentHandback', de, async ($, on) => {
+    engine(on, [], { codeMode: true })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'detail:sub-1')
+    await ui.redraw()
+    await steer(ui, 'halt:sub-1')
+    await ui.redraw()
+    const denied = await $.tool.call({ tool: 'Bash', command: 'ping -c 20 127.0.0.1', agentId: 'sub-1' } as never)
+    expect(JSON.stringify(denied)).toMatch(/Im Agent Tree vom Nutzer gestoppt/)
+    const chunks: unknown[] = []
+    const first = await step($, { agentId: 'sub-1', chunks })
+    expect(chunks.map(c => (c as { kind: string }).kind)).toEqual(['text', 'stop'])
+    expect([first.stopReason, first.toolUses]).toEqual(['end_turn', []])
+    await $.turn.complete({ answer: first.answer, durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    await ui.redraw()
+    await ui.press({ key: 'detail:close' })
+    expect(await screen(ui)).toMatch(/○ gestoppt/)
+    await ui.unmount()
+  })
+
+  test('Code Mode: eine Korrektur an einen laufenden Agenten geht per send, ohne Werkzeugnamen', de, async ($, on) => {
+    const seen = engine(on, [], { codeMode: true })
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Nur lesen')
+    await ui.unmount()
+    expect(seen.appended.filter(row => row.agentId === 'sub-1').length).toBe(0)
+    expect(seen.sent.length).toBe(1)
+    expect(JSON.stringify(seen.sent[0]?.to)).toContain('sub-1')
+    expect(seen.sent[0]?.text).toContain('Nur lesen')
+    expect(seen.sent[0]?.text).toMatch(/in deinem Abschlussbericht/)
+    expect(seen.sent[0]?.text).not.toMatch(/SubagentHandback/)
+  })
+
+  test('Code Mode: ein Codeblock zählt als Schritt, Poll nicht, und der Titel trägt das Kennzeichen', de, async ($, on) => {
+    engine(on, [], { codeMode: true, stepTools: ['REPL', 'Poll'] })
+    await oneAgentWithAdvisor($)
+    await step($, { agentId: 'sub-1' })
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    expect(text).toMatch(/CODE MODE/)
+    expect(text).toMatch(/führt Code aus/)
+    await ui.unmount()
+  })
+
+  test('ohne Code Mode kein Kennzeichen und kein Codeschritt', de, async ($, on) => {
+    engine(on, [], { codeMode: false, stepTools: ['REPL'] })
+    await oneAgentWithAdvisor($)
+    await step($, { agentId: 'sub-1' })
+    const ui = await $.ui.mount(pane(90))
+    const text = await screen(ui)
+    expect(text).not.toMatch(/CODE MODE/)
+    expect(text).not.toMatch(/führt Code aus/)
+    await ui.unmount()
+  })
 
   test('eine Korrektur an einen laufenden Agenten geht per append, die Hauptsitzung erfährt sie', de, async ($, on) => {
     const seen = engine(on)

@@ -44,6 +44,10 @@ Log: every event, by source.
 
 Help: keys, signs, commands.
 
+## Code Mode
+
+When Claude Code runs in Code Mode, the title shows "CODE MODE". Each code block an agent runs counts as a step ("runs code"), and the calls inside it appear one by one. Stop and write work as usual: a stopped agent finishes the call that is running, and every further call in its code is refused.
+
 ## What it gives you
 
 Stop one agent, not the whole session.

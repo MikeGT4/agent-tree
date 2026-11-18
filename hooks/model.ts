@@ -722,6 +722,8 @@ export function spawned(s: AgentTreeState, input: SpawnInput, now: number): Agen
   return logged(next, 'agent', 'agentEnded', ended, orphan.at)
 }
 
+export const CODE_TOOL = 'REPL'
+
 export type ToolKind = 'read' | 'change' | 'search' | 'run' | 'web' | 'agent' | 'other'
 
 const TOOL_KINDS: Record<string, ToolKind> = {
@@ -896,6 +898,18 @@ export function clashesCleared(s: AgentTreeState, who: string): AgentTreeState {
 
 function remembered(list: readonly string[] | undefined, name: string): string[] {
   return [...(list ?? []).filter(n => n !== name), name].slice(-FILES_KEPT)
+}
+
+export function codeModeOf(toolNames: readonly string[]): boolean {
+  return toolNames.includes(CODE_TOOL)
+}
+
+export function codeModeSeen(s: AgentTreeState, active: boolean): AgentTreeState {
+  return Boolean(s.codeMode) === active ? s : { ...s, codeMode: active ? true : undefined }
+}
+
+export function codeBlocksRan(s: AgentTreeState, agentId: string, toolNames: readonly string[], now: number): AgentTreeState {
+  return toolNames.filter(name => name === CODE_TOOL).reduce((next: AgentTreeState) => toolRan(next, { agentId, label: CODE_TOOL }, now), s)
 }
 
 export function toolRan(s: AgentTreeState, input: { agentId?: string; label: string; kind?: ToolKind; file?: string }, now: number): AgentTreeState {

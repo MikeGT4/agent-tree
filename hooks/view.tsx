@@ -949,6 +949,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
           <Text bold size={SIZE.title} wrap="truncate-end">
             {'AGENT TREE'}
             {mainModel ? <Text color={palette.main}>{` · ${mainModel.toUpperCase()} ${verb}`}</Text> : null}
+            {s.codeMode ? <Text color={palette.dim}>{` · ${w.codeModeTag}`}</Text> : null}
             {advisorModel && wide ? <Text color={palette.advisor}>{` · ${w.advisorOnCall(advisorModel.toUpperCase())}`}</Text> : null}
           </Text>
         )}

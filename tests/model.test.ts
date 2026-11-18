@@ -3,6 +3,9 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import type { AgentTreeLogEntry } from '../types'
 import {
+  codeBlocksRan,
+  codeModeOf,
+  codeModeSeen,
   adopted,
   chosen,
   clashed,
@@ -225,6 +228,20 @@ describe('Datenmodell', () => {
     ])
     expect(line(s.log.at(-1))).toBe('1 Agent aus der Agentenliste übernommen')
     expect(adopted(s, [{ id: 'x1', description: 'Vorher gestartet', type: 'Plan', status: 'running' }], 6)).toBe(s)
+  })
+
+  test('Code Mode: erkannt an REPL, Kennzeichen nur bei Wechsel neu, Codeblöcke zählen ohne Poll', () => {
+    expect([codeModeOf(['Bash', 'REPL']), codeModeOf(['Bash', 'Poll']), codeModeOf([])]).toEqual([true, false, false])
+    const tree = createTree(0)
+    expect(codeModeSeen(tree, false)).toBe(tree)
+    const marked = codeModeSeen(tree, true)
+    expect([marked.codeMode, codeModeSeen(marked, true)]).toEqual([true, marked])
+    expect(codeModeSeen(marked, false).codeMode).toBeUndefined()
+    let s = spawned(createTree(0), spawn('a1'), 1)
+    s = codeBlocksRan(s, 'a1', ['REPL', 'Poll', 'REPL'], 2)
+    expect([s.agents[0]?.toolCount, s.agents[0]?.lastTool]).toEqual([2, 'REPL'])
+    expect(codeBlocksRan(s, 'fremd', ['REPL'], 3)).toBe(s)
+    expect([toolText('REPL', 'de'), toolText('REPL', 'en')]).toEqual(['führt Code aus', 'runs code'])
   })
 
   test('ein geweckter oder fortgesetzter Agent läuft wieder und behält seine Zahlen', () => {
