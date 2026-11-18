@@ -7,6 +7,7 @@ import type { Glyphs, Palette } from './looks.ts'
 import { LOG_SOURCES, MAIN, TABS, clashShown, clockTime, contextLevel, contextPercent, cut, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
 import { helpItems, logLine } from './words.ts'
 import type { Lang, Words } from './words.ts'
+import { VERSION, newsBetween } from './news.ts'
 
 type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'> & Partial<Pick<Elements['terminal'], 'Markdown'>>
 
@@ -381,6 +382,7 @@ export function drawHelp(ui: Ui, o: ViewInput) {
     <Box key="help-view" flexDirection="column" width={o.width}>
       {section('help-keys', o.w.helpKeys, helpItems(o.w, o.s.main.fast !== undefined))}
       {o.docked ? section('help-size', o.w.helpSize, o.w.helpSizeLines) : null}
+      {section('help-version', `${o.w.helpVersion} ${VERSION}`, [...newsBetween(undefined, VERSION, o.lang), o.w.helpCodeMode])}
       {section('help-glyphs', o.w.helpGlyphs, glyphLines)}
       {section('help-commands', o.w.helpCommands, [`/agent-tree ${o.w.commandHint}`])}
       {section('help-guide', o.w.helpGuide, [o.w.guideUrl])}

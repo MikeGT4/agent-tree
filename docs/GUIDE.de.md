@@ -42,7 +42,7 @@ Verlauf: jedes Ereignis, nach Quelle.
 
 ![Hilfe](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/guide-de-7.png)
 
-Hilfe: Tasten, Zeichen, Befehle.
+Hilfe: Tasten, Zeichen, Befehle und was zuletzt neu ist.
 
 ## Code Mode
 

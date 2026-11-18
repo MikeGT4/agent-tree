@@ -68,6 +68,8 @@ export type Words = {
   helpGlyphs: string
   helpCommands: string
   helpGuide: string
+  helpVersion: string
+  helpCodeMode: string
   guideUrl: string
   filesNone: string
   filesClash: string
@@ -259,6 +261,8 @@ export const WORDS: Record<Lang, Words> = {
     helpGlyphs: 'Zeichen',
     helpCommands: 'Befehle',
     helpGuide: 'Anleitung',
+    helpVersion: 'Zuletzt neu, Stand',
+    helpCodeMode: '„CODE MODE“ im Titel: die Sitzung läuft im Code Mode.',
     guideUrl: 'github.com/MikeGT4/agent-tree/blob/main/docs/GUIDE.de.md',
     filesNone: 'noch keine Dateien',
     filesClash: 'Gleiche Datei',
@@ -458,6 +462,8 @@ export const WORDS: Record<Lang, Words> = {
     helpGlyphs: 'Glyphs',
     helpCommands: 'Commands',
     helpGuide: 'Guide',
+    helpVersion: 'Recent, as of',
+    helpCodeMode: '"CODE MODE" in the title: the session runs in Code Mode.',
     guideUrl: 'github.com/MikeGT4/agent-tree/blob/main/docs/GUIDE.md',
     filesNone: 'no files yet',
     filesClash: 'Same file',

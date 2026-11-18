@@ -42,7 +42,7 @@ Log: every event, by source.
 
 ![Help](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/guide-7.png)
 
-Help: keys, signs, commands.
+Help: keys, signs, commands and what is new.
 
 ## Code Mode
 

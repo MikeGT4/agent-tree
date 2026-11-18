@@ -2169,6 +2169,19 @@ describe('Fast Mode per Knopf', () => {
     await ui.unmount()
   })
 
+  test('die Hilfe nennt die eigene Version, das Neue und das Kennzeichen des Code Mode', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:help' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('Zuletzt neu, Stand 0.7.8')
+    expect(text).toContain('Zeigt nach einem Update, was neu ist')
+    expect(text).toContain('„CODE MODE“ im Titel: die Sitzung läuft im Code Mode.')
+    await ui.unmount()
+  })
+
   test('ohne den Knopf führt die Hilfe die Taste f nicht', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
