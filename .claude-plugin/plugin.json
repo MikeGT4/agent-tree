@@ -31,7 +31,8 @@
     "context-window",
     "tabs",
     "reports",
-    "activity-log"
+    "activity-log",
+    "code-mode"
   ],
   "types": "./types/index.d.ts",
   "userConfig": {

@@ -46,7 +46,7 @@ Help: keys, signs, commands.
 
 ## Code Mode
 
-When Claude Code runs in Code Mode, the title shows "CODE MODE". Each code block an agent runs counts as a step ("runs code"), and the calls inside it appear one by one. Stop and write work as usual: a stopped agent finishes the call that is running, and every further call in its code is refused.
+When Claude Code runs in Code Mode, the title shows "CODE MODE". Each code block an agent runs counts as a step ("runs code"), and the calls inside it appear one by one. Stop: the running call finishes, and every further call from the agent's code is refused, even if the code outlives the agent. Write: the message reaches the running agent. If it ends before reading it, the message stays "sent"; after a stop it counts as "not delivered".
 
 ## What it gives you
 

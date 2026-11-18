@@ -640,7 +640,7 @@ async function settleUnread($: EngineInterface, s: AgentTreeState, agentId: stri
   const waiting = pendingCorrection(s, agentId)
   const node = s.agents.find(n => n.id === agentId)
   if (!waiting || !node) return
-  if (codeMode && waiting.via === 'send') return
+  if (codeMode && waiting.via === 'send' && node.status === 'done') return
   const w = wordsFor(lang)
   if (node.status === 'done' && waiting.via === 'append' && texts.length) {
     await change($, t => correctionResent(t, agentId, now))
@@ -994,6 +994,10 @@ export const register: Register = (on, options) => {
       return result
     }
     const stopping = stoppingIds.has(agentId)
+    if (!stopping && codeMode) {
+      const ended = (await latest($)).agents.find(n => n.id === agentId)
+      if (ended?.status === 'stopped') return { deny: wordsFor(lang).stopAnswer(ended.toolCount) }
+    }
     if (stopping) {
       if (String(e.tool) !== HANDBACK) {
         const current = await latest($)

@@ -243,6 +243,7 @@ describe('Datenmodell', () => {
     expect([s.agents[0]?.toolCount, s.agents[0]?.lastTool]).toEqual([2, 'REPL'])
     expect(codeBlocksRan(s, 'fremd', ['REPL'], 3)).toBe(s)
     expect([toolText('REPL', 'de'), toolText('REPL', 'en')]).toEqual(['führt Code aus', 'runs code'])
+    expect(WORDS.en.correctionFrameCode('Read only')).toBe('Message from the user via Agent Tree: Read only\n\nIt applies to your task from now on. Take it into account in your remaining work and in your final report.')
   })
 
   test('ein geweckter oder fortgesetzter Agent läuft wieder und behält seine Zahlen', () => {

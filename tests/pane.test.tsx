@@ -1418,7 +1418,7 @@ describe('Korrektur', () => {
     expect(seen.sent[0]?.text).not.toMatch(/SubagentHandback/)
   })
 
-  test('Code Mode: ein Codeblock zählt als Schritt, Poll nicht, und der Titel trägt das Kennzeichen', de, async ($, on) => {
+  test('Code Mode: ein Codeblock steht als Schritt auf der Karte, und der Titel trägt das Kennzeichen', de, async ($, on) => {
     engine(on, [], { codeMode: true, stepTools: ['REPL', 'Poll'] })
     await oneAgentWithAdvisor($)
     await step($, { agentId: 'sub-1' })
@@ -1464,6 +1464,49 @@ describe('Korrektur', () => {
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90, 30))
     expect(await screen(ui)).toMatch(/CODE MODE/)
+    await ui.unmount()
+  })
+
+  test('Code Mode: eine ungelesene Korrektur gilt nach einem Stopp als nicht zugestellt', de, async ($, on) => {
+    engine(on, [], { codeMode: true })
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Nimm b.ts')
+    await steer(ui, 'halt:sub-1')
+    const first = await step($, { agentId: 'sub-1' })
+    await $.turn.complete({ answer: first.answer, durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Korrektur: nicht zugestellt/)
+    await ui.unmount()
+  })
+
+  test('Code Mode: nach dem Stopp bleiben Aufrufe aus weiterlaufendem Code gesperrt', de, async ($, on) => {
+    engine(on, [], { codeMode: true })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'detail:sub-1')
+    await ui.redraw()
+    await steer(ui, 'halt:sub-1')
+    const first = await step($, { agentId: 'sub-1' })
+    await $.turn.complete({ answer: first.answer, durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    const late = await $.tool.call({ tool: 'Bash', command: 'echo spaet', agentId: 'sub-1' } as never)
+    expect(JSON.stringify(late)).toMatch(/Im Agent Tree vom Nutzer gestoppt/)
+    await ui.unmount()
+  })
+
+  test('ohne Code Mode laufen Aufrufe eines gestoppten Agenten wie bisher an der Sperre vorbei', de, async ($, on) => {
+    engine(on, [], { codeMode: false })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'detail:sub-1')
+    await ui.redraw()
+    await steer(ui, 'halt:sub-1')
+    await step($, { agentId: 'sub-1' })
+    await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
+    const second = await step($, { agentId: 'sub-1' })
+    await $.turn.complete({ answer: second.answer, durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    const late = await $.tool.call({ tool: 'Read', file_path: '/x/c.ts', agentId: 'sub-1' } as never)
+    expect(JSON.stringify(late)).not.toMatch(/gestoppt/)
     await ui.unmount()
   })
 

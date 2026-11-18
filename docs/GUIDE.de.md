@@ -46,7 +46,7 @@ Hilfe: Tasten, Zeichen, Befehle.
 
 ## Code Mode
 
-Läuft Claude Code im Code Mode, steht „CODE MODE“ im Titel. Jeder Codeblock eines Agenten zählt als Schritt („führt Code aus“), die Aufrufe darin erscheinen einzeln. Stoppen und Schreiben funktionieren wie sonst: Ein gestoppter Agent beendet den laufenden Aufruf, alle weiteren im Code werden abgelehnt.
+Läuft Claude Code im Code Mode, steht „CODE MODE“ im Titel. Jeder Codeblock eines Agenten zählt als Schritt („führt Code aus“), die Aufrufe darin erscheinen einzeln. Stoppen: Der laufende Aufruf endet noch, jeder weitere aus dem Code des Agenten wird abgelehnt, auch wenn der Code den Agenten überdauert. Schreiben: Die Nachricht erreicht den laufenden Agenten. Endet er, bevor er sie liest, bleibt sie als „geschickt“ stehen; nach einem Stopp gilt sie als „nicht zugestellt“.
 
 ## Was es dir bringt
 
