@@ -2,7 +2,7 @@
 import { isNewer } from './update.ts'
 import type { Lang } from './words.ts'
 
-export const VERSION = '0.7.9'
+export const VERSION = '0.7.10'
 export const SEEN_VERSION_KEY = 'seenVersion'
 export const NOTICE_MS = 3000
 export const NOTICE_LINES = 3
@@ -19,6 +19,10 @@ export const NEWS: Readonly<Record<string, Readonly<Record<Lang, readonly string
   '0.7.9': {
     de: ['Nachrichten an Agenten: ein Weg in jeder Sitzung'],
     en: ['Messages to agents: one path in every session'],
+  },
+  '0.7.10': {
+    de: ['Späte Nachricht an einen Agenten: kein doppelter Lauf mehr'],
+    en: ['Late message to an agent: no second run any more'],
   },
 }
 

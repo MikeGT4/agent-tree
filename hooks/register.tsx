@@ -21,7 +21,6 @@ import {
   choicesOf,
   chosen,
   clashed,
-  correctionResent,
   CODE_TOOL,
   codeBlocksRan,
   codeModeOf,
@@ -328,7 +327,7 @@ async function prepareNotice($: EngineInterface): Promise<void> {
   const updated = await $.store.get(UPDATE_KEY).catch(() => undefined)
   const starred = await $.store.get(STAR_KEY).catch(() => undefined)
   notice = noticeFor(seen, VERSION, updated !== undefined || starred !== undefined, lang)
-  if (seen !== VERSION) await $.store.set(SEEN_VERSION_KEY, VERSION).catch(() => undefined)
+  if (!notice && seen !== VERSION) await $.store.set(SEEN_VERSION_KEY, VERSION).catch(() => undefined)
 }
 
 function startNotice($: EngineInterface, now: number): void {
@@ -581,7 +580,7 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
   const note = w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text)
   await appendRow($, note)
   const parent = node.parentId ? (await latest($)).agents.find(n => n.id === node.parentId) : undefined
-  if (parent?.status === 'running') await $.session.send({ to: { agentId: parent.id }, text: note }).catch(() => undefined)
+  if (parent?.status === 'running') await appendRow($, note, parent.id)
   return true
 }
 
@@ -702,19 +701,18 @@ async function chooseMainModel($: EngineInterface, family: string | undefined): 
 
 async function settleUnread($: EngineInterface, s: AgentTreeState, agentId: string, now: number, stopAsked: boolean): Promise<void> {
   const texts = (await read($, unreadTexts))[agentId] ?? []
-  await forget($, agentId)
   const waiting = pendingCorrection(s, agentId)
   const node = s.agents.find(n => n.id === agentId)
+  if (waiting && node?.status === 'done' && texts.length && !stopAsked) return
+  await forget($, agentId)
   if (!waiting || !node) return
   const w = wordsFor(lang)
-  if (node.status === 'done' && texts.length && !stopAsked) {
-    await change($, t => correctionResent(t, agentId, now))
-    const sent = await $.session.send({ to: { agentId }, text: w.resendFrame(texts.join('\n\n')) }).catch(() => undefined)
-    if (sent?.isDelivered) return
-  }
   await change($, t => correctionFailed(t, { agentId, text: waiting.text, count: waiting.count }, now))
   $.ui.status(w.correctionFailedStatus)
-  await appendRow($, w.mainNoteLost(`${typeLabel(node.type)} · ${node.description}`))
+  const lost = w.mainNoteLost(`${typeLabel(node.type)} · ${node.description}`)
+  await appendRow($, lost)
+  const parent = node.parentId ? (await latest($)).agents.find(n => n.id === node.parentId) : undefined
+  if (parent?.status === 'running') await appendRow($, lost, parent.id)
 }
 
 function actionsFor($: EngineInterface): TreeActions {
@@ -977,6 +975,10 @@ export const register: Register = (on, options) => {
       .map(use => ({ id: use.id, startedAt: use.startedAt, endedAt: use.endedAt }))
     const now = await clock($)
     const used = (result.toolUses ?? []).map(use => use.name)
+    if (!codeMode && used.includes(CODE_TOOL)) {
+      codeMode = true
+      await change($, s => codeModeSeen(s, true)).catch(() => undefined)
+    }
     if (agentId && codeMode && used.includes(CODE_TOOL)) await change($, s => codeBlocksRan(s, agentId, used, now)).catch(() => undefined)
     await change($, s =>
       stepped(
@@ -1185,7 +1187,10 @@ export const register: Register = (on, options) => {
       if (intro) return intro
     }
     if (noticeTicker && notice) {
-      noticeStartedAt ??= now
+      if (noticeStartedAt === undefined) {
+        noticeStartedAt = now
+        await $.store.set(SEEN_VERSION_KEY, VERSION).catch(() => undefined)
+      }
       return drawNotice({ Box, Text, Button } as never, e.props.bodyColumns, notice, now - noticeStartedAt, { palette: PALETTES[look.colors], animate, words: wordsFor(lang) }, () => void endNotice($).catch(() => undefined))
     }
     return drawTree({ Box, Text, Button, Markdown } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {

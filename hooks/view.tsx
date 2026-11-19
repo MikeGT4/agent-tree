@@ -1349,7 +1349,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         </Box>
         {detailCorrection ? (
           <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
-            {`${w.correctionLabel}: ${w.correction[detailCorrection.state]} · ${clockTime(detailCorrection.at)}${detailCorrection.text ? ` · „${detailCorrection.text}“` : ''}`}
+            {`${w.correctionLabel}: ${w.correction[detailCorrection.state]} · ${clockTime(detailCorrection.at)}${detailCorrection.text ? ` · ${w.quoted(detailCorrection.text)}` : ''}`}
           </Text>
         ) : null}
         <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">

@@ -4,7 +4,6 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { AgentTreeLogEntry } from '../types'
 import {
   codeBlocksRan,
-  correctionResent,
   codeModeOf,
   codeModeSeen,
   adopted,
@@ -696,12 +695,6 @@ describe('Korrekturen', () => {
     expect([s.corrections?.['sub-1']?.state, s.corrections?.['sub-1']?.count]).toEqual(['sent', 1])
     const kept = correctionFailed(s, { agentId: 'sub-1', text: 'A', count: 7 }, 3)
     expect([kept.corrections?.['sub-1']?.state, kept.corrections?.['sub-1']?.count]).toEqual(['failed', 7])
-  })
-
-  test('correctionResent vermerkt das Nachschicken über send', () => {
-    const s = correctionResent(correctionSent(one(), { agentId: 'sub-1', text: 'A', via: 'send' }, 2), 'sub-1', 4)
-    expect([s.corrections?.['sub-1']?.state, s.corrections?.['sub-1']?.via, s.corrections?.['sub-1']?.at]).toEqual(['sent', 'send', 4])
-    expect(line(s.log.at(-1))).toBe('Korrektur an Explore nachgeschickt')
   })
 
   test('pendingCorrection kennt nur geschickte', () => {

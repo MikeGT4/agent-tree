@@ -900,10 +900,27 @@ describe('Agent Tree', () => {
     const ui = await $.ui.mount(pane(90))
     const card = await screen(ui)
     expect(card).toContain(`AGENT TREE ${VERSION}`)
-    expect(card).toMatch(/Läuft im Code Mode von Claude Code/)
+    expect(card).toMatch(/kein doppelter Lauf mehr/)
+    expect(card).not.toMatch(/Läuft im Code Mode/)
     await ui.press({ key: 'notice:skip' })
     await ui.redraw()
     expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('wird die Karte nie gezeichnet, gilt die Version nicht als gesehen', de, async ($, on) => {
+    const { clock, seen } = await introStart($, on, { seenVersion: '0.7.7' })
+    await startSession($)
+    await clock.advance(6000)
+    expect(seen.storeSets.some(set => set.key === 'seenVersion')).toBe(false)
+  })
+
+  test('die gezeichnete Karte merkt die Version', de, async ($, on) => {
+    const { seen } = await introStart($, on, { seenVersion: '0.7.7' })
+    await startSession($)
+    expect(seen.storeSets.some(set => set.key === 'seenVersion')).toBe(false)
+    const ui = await $.ui.mount(pane(90))
+    expect(seen.storeSets).toContainEqual({ key: 'seenVersion', value: VERSION })
     await ui.unmount()
   })
 
@@ -1502,7 +1519,7 @@ describe('Korrektur', () => {
     await ui.unmount()
   })
 
-  test('Code Mode: der laufende Eltern-Agent erfährt die Korrektur per send, nicht per append', de, async ($, on) => {
+  test('Code Mode: die Korrektur geht per send ans Kind, der laufende Eltern-Agent bekommt nur eine Notiz', de, async ($, on) => {
     const seen = engine(on, [], { codeMode: true })
     await oneAgentWithAdvisor($)
     await $.agent.spawn({ prompt: 'Prüfe.', description: 'Unterauftrag', subagentType: 'general-purpose', parentAgentId: 'sub-1' } as never)
@@ -1512,12 +1529,12 @@ describe('Korrektur', () => {
     await ui.redraw()
     await sayCommand($, 'Nur lesen', 'sub-2')
     await ui.unmount()
-    expect(seen.appended.some(row => row.agentId === 'sub-1' || row.agentId === 'sub-2')).toBe(false)
-    expect(seen.sent.map(row => JSON.stringify(row.to))).toEqual(['"sub-2"', '"sub-1"'])
-    expect(seen.sent[1]?.text).toContain('Nur lesen')
+    expect(seen.appended.some(row => row.agentId === 'sub-2')).toBe(false)
+    expect(seen.appended.some(row => row.agentId === 'sub-1' && (row.message.content[0]?.text ?? '').includes('Nur lesen'))).toBe(true)
+    expect(seen.sent.map(row => JSON.stringify(row.to))).toEqual(['"sub-2"'])
   })
 
-  test('Code Mode: endet der Agent vor dem Lesen, geht die Korrektur einmal nach und bleibt geschickt', de, async ($, on) => {
+  test('Code Mode: endet der Agent vor dem Lesen, bleibt die Korrektur geschickt und nichts geht nach', de, async ($, on) => {
     const seen = engine(on, [], { codeMode: true })
     await oneAgentWithAdvisor($)
     const ui = await openDetail($)
@@ -1525,10 +1542,8 @@ describe('Korrektur', () => {
     await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
     await ui.redraw()
     const text = await screen(ui)
-    expect(text).not.toMatch(/nicht zugestellt/)
     expect(text).toMatch(/Korrektur: geschickt/)
-    expect(seen.sent.length).toBe(2)
-    expect(seen.sent[1]?.text).toMatch(/blieb ungelesen[\s\S]*Nur lesen/)
+    expect(seen.sent.length).toBe(1)
     expect(seen.status.some(line => /nicht zugestellt/.test(line))).toBe(false)
     await ui.unmount()
   })
@@ -1584,8 +1599,23 @@ describe('Korrektur', () => {
     await ui.unmount()
   })
 
-  test('ohne Code Mode kein Kennzeichen und kein Codeschritt', de, async ($, on) => {
+  test('meldet die Werkzeugliste kein Code-Werkzeug, erkennt der erste Codeblock in einem Schritt den Code Mode', de, async ($, on) => {
     engine(on, [], { codeMode: false, stepTools: ['REPL'] })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).not.toMatch(/CODE MODE/)
+    await $.turn.start({ text: 'Prüf das Auth-Modul', turnId: 't1' })
+    await $.agent.spawn({ prompt: 'Lies den Code.', description: 'Code lesen', subagentType: 'Explore' } as never)
+    await step($, { agentId: 'sub-1' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toMatch(/CODE MODE/)
+    expect(text).toMatch(/führt Code aus/)
+    await ui.unmount()
+  })
+
+  test('ohne Code Mode kein Kennzeichen und kein Codeschritt', de, async ($, on) => {
+    engine(on, [], { codeMode: false, stepTools: ['Bash'] })
     await oneAgentWithAdvisor($)
     await step($, { agentId: 'sub-1' })
     const ui = await $.ui.mount(pane(90))
@@ -1719,19 +1749,6 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
 
   const finished = { answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' } as const
 
-  test('endet ein Agent vor dem Lesen, schickt Agent Tree die Korrektur einmal nach', de, async ($, on) => {
-    const seen = engine(on)
-    await oneAgentWithAdvisor($)
-    const ui = await openDetail($)
-    await sayCommand($, 'Nimm b.ts')
-    await ui.unmount()
-    await $.turn.complete(finished)
-    expect(seen.sent.length).toBe(2)
-    expect(seen.sent[1]?.text).toMatch(/blieb ungelesen[\s\S]*Nimm b\.ts/)
-    await $.turn.complete(finished)
-    expect(seen.sent.length).toBe(2)
-  })
-
   test('nach einem angeforderten Stopp geht nichts weiter an den Agenten', de, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
@@ -1757,21 +1774,24 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     expect(JSON.stringify(handback)).not.toMatch(/deny/)
   })
 
-  test('scheitert das Nachschicken, gilt die Korrektur als nicht zugestellt und die Hauptsitzung erfährt es', de, async ($, on) => {
-    const refuse = { send: false }
-    const seen = engine(on, [], refuse)
+  test('endet ein Agent vor dem Lesen, bleibt die Korrektur geschickt und nichts geht nach; geweckt liest er sie', de, async ($, on) => {
+    const seen = engine(on)
     await oneAgentWithAdvisor($)
     const ui = await openDetail($)
     await sayCommand($, 'Nimm b.ts')
-    refuse.send = true
+    await $.turn.complete(finished)
     await $.turn.complete(finished)
     await ui.redraw()
-    expect(await screen(ui)).toMatch(/Korrektur: nicht zugestellt/)
-    expect(seen.appended.some(row => !row.agentId && (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(true)
+    expect(await screen(ui)).toMatch(/Korrektur: geschickt/)
+    expect(seen.sent.length).toBe(1)
+    expect(seen.appended.some(row => (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(false)
+    await step($, { agentId: 'sub-1' })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Korrektur: gelesen/)
     await ui.unmount()
   })
 
-  test('ein Schritt während des Sendens der zweiten Korrektur lässt sie ungelesen, beim Ende geht nur sie nach', de, async ($, on) => {
+  test('ein Schritt während des Sendens der zweiten Korrektur lässt sie ungelesen, beim Ende bleibt sie geschickt', de, async ($, on) => {
     const refuse: { onSend?: () => Promise<unknown> } = {}
     const seen = engine(on, [], refuse)
     await oneAgentWithAdvisor($)
@@ -1782,11 +1802,53 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     refuse.onSend = undefined
     await $.turn.complete(finished)
     await ui.redraw()
-    expect(seen.sent.length).toBe(3)
-    expect(seen.sent[2]?.text).toContain('Zweitens B')
-    expect(seen.sent[2]?.text).not.toContain('Erstens A')
-    expect(await screen(ui)).not.toMatch(/nicht zugestellt/)
+    expect(seen.sent.length).toBe(2)
+    const text = await screen(ui)
+    expect(text).toMatch(/Korrektur: geschickt[^"]*Zweitens B/)
+    expect(text).not.toMatch(/nicht zugestellt/)
     await ui.unmount()
+  })
+
+  test('scheitert dieselbe Korrektur beim zweiten Mal, bleibt die erste beim Ende geschickt', de, async ($, on) => {
+    const refuse = { send: false }
+    const seen = engine(on, [], refuse)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Nimm b.ts')
+    refuse.send = true
+    await sayCommand($, 'Nimm b.ts')
+    refuse.send = false
+    await $.turn.complete(finished)
+    await ui.redraw()
+    expect(seen.sent.length).toBe(1)
+    expect(await screen(ui)).toMatch(/Korrektur: geschickt/)
+    expect(seen.appended.some(row => (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(false)
+    await ui.unmount()
+  })
+
+  test('mehrere Korrekturen gehen einzeln per send, beim Ende geht nichts nach', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Erstens A')
+    await sayCommand($, 'Zweitens B')
+    await ui.unmount()
+    expect([seen.sent[0]?.text, seen.sent[1]?.text].join('|')).toMatch(/Erstens A[\s\S]*\|[\s\S]*Zweitens B/)
+    await $.turn.complete(finished)
+    expect(seen.sent.length).toBe(2)
+  })
+
+  test('nach /agent-tree clear gilt eine ungelesene Korrektur an einen laufenden Agenten beim Ende nicht als verloren', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Nimm b.ts')
+    await ui.unmount()
+    await $.command.run({ command: 'agent-tree', args: 'clear', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+    await $.turn.complete(finished)
+    expect(seen.sent.length).toBe(1)
+    expect(seen.status.some(line => /nicht zugestellt/.test(line))).toBe(false)
+    expect(seen.appended.some(row => (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(false)
   })
 
   test('nach angefordertem Stopp wird eine spätere Korrektur nicht nachgeschickt, auch wenn der Agent selbst endet', de, async ($, on) => {
@@ -1820,19 +1882,6 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await ui.unmount()
   })
 
-  test('beim Nachschicken liest ein sofort startender Agent die Korrektur ohne Anhalten', de, async ($, on) => {
-    const refuse: { onSend?: () => Promise<unknown> } = {}
-    engine(on, [], refuse)
-    await oneAgentWithAdvisor($)
-    const ui = await openDetail($)
-    await sayCommand($, 'Nimm b.ts')
-    await ui.unmount()
-    refuse.onSend = () => step($, { agentId: 'sub-1' })
-    await $.turn.complete(finished)
-    const handback = await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
-    expect(JSON.stringify(handback)).not.toMatch(/deny/)
-  })
-
   test('an einen fehlgeschlagenen Agenten geht nichts nach, die Korrektur gilt als nicht zugestellt', de, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
@@ -1845,35 +1894,15 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await ui.unmount()
   })
 
-  test('scheitert dieselbe Korrektur beim zweiten Mal, geht die erste beim Ende trotzdem nach', de, async ($, on) => {
-    const refuse = { send: false }
-    const seen = engine(on, [], refuse)
+  test('gilt die Korrektur an ein Kind als nicht zugestellt, erfährt das auch der laufende Eltern-Agent', de, async ($, on) => {
+    const seen = engine(on)
     await oneAgentWithAdvisor($)
-    const ui = await openDetail($)
-    await sayCommand($, 'Nimm b.ts')
-    refuse.send = true
-    await sayCommand($, 'Nimm b.ts')
-    refuse.send = false
-    await ui.unmount()
-    await $.turn.complete(finished)
-    expect(seen.sent.length).toBe(2)
-    expect(seen.sent[1]?.text).toMatch(/blieb ungelesen[\s\S]*Nimm b\.ts/)
-  })
-
-  test('scheitert eine zweite Korrektur, geht beim Ende nur die erste nach', de, async ($, on) => {
-    const refuse = { send: false }
-    const seen = engine(on, [], refuse)
-    await oneAgentWithAdvisor($)
-    const ui = await openDetail($)
-    await sayCommand($, 'Erste Korrektur')
-    refuse.send = true
-    await sayCommand($, 'Zweite Korrektur')
-    refuse.send = false
-    await ui.unmount()
-    await $.turn.complete(finished)
-    expect(seen.sent.length).toBe(2)
-    expect(seen.sent[1]?.text).toContain('Erste Korrektur')
-    expect(seen.sent[1]?.text).not.toContain('Zweite Korrektur')
+    await $.agent.spawn({ prompt: 'Prüfe.', description: 'Unterauftrag', subagentType: 'general-purpose', parentAgentId: 'sub-1' } as never)
+    await step($, { agentId: 'sub-2' })
+    await sayCommand($, 'Nur lesen', 'sub-2')
+    await $.turn.complete({ ...finished, agentId: 'sub-2', answer: '', reason: 'error' })
+    expect(seen.appended.some(row => row.agentId === 'sub-1' && (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(true)
+    expect(seen.appended.some(row => !row.agentId && (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(true)
   })
 
   test('endet der Eltern-Agent, während die Korrektur an sein Kind läuft, bekommt er keine Notiz', de, async ($, on) => {
@@ -1900,31 +1929,6 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     expect(await screen(ui)).toMatch(/Korrektur: nicht zugestellt/)
     expect(seen.sent.length).toBe(1)
     await ui.unmount()
-  })
-
-  test('mehrere Korrekturen gehen einzeln per send, ungelesene beim Ende zusammen nach', de, async ($, on) => {
-    const seen = engine(on)
-    await oneAgentWithAdvisor($)
-    const ui = await openDetail($)
-    await sayCommand($, 'Erstens A')
-    await sayCommand($, 'Zweitens B')
-    await ui.unmount()
-    expect([seen.sent[0]?.text, seen.sent[1]?.text].join('|')).toMatch(/Erstens A[\s\S]*\|[\s\S]*Zweitens B/)
-    await $.turn.complete(finished)
-    expect(seen.sent.length).toBe(3)
-    expect(seen.sent[2]?.text).toMatch(/blieb ungelesen[\s\S]*Erstens A[\s\S]*Zweitens B/)
-  })
-
-  test('nach /agent-tree clear geht eine ungelesene Korrektur an einen laufenden Agenten nicht verloren', de, async ($, on) => {
-    const seen = engine(on)
-    await oneAgentWithAdvisor($)
-    const ui = await openDetail($)
-    await sayCommand($, 'Nimm b.ts')
-    await ui.unmount()
-    await $.command.run({ command: 'agent-tree', args: 'clear', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
-    await $.turn.complete(finished)
-    expect(seen.sent.length).toBe(2)
-    expect(seen.sent[1]?.text).toMatch(/blieb ungelesen[\s\S]*Nimm b\.ts/)
   })
 
   test('in der Zeilenansicht steht beim Stoppen „hält an“', de, async ($, on) => {
@@ -2005,8 +2009,8 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await ui.redraw()
     await sayCommand($, 'Nur lesen', 'sub-2')
     await ui.unmount()
-    expect(seen.sent.some(row => JSON.stringify(row.to).includes('sub-1') && row.text.includes('Nur lesen'))).toBe(true)
-    expect(seen.appended.some(row => row.agentId === 'sub-1')).toBe(false)
+    expect(seen.appended.some(row => row.agentId === 'sub-1' && (row.message.content[0]?.text ?? '').includes('Nur lesen'))).toBe(true)
+    expect(seen.sent.some(row => JSON.stringify(row.to).includes('sub-1'))).toBe(false)
   })
 
   test('der Kasten zeigt geschickt und gelesen, der Detailkasten nennt den Stand', de, async ($, on) => {
@@ -3643,7 +3647,7 @@ describe('Aktionszeile', () => {
     const ui = await $.ui.mount(pane(90))
     await ui.press({ key: 'select:sub-1' })
     const text = await screen(ui)
-    expect(text).toContain('⚠ api.ts ändert auch: Agent B')
+    expect(text).toContain('⚠ Agent B ändert api.ts auch')
     await ui.unmount()
   })
 
@@ -4189,7 +4193,7 @@ describe('Tab Hilfe', () => {
     await ui.press({ key: 'tab:help' })
     await ui.redraw()
     const text = await screen(ui)
-    for (const word of ['Keys', 'Size', 'Drag the left edge of the pane with the mouse', 'Glyphs', 'Commands', 'Guide', 'docs/GUIDE.md']) expect(text).toContain(word)
+    for (const word of ['Keys', 'Size', 'Drag the left edge of the pane with the mouse', 'Signs', 'Commands', 'Guide', 'docs/GUIDE.md']) expect(text).toContain(word)
     await ui.unmount()
   })
 

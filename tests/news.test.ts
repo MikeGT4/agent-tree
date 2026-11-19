@@ -6,7 +6,7 @@ import { arrowLength } from '../hooks/notice.tsx'
 
 describe('Update-Hinweis', () => {
   test('die eigene Version hat Neuigkeiten in beiden Sprachen', () => {
-    expect(VERSION).toBe('0.7.9')
+    expect(VERSION).toBe('0.7.10')
     expect(NEWS[VERSION]?.de.length).toBeGreaterThan(0)
     expect(NEWS[VERSION]?.en.length).toBe(NEWS[VERSION]?.de.length)
   })

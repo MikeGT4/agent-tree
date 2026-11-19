@@ -68,6 +68,7 @@ export type Words = {
   helpGlyphs: string
   helpCommands: string
   helpGuide: string
+  quoted: (text: string) => string
   helpVersion: string
   helpCodeMode: string
   guideUrl: string
@@ -116,7 +117,6 @@ export type Words = {
   mainNote: (agent: string, text: string) => string
   mainNoteLost: (agent: string) => string
   correctionWaiting: (tool: string) => string
-  resendFrame: (text: string) => string
   correctionFailedStatus: string
   correctionLabel: string
   correction: Record<AgentTreeCorrectionState, string>
@@ -261,6 +261,7 @@ export const WORDS: Record<Lang, Words> = {
     helpGlyphs: 'Zeichen',
     helpCommands: 'Befehle',
     helpGuide: 'Anleitung',
+    quoted: text => `„${text}“`,
     helpVersion: 'Zuletzt neu, Stand',
     helpCodeMode: '„CODE MODE“ im Titel: die Sitzung läuft im Code Mode.',
     guideUrl: 'github.com/MikeGT4/agent-tree/blob/main/docs/GUIDE.de.md',
@@ -311,7 +312,6 @@ export const WORDS: Record<Lang, Words> = {
     mainNote: (agent, text) =>
       `Der Nutzer hat dem Unteragenten ${agent} über Agent Tree geschrieben: „${text}“. Sein Ergebnis kann deshalb vom Auftrag abweichen.`,
     mainNoteLost: agent => `Hinweis: Die Nachricht des Nutzers an ${agent} ist nicht mehr angekommen; sein Ergebnis berücksichtigt sie nicht.`,
-    resendFrame: text => `Diese Nachricht kam vor deinem Abschluss an und blieb ungelesen:\n\n${text}`,
     correctionWaiting: tool =>
       `Bevor du abschließt: Der Nutzer hat dir eine neue Nachricht geschrieben. Siehst du sie noch nicht, wird sie dir jetzt zugestellt. Setz sie um und ruf danach ${tool} erneut auf, mit einem Bericht, der sie berücksichtigt.`,
     correctionFailedStatus: 'Agent Tree: Korrektur nicht zugestellt',
@@ -334,7 +334,7 @@ export const WORDS: Record<Lang, Words> = {
     detailsButton: 'Details',
     readFiles: 'Gelesen',
     changedFiles: 'Geändert',
-    alsoChanges: (file, other) => `⚠ ${file} ändert auch: ${other}`,
+    alsoChanges: (file, other) => `⚠ ${other} ändert ${file} auch`,
     feedback: {
       modelPending: x => `✓ Modell auf ${x} gestellt, gilt ab seinem nächsten Schritt`,
       modelDone: x => `✓ läuft jetzt mit ${x}`,
@@ -459,9 +459,10 @@ export const WORDS: Record<Lang, Words> = {
     helpFast: 'f: fast mode',
     helpSize: 'Size',
     helpSizeLines: ['Drag the left edge of the pane with the mouse: wider or narrower.', 'The width is kept for new sessions.'],
-    helpGlyphs: 'Glyphs',
+    helpGlyphs: 'Signs',
     helpCommands: 'Commands',
     helpGuide: 'Guide',
+    quoted: text => `"${text}"`,
     helpVersion: 'Recent, as of',
     helpCodeMode: '"CODE MODE" in the title: the session runs in Code Mode.',
     guideUrl: 'github.com/MikeGT4/agent-tree/blob/main/docs/GUIDE.md',
@@ -512,7 +513,6 @@ export const WORDS: Record<Lang, Words> = {
     mainNote: (agent, text) =>
       `The user wrote to the sub-agent ${agent} via Agent Tree: "${text}". Its result may differ from the task for that reason.`,
     mainNoteLost: agent => `Note: the user's message to ${agent} did not arrive; its result does not reflect it.`,
-    resendFrame: text => `This message arrived before you finished and was not read:\n\n${text}`,
     correctionWaiting: tool => `Before you finish: the user sent you a new message. If you do not see it yet, it is delivered to you now. Act on it, then call ${tool} again with a report that reflects it.`,
     correctionFailedStatus: 'Agent Tree: correction not delivered',
     correctionLabel: 'Correction',
