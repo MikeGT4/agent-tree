@@ -2,7 +2,7 @@
 import { isNewer } from './update.ts'
 import type { Lang } from './words.ts'
 
-export const VERSION = '0.7.11'
+export const VERSION = '0.7.12'
 export const SEEN_VERSION_KEY = 'seenVersion'
 export const NOTICE_MS = 3000
 export const NOTICE_LINES = 3
@@ -27,6 +27,10 @@ export const NEWS: Readonly<Record<string, Readonly<Record<Lang, readonly string
   '0.7.11': {
     de: ['Verlauf: Klick zeigt deine Frage oder den Bericht', 'Filter als Leiste, bleibt gespeichert', 'Farben für Zeichen und Verbrauch'],
     en: ['History: a click shows your prompt or the report', 'Filters as a bar, choice is kept', 'Colors for status marks and usage'],
+  },
+  '0.7.12': {
+    de: ['Unten in der Leiste: ein Tipp je Sitzung', 'Die Option „Tips“ schaltet ihn ab'],
+    en: ['A tip per session at the bottom of the pane', 'The Tips option turns it off'],
   },
 }
 

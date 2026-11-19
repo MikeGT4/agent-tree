@@ -59,6 +59,7 @@ export type Words = {
   effortNextMessage: string
   newAgents: string
   help: readonly string[]
+  tips: readonly string[]
   tabs: Record<AgentTreeTab, string>
   fullReport: string
   helpKeys: string
@@ -254,6 +255,14 @@ export const WORDS: Record<Lang, Words> = {
     effortNextMessage: 'gilt, sobald es eine neue Nachricht bekommt (nur Modelle mit Denkstufe)',
     newAgents: 'neue Unteragenten',
     help: ['ctrl+x tab: Leiste', 'Kasten: wählen', 's: stoppen', 'e: Denkstufe', 'm: Modell', 'a: Aussehen', 'Tab: wandern'],
+    tips: [
+      'Tipp: Im Verlauf › anklicken: deine Frage oder der Bericht',
+      'Tipp: Kasten anklicken: stoppen, schreiben, Modell, Denkstufe',
+      'Tipp: Überschrift der Hauptsitzung anklicken: Modell wechseln',
+      'Tipp: Reiter Berichte zeigt die ganze Antwort jedes Agenten',
+      'Tipp: a öffnet das Aussehen: fünf Stile, vier Farbschemata',
+      'Tipp: Reiter Hilfe zeigt alle Tasten',
+    ],
     tabs: { tree: 'Baum', reports: 'Berichte', files: 'Dateien', log: 'Verlauf', usage: 'Verbrauch', help: 'Hilfe' },
     fullReport: 'ganzer Bericht ›',
     helpKeys: 'Tasten',
@@ -457,6 +466,14 @@ export const WORDS: Record<Lang, Words> = {
     effortNextMessage: 'applies once it gets a new message (models with effort only)',
     newAgents: 'new sub-agents',
     help: ['ctrl+x tab: pane', 'box: select', 's: stop', 'e: effort', 'm: model', 'a: look', 'Tab: move'],
+    tips: [
+      'Tip: in the Log, click › for your prompt or the report',
+      'Tip: click a box to stop, write, switch model or effort',
+      'Tip: click the main session title to switch its model',
+      'Tip: the Reports tab shows each agent’s full answer',
+      'Tip: a opens the look: five styles, four color schemes',
+      'Tip: the Help tab lists every key',
+    ],
     tabs: { tree: 'Tree', reports: 'Reports', files: 'Files', log: 'Log', usage: 'Usage', help: 'Help' },
     fullReport: 'full report ›',
     helpKeys: 'Keys',

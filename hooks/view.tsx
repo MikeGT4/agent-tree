@@ -144,6 +144,7 @@ export type TreeLook = {
   docked?: boolean
   reports?: Record<string, AgentTreeReport>
   questions?: ReadonlyMap<number, string>
+  tip?: number
 }
 
 export function pressKey(actions: TreeActions, key: string): boolean {
@@ -1556,7 +1557,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       {detailBox ? null : limitRow}
       {tight || detailBox ? null : (
         <Text key="help" size={SIZE.note} color={palette.dim} wrap="truncate-end">
-          {helpLine(helpItems(w, s.main.fast !== undefined), width)}
+          {look.tip !== undefined && w.tips.length ? (w.tips[look.tip % w.tips.length] ?? '') : helpLine(helpItems(w, s.main.fast !== undefined), width)}
         </Text>
       )}
     </Box>

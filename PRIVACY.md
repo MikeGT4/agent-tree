@@ -2,13 +2,13 @@
 
 Agent Tree runs inside Claude Code and keeps the session's events in memory.
 
-Once a day, in interactive sessions, it runs Claude Code's `plugin list --json` for its version and reads the latest from GitHub (raw.githubusercontent.com); the request carries nothing about you; GitHub sees your IP address.
+Daily, in interactive sessions, it runs Claude Code's `plugin list --json` for its version and reads the latest from GitHub (raw.githubusercontent.com); the request carries nothing about you; GitHub sees your IP address.
 
 A newer marketplace version triggers `plugin update agent-tree`.
 
 The Auto-update option turns this off, as do DO_NOT_TRACK=1, DISABLE_AUTOUPDATER, DISABLE_UPDATES and Claude Code's switch for nonessential traffic.
 
-Claude Code's plugin storage keeps your look, model, effort and history filter, update state, last version seen and a start count for the star hint. No telemetry, account or cookie.
+Claude Code's plugin storage keeps your look, model, effort and history filter, tip position, update state, last version seen and a start count for the star hint. No telemetry, account or cookie.
 
 ## Hooks
 

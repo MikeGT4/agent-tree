@@ -7,6 +7,7 @@ import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES } from '../hooks/looks.ts'
 import { LOGO_COLORS, LOGO_EMPTY, LOGO_FLASH } from '../hooks/logo.ts'
 import { createTree } from '../hooks/model.ts'
 import { VERSION } from '../hooks/news.ts'
+import { wordsFor } from '../hooks/words.ts'
 import type { AgentTreeState } from '../types'
 
 const usage = { input_tokens: 2000, output_tokens: 40, cache_read_input_tokens: 30000, cache_creation_input_tokens: 0 }
@@ -228,7 +229,7 @@ const pane = (bodyColumns: number, bodyRows = 60) =>
     },
   }) as const
 
-const de = { options: { language: 'de', intro: false } }
+const de = { options: { language: 'de', intro: false, tips: false } }
 
 async function screen(ui: { drawn: () => Promise<unknown> }): Promise<string> {
   return JSON.stringify(await ui.drawn())
@@ -785,7 +786,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('die Limits auf Englisch', { options: { language: 'en', intro: false } }, async ($, on) => {
+  test('die Limits auf Englisch', { options: { language: 'en', intro: false, tips: false } }, async ($, on) => {
     engine(on)
     await startSession($)
     await measureLimits($, limitWindows)
@@ -842,7 +843,7 @@ describe('Agent Tree', () => {
     expect(seen.toasts.filter(t => /gespeicherte Wahl/.test(t))).toHaveLength(1)
   })
 
-  const introOn = { options: { language: 'de', intro: true } }
+  const introOn = { options: { language: 'de', intro: true, tips: false } }
   const plantDots = /[█▀]/
   const introStart = async ($: Engine, on: On, saved: Record<string, unknown> = {}) => {
     const clock = mock.clock(on, { now: 1_000_000 })
@@ -901,7 +902,7 @@ describe('Agent Tree', () => {
     const ui = await $.ui.mount(pane(90))
     const card = await screen(ui)
     expect(card).toContain(`AGENT TREE ${VERSION}`)
-    expect(card).toMatch(/Farben für Zeichen und Verbrauch/)
+    expect(card).toMatch(/Unten in der Leiste: ein Tipp je Sitzung/)
     expect(card).not.toMatch(/Läuft im Code Mode/)
     await ui.press({ key: 'notice:skip' })
     await ui.redraw()
@@ -967,7 +968,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('ab Werk kommt das Logo', { options: { language: 'de' } }, async ($, on) => {
+  test('ab Werk kommt das Logo', { options: { language: 'de', tips: false } }, async ($, on) => {
     const { clock } = await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(90))
@@ -996,7 +997,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('ohne Bewegung kein Intro', { options: { language: 'de', intro: true, animate: false } }, async ($, on) => {
+  test('ohne Bewegung kein Intro', { options: { language: 'de', intro: true, animate: false, tips: false } }, async ($, on) => {
     await introStart($, on)
     await startSession($)
     const ui = await $.ui.mount(pane(90))
@@ -1296,7 +1297,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('englische Beschriftung, wenn die Sprache Englisch ist', { options: { language: 'en', intro: false } }, async ($, on) => {
+  test('englische Beschriftung, wenn die Sprache Englisch ist', { options: { language: 'en', intro: false, tips: false } }, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))
@@ -2553,7 +2554,7 @@ describe('Fast Mode per Knopf', () => {
     await ui.unmount()
   })
 
-  test('auf Englisch heißt der Stand on und off', { options: { language: 'en', intro: false } }, async ($, on) => {
+  test('auf Englisch heißt der Stand on und off', { options: { language: 'en', intro: false, tips: false } }, async ($, on) => {
     engine(on, [], { fast: false })
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))
@@ -2582,7 +2583,7 @@ describe('Fast Mode per Knopf', () => {
     await ui.redraw()
     const text = await screen(ui)
     expect(text).toContain(`Zuletzt neu, Stand ${VERSION}`)
-    expect(text).toContain('Filter als Leiste, bleibt gespeichert')
+    expect(text).toContain('Die Option „Tips“ schaltet ihn ab')
     expect(text).toContain('„CODE MODE“ im Titel: die Sitzung läuft im Code Mode.')
     await ui.unmount()
   })
@@ -2742,7 +2743,7 @@ describe('Aussehen in der Leiste', () => {
     await ui.unmount()
   })
 
-  test('ohne Bewegung kein Lichtstreifen', { options: { language: 'de', animate: false } }, async ($, on) => {
+  test('ohne Bewegung kein Lichtstreifen', { options: { language: 'de', animate: false, tips: false } }, async ($, on) => {
     engine(on, [], {}, { look: { light: 'gold' } })
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))
@@ -3006,7 +3007,7 @@ describe('Modell der Hauptsitzung', () => {
     await ui.unmount()
   })
 
-  test('englisch heißt die Zeile Main session model', { options: { language: 'en', intro: false } }, async ($, on) => {
+  test('englisch heißt die Zeile Main session model', { options: { language: 'en', intro: false, tips: false } }, async ($, on) => {
     engine(on, [], { model: 'default' })
     await startSession($)
     await $.turn.start({ text: 'Go', turnId: 't1' })
@@ -3111,7 +3112,7 @@ describe('Denkstufe der Hauptsitzung', () => {
     expect(seen.stepEfforts.at(-1)).toBe('high')
   })
 
-  test('auf Englisch', { options: { language: 'en', intro: false } }, async ($, on) => {
+  test('auf Englisch', { options: { language: 'en', intro: false, tips: false } }, async ($, on) => {
     engine(on)
     await startSession($)
     const ui = await $.ui.mount(pane(90))
@@ -3213,7 +3214,7 @@ describe('Schreiben an Unteragenten', () => {
     expect((await run($, 'an sub-1 Hallo')).text).toMatch(/nicht zugestellt/)
   })
 
-  test('auf Englisch mit to', { options: { language: 'en', intro: false } }, async ($, on) => {
+  test('auf Englisch mit to', { options: { language: 'en', intro: false, tips: false } }, async ($, on) => {
     const seen = engine(on)
     on('prompt.read', () => ({ value: { text: '', cursor: 0 } }) as never)
     await oneAgentWithAdvisor($)
@@ -3327,7 +3328,7 @@ describe('Zweites /clear, Intro, Aussehen und Eingaben', () => {
     await ui.unmount()
   })
 
-  test('nach /clear und einem Neuladen spielt das Intro nicht mitten in der Unterhaltung', { options: { language: 'de', intro: true } }, async ($, on) => {
+  test('nach /clear und einem Neuladen spielt das Intro nicht mitten in der Unterhaltung', { options: { language: 'de', intro: true, tips: false } }, async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     const seen = engine(on, [], { clearResets: true })
     await startSession($)
@@ -3366,7 +3367,7 @@ describe('Zweites /clear, Intro, Aussehen und Eingaben', () => {
     await after.unmount()
   })
 
-  test('/agent-tree intro auf einer offenen Leiste spielt das Logo ohne Zeichnen von außen', { options: { language: 'de', intro: false } }, async ($, on) => {
+  test('/agent-tree intro auf einer offenen Leiste spielt das Logo ohne Zeichnen von außen', { options: { language: 'de', intro: false, tips: false } }, async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     engine(on)
     await startSession($)
@@ -3853,7 +3854,7 @@ describe('Kontext je Agent in der Leiste', () => {
   })
 })
 
-const en = { options: { language: 'en', intro: false } }
+const en = { options: { language: 'en', intro: false, tips: false } }
 const has = (text: string, key: string) => text.includes(`"key":"${key}"`)
 
 describe('Aktionszeile', () => {
@@ -4488,7 +4489,7 @@ describe('Tab Hilfe', () => {
     await ui.unmount()
   })
 
-  test('auf Englisch führt der Weg zur englischen Anleitung', { options: { language: 'en', intro: false } }, async ($, on) => {
+  test('auf Englisch führt der Weg zur englischen Anleitung', { options: { language: 'en', intro: false, tips: false } }, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))
@@ -5235,5 +5236,77 @@ describe('Farben 0.7.11: Zeichen und Verbrauch', () => {
     const later = await ui.findAll({ type: 'Text' })
     expect(later.find(f => /Woche \S+ 85 %/.test(f.text))?.props.color).toBe(p.failed)
     await ui.unmount()
+  })
+})
+
+describe('Tipps 0.7.12', () => {
+  const tips = { options: { language: 'de', intro: false } }
+  const helpText = async (ui: { findAll: (q: { type: string }) => Promise<{ text: string }[]> }) =>
+    (await ui.findAll({ type: 'Text' })).map(f => f.text).find(text => /^(Tipp?: |ctrl\+x tab)/.test(text)) ?? ''
+
+  test('ab Werk steht unten ein Tipp, und die Reihe merkt sich, wo sie steht', tips, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await helpText(ui)).toBe('Tipp: Im Verlauf › anklicken: deine Frage oder der Bericht')
+    expect(seen.storeSets).toContainEqual({ key: 'tip', value: 1 })
+    await ui.unmount()
+  })
+
+  test('die nächste Sitzung zeigt den nächsten Tipp', tips, async ($, on) => {
+    const seen = engine(on, [], {}, { tip: 1 })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await helpText(ui)).toBe('Tipp: Kasten anklicken: stoppen, schreiben, Modell, Denkstufe')
+    expect(seen.storeSets).toContainEqual({ key: 'tip', value: 2 })
+    await ui.unmount()
+  })
+
+  test('nach dem letzten Tipp beginnt die Reihe von vorn', tips, async ($, on) => {
+    engine(on, [], {}, { tip: 6 })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await helpText(ui)).toBe('Tipp: Im Verlauf › anklicken: deine Frage oder der Bericht')
+    await ui.unmount()
+  })
+
+  test('ein kaputter gespeicherter Wert beginnt beim ersten Tipp', tips, async ($, on) => {
+    engine(on, [], {}, { tip: 'quatsch' })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await helpText(ui)).toBe('Tipp: Im Verlauf › anklicken: deine Frage oder der Bericht')
+    await ui.unmount()
+  })
+
+  test('ohne Tipps steht die Tastenzeile da', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await helpText(ui)).toMatch(/^ctrl\+x tab: Leiste/)
+    expect(seen.storeSets.some(s => s.key === 'tip')).toBe(false)
+    await ui.unmount()
+  })
+
+  test('ohne Bedienung kein Tipp', tips, async ($, on) => {
+    const seen = engine(on)
+    await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
+    const ui = await $.ui.mount(pane(90))
+    expect(await helpText(ui)).toMatch(/^ctrl\+x tab: Leiste/)
+    expect(seen.storeSets.some(s => s.key === 'tip')).toBe(false)
+    await ui.unmount()
+  })
+
+  test('die Tipps auf Englisch', { options: { language: 'en', intro: false } }, async ($, on) => {
+    engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await helpText(ui)).toBe('Tip: in the Log, click › for your prompt or the report')
+    await ui.unmount()
+  })
+})
+
+describe('Länge der Tipps', () => {
+  test('jeder Tipp passt in eine Leiste von 64 Spalten', () => {
+    for (const lang of ['de', 'en']) for (const tip of wordsFor(lang).tips) expect([...tip].length).toBeLessThanOrEqual(64)
   })
 })

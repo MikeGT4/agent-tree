@@ -112,6 +112,7 @@ const SHAPE = 'agent-tree-1'
 const LOOK_SHAPE = 'agent-tree-look-1'
 const LOOK_KEY = 'look'
 const STAR_KEY = 'star'
+const TIP_KEY = 'tip'
 const MODEL_KEY = 'model'
 const EFFORT_KEY = 'effort'
 const MAIN_EFFORT_KEY = 'mainEffort'
@@ -155,6 +156,7 @@ let codeMode = false
 let stopSentIds = new Set<string>()
 let lastAdvisor = 'opus'
 let advisorCommand = true
+let tip: number | undefined
 type Carried = { tree: AgentTreeState; look: AgentTreeLook; unread: Record<string, string[]>; sessionId?: string }
 type Pin = string | undefined
 type Level = string | number
@@ -797,6 +799,13 @@ function actionsFor($: EngineInterface): TreeActions {
   }
 }
 
+async function nextTip($: EngineInterface): Promise<number | undefined> {
+  const stored = Number((await $.store.get(TIP_KEY).catch(() => undefined)) ?? 0)
+  const shown = Number.isInteger(stored) && stored >= 0 ? stored : 0
+  await $.store.set(TIP_KEY, shown + 1).catch(() => undefined)
+  return shown
+}
+
 async function starDue($: EngineInterface): Promise<boolean> {
   const starts = Number((await $.store.get(STAR_KEY).catch(() => undefined)) ?? 0)
   if (!Number.isFinite(starts) || starts >= 2) return false
@@ -851,6 +860,7 @@ export const register: Register = (on, options) => {
   const openOnStart = options.openOnStart === true
   animate = options.animate !== false
   introOn = options.intro !== false
+  const tipsOn = options.tips !== false
   lang = resolveLang(options.language, undefined)
 
   on('session.start', async ($, e, next) => {
@@ -887,6 +897,7 @@ export const register: Register = (on, options) => {
     await readMainModels($).catch(() => undefined)
     await catchUp($, await clock($), keep).catch(() => undefined)
     if (e.isInteractive !== false) await prepareNotice($).catch(() => undefined)
+    tip = tipsOn && e.isInteractive !== false ? await nextTip($).catch(() => undefined) : undefined
     await maybeStartIntro($, e.isInteractive !== false).catch(() => undefined)
     if (!introTicker) startNotice($, await clock($))
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
@@ -1276,6 +1287,7 @@ export const register: Register = (on, options) => {
       canAdvise: advisorCommand,
       reports,
       questions,
+      ...(tip !== undefined ? { tip } : {}),
       docked: e.props.placement === 'dock',
     })
   })
