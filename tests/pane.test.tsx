@@ -5088,6 +5088,24 @@ describe('Verlauf 0.7.11: Untermenü, Aufklappen, Sprung', () => {
     await ui.unmount()
   })
 
+  test('unter Haupt sind die 20 neuesten Fragen klickbar, auch zwischen anderen Einträgen', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    for (let i = 1; i <= 30; i++) {
+      await $.turn.start({ text: `Frage ${i}`, turnId: `t${i}` })
+      await $.turn.complete({ answer: 'OK', durationMs: 100, isAborted: false, turnId: `t${i}`, reason: 'answer' })
+    }
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.press({ key: 'logfilter:main' })
+    await ui.redraw()
+    const keys = [...(await screen(ui)).matchAll(/"key":"logopen:(\d+)"/g)].map(m => Number(m[1]))
+    expect(keys.length).toBe(20)
+    expect(Math.max(...keys)).toBe(30)
+    expect(Math.min(...keys)).toBe(11)
+    await ui.unmount()
+  })
+
   test('ein Eintrag eines Agenten springt zu seinem Bericht', de, async ($, on) => {
     engine(on)
     await agents($, 2)

@@ -260,11 +260,13 @@ export function drawLog(ui: Ui, o: LogInput) {
   const active = o.s.logFilter
   const rows = [...o.s.log].reverse().filter(row => !active || row.source === active)
   const sourceColor = (source: AgentTreeLogSource) => (source === 'session' ? o.palette.dim : o.palette[source])
+  let links = 0
   const drawRow = (row: AgentTreeLogEntry, i: number) => {
-    const linked = i < LOG_LINKS
+    const linked = links < LOG_LINKS
     const turn = questionTurn(row)
     const question = turn === undefined || !o.open || !linked ? undefined : o.questions?.get(turn)
-    const target = o.jump && linked ? logTarget(o.s, row) : undefined
+    const target = o.jump && linked && question === undefined ? logTarget(o.s, row) : undefined
+    if (question !== undefined || target !== undefined) links += 1
     const isOpen = question !== undefined && o.s.logOpen === turn
     const marker = question !== undefined ? (isOpen ? '  ⌄' : '  ›') : target !== undefined ? '  ›' : ''
     const said = logLine(row, o.lang)
