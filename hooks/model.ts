@@ -272,9 +272,11 @@ export function stopRevived(s: AgentTreeState, agentId: string, now: number): Ag
 }
 
 export function wakeStopDropped(s: AgentTreeState, agentId: string): AgentTreeState {
-  if (!wakeStopKnown(s, agentId) && !wasStopOutrun(s, agentId)) return s
+  const idle = findAgent(s, agentId)?.status !== 'running'
+  const stuck = idle && (isStopping(s, agentId) || wasStopSent(s, agentId))
+  if (!wakeStopKnown(s, agentId) && !wasStopOutrun(s, agentId) && !stuck) return s
   return {
-    ...s,
+    ...(stuck ? withoutStop(s, agentId) : s),
     stopOutrun: (s.stopOutrun ?? []).filter(id => id !== agentId),
     stopWake: Object.fromEntries(Object.entries(s.stopWake ?? {}).filter(([id]) => id !== agentId)),
   }
@@ -997,7 +999,11 @@ export function completed(s: AgentTreeState, input: CompleteInput, now: number):
     )
     return { ...withoutStop(s, input.agentId), orphans: Object.fromEntries(kept) }
   }
-  if (node.status !== 'running' && node.answerTokens !== undefined) return s
+  if (node.status !== 'running' && node.answerTokens !== undefined) {
+    if (!wasStopSent(s, node.id)) return s
+    const halted = withAgent(withoutStop(s, node.id), node.id, n => ({ ...n, status: 'stopped' }))
+    return logged(halted, 'agent', 'agentEnded', { type: node.type, status: 'stopped', durationMs: input.durationMs, tokens: answerTokens }, now)
+  }
   const final = node.status === 'stopped' || wasStopSent(s, node.id) ? 'stopped' : status
   let next = withAgent(withoutStop(s, node.id), node.id, n => ({
     ...n,

@@ -14,7 +14,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; fast?: boolean; fastFails?: boolean; model?: string; modelOptions?: string[]; modelFails?: boolean; modelLocked?: boolean; codeMode?: boolean; stepTools?: string[]; mainStepTools?: string[] } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; denyHandback?: boolean; fast?: boolean; fastFails?: boolean; model?: string; modelOptions?: string[]; modelFails?: boolean; modelLocked?: boolean; codeMode?: boolean; stepTools?: string[]; mainStepTools?: string[] } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -170,6 +170,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { send?: boolean; comman
   on('tool.call', async (_, e) => {
     const edit = (e as { tool?: string }).tool === 'Edit'
     if (edit && refuse.denyEdit) return { deny: 'User rejected' } as never
+    if (refuse.denyHandback && (e as { tool?: string }).tool === 'SubagentHandback') return { deny: 'Regel' } as never
     if (edit && refuse.failEdit) return { result: 'String to replace not found', isError: true } as never
     return { result: 'ok', text: 'ok' } as never
   })
@@ -1904,7 +1905,7 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await ui.unmount()
   })
 
-  test('Korrektur, Stoppwunsch, der Agent berichtet selbst: geweckt wird er sofort gestoppt', de, async ($, on) => {
+  test('Korrektur, Stoppwunsch, der Agent berichtet selbst: der Schritt mit der wartenden Nachricht wird gestoppt', de, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
     const ui = await openDetail($)
@@ -1931,6 +1932,42 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     const woken = await step($, { agentId: 'sub-1' })
     expect(woken.answer).toMatch(/Im Agent Tree vom Nutzer gestoppt/)
     expect(seen.stepModels.length - before).toBe(0)
+    await ui.unmount()
+  })
+
+  test('Stopp beim Wecken ohne turn.start: die Karte zeigt gestoppt, eine neue Nachricht des Nutzers läuft', de, async ($, on) => {
+    const seen = engine(on, [], { codeMode: true })
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Nimm b.ts')
+    await steer(ui, 'halt:sub-1')
+    await $.turn.complete(finished)
+    const woken = await step($, { agentId: 'sub-1' })
+    expect(woken.answer).toMatch(/Im Agent Tree vom Nutzer gestoppt/)
+    await $.turn.complete({ ...finished, answer: woken.answer })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toMatch(/○ gestoppt/)
+    expect(JSON.stringify(seen.tree()?.log.at(-1))).toMatch(/"status":"stopped"/)
+    const before = seen.stepModels.length
+    await sayCommand($, 'Jetzt c.ts')
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepModels.length - before).toBe(1)
+    await ui.unmount()
+  })
+
+  test('Stopp beim Wecken, das Ende des Weckrufs kommt nie an: eine neue Nachricht des Nutzers läuft trotzdem', de, async ($, on) => {
+    const seen = engine(on, [], { codeMode: true })
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Nimm b.ts')
+    await steer(ui, 'halt:sub-1')
+    await $.turn.complete(finished)
+    await step($, { agentId: 'sub-1' })
+    const before = seen.stepModels.length
+    await sayCommand($, 'Jetzt c.ts')
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepModels.length - before).toBe(1)
     await ui.unmount()
   })
 
@@ -1976,7 +2013,7 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await ui.unmount()
   })
 
-  test('Stoppwunsch überholt: erst Stopp, dann Korrektur, der Agent endet während des Sendens: geweckt wird er gestoppt', de, async ($, on) => {
+  test('Stoppwunsch überholt: eine Korrektur nach dem Stopp wird nicht gesendet, der endende Agent wird beim Wecken gestoppt', de, async ($, on) => {
     const refuse: { onSend?: () => Promise<unknown> } = {}
     const seen = engine(on, [], refuse)
     await oneAgentWithAdvisor($)
@@ -2027,34 +2064,32 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await ui.unmount()
   })
 
-  test('nach angefordertem Stopp wird eine spätere Korrektur nicht nachgeschickt, auch wenn der Agent selbst endet', de, async ($, on) => {
+  test('einem Agenten im Stopp wird nichts mehr geschickt, die Nachricht gilt sofort als nicht zugestellt', de, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
     const ui = await openDetail($)
     await steer(ui, 'halt:sub-1')
-    await sayCommand($, 'Nimm b.ts')
-    await $.turn.complete(finished)
+    const said = await sayCommand($, 'Nimm b.ts')
     await ui.redraw()
-    expect(seen.sent.length).toBe(1)
+    expect(seen.sent.length).toBe(0)
+    expect(seen.appended.length).toBe(0)
+    expect(said.text).toMatch(/nicht zugestellt/)
     expect(await screen(ui)).toMatch(/Korrektur: nicht zugestellt/)
+    expect(seen.status.some(line => /Korrektur nicht zugestellt/.test(line))).toBe(true)
     await ui.unmount()
   })
 
-  test('eine Korrektur nach dem Stoppwunsch geht an den gestoppten Agenten nicht nach', de, async ($, on) => {
-    const seen = engine(on)
+  test('lehnt ein anderer Hook die eigene Abgabe ab, bleibt der Stopp bestehen', de, async ($, on) => {
+    const seen = engine(on, [], { denyHandback: true })
     await oneAgentWithAdvisor($)
     const ui = await openDetail($)
     await steer(ui, 'halt:sub-1')
-    await sayCommand($, 'Nimm b.ts')
-    const stopped = await step($, { agentId: 'sub-1' })
-    await $.tool.call({ tool: 'SubagentHandback', message: stopped.answer, agentId: 'sub-1' } as never)
-    const last = await step($, { agentId: 'sub-1' })
-    await $.turn.complete({ ...finished, answer: last.answer })
-    await ui.redraw()
-    expect(seen.sent.length).toBe(1)
-    const text = await screen(ui)
-    expect(text).toMatch(/○ gestoppt/)
-    expect(text).toMatch(/Korrektur: nicht zugestellt/)
+    const own = await $.tool.call({ tool: 'SubagentHandback', message: 'Mein Bericht', agentId: 'sub-1' } as never)
+    expect(JSON.stringify(own)).toMatch(/Regel/)
+    const before = seen.stepModels.length
+    const next = await step($, { agentId: 'sub-1' })
+    expect(next.answer).toMatch(/Im Agent Tree vom Nutzer gestoppt/)
+    expect(seen.stepModels.length - before).toBe(0)
     await ui.unmount()
   })
 
@@ -4712,20 +4747,6 @@ describe('Stopp beim Wecken und Senden an endende Agenten', () => {
     await ui.unmount()
   })
 
-  test('Stoppwunsch ohne Korrektur, eigenes Ende: eine spätere Nachricht weckt ihn ohne Stopp', de, async ($, on) => {
-    const seen = engine(on, [], { codeMode: true })
-    await oneAgentWithAdvisor($)
-    const ui = await detail($)
-    await steer(ui, 'halt:sub-1')
-    await $.turn.complete(done1)
-    await sayCommand($, 'Jetzt c.ts')
-    await $.turn.start({ text: 'Jetzt c.ts', turnId: 't3', agentId: 'sub-1' } as never)
-    const before = seen.stepModels.length
-    await step($, { agentId: 'sub-1' })
-    expect(seen.stepModels.length - before).toBe(1)
-    await ui.unmount()
-  })
-
   test('abgebrochen während des Sendens: nicht zugestellt', de, async ($, on) => {
     const refuse: { onSend?: () => Promise<unknown> } = {}
     engine(on, [], refuse)
@@ -4781,6 +4802,132 @@ describe('Stopp beim Wecken und Senden an endende Agenten', () => {
     await sayCommand($, 'Jetzt c.ts')
     await ui.redraw()
     expect(await screen(ui)).toMatch(/Korrektur: geschickt/)
+    await ui.unmount()
+  })
+})
+
+describe('Gehaltener Stopp: Zeitfenster, Marken und Bereinigung', () => {
+  const done1 = { answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' } as const
+  const done2 = { ...done1, agentId: 'sub-2' } as const
+  const lostText = (rows: Appended[], agentId?: string) => rows.filter(r => r.agentId === agentId && (r.message.content[0]?.text ?? '').includes('nicht mehr angekommen')).length
+  async function detail($: Engine, id = 'sub-1') {
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, `detail:${id}`)
+    await ui.redraw()
+    return ui
+  }
+  async function label(ui: Pressable & { redraw: () => Promise<unknown> }) {
+    await ui.redraw()
+    const text = await screen(ui)
+    return /Korrektur: nicht zugestellt/.test(text) ? 'failed' : /Korrektur: geschickt/.test(text) ? 'sent' : /Korrektur: gelesen/.test(text) ? 'read' : 'none'
+  }
+
+  test('Weckruf während des Sendens nach überholtem Stopp läuft', de, async ($, on) => {
+    const refuse: { onSend?: () => Promise<unknown> } = {}
+    const seen = engine(on, [], refuse)
+    await oneAgentWithAdvisor($)
+    const ui = await detail($)
+    await steer(ui, 'halt:sub-1')
+    await $.turn.complete(done1)
+    const before = seen.stepModels.length
+    refuse.onSend = () => step($, { agentId: 'sub-1' })
+    await sayCommand($, 'Mach weiter')
+    refuse.onSend = undefined
+    expect(seen.stepModels.length - before).toBe(1)
+    await ui.unmount()
+  })
+
+  test('Nachricht zwischen Abgabe und Ende: Weckruf läuft', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await detail($)
+    await steer(ui, 'halt:sub-1')
+    await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
+    await sayCommand($, 'Doch weiter')
+    await $.turn.complete(done1)
+    const before = seen.stepModels.length
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepModels.length - before).toBe(1)
+    await ui.unmount()
+  })
+
+  test('clear zwischen Abgabe und Ende: Weckruf wird gestoppt', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await detail($)
+    await steer(ui, 'halt:sub-1')
+    await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
+    await ui.unmount()
+    await $.command.run({ command: 'agent-tree', args: 'clear', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+    await $.turn.complete(done1)
+    const before = seen.stepModels.length
+    const woken = await step($, { agentId: 'sub-1' })
+    expect(seen.stepModels.length - before).toBe(0)
+  })
+
+  test('Abgabe ohne Korrektur, Schritt vor dem Ende läuft', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await detail($)
+    await steer(ui, 'halt:sub-1')
+    await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
+    const before = seen.stepModels.length
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepModels.length - before).toBe(1)
+    await ui.unmount()
+  })
+
+  test('abgelaufene Einträge anderer Agenten werden entfernt', de, async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    await $.agent.spawn({ prompt: 'Zweiter.', description: 'Zweiter', subagentType: 'Explore' } as never)
+    await step($, { agentId: 'sub-2' })
+    const ui = await detail($)
+    await steer(ui, 'halt:sub-1')
+    await $.turn.complete(done1)
+    await clock.advance(61_000)
+    await steer(ui, 'detail:sub-2')
+    await ui.redraw()
+    await steer(ui, 'halt:sub-2')
+    await $.turn.complete(done2)
+    const wake = seen.tree().stopWake ?? {}
+    expect(Object.keys(wake)).toEqual(['sub-2'])
+    await ui.unmount()
+  })
+  test('nach Ablauf geweckt, normal beendet: ein weiterer Weckruf läuft', de, async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await detail($)
+    await steer(ui, 'halt:sub-1')
+    await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
+    await $.turn.complete(done1)
+    await clock.advance(61_000)
+    await $.turn.start({ text: 'Weiter', turnId: 't2', agentId: 'sub-1' } as never)
+    const first = seen.stepModels.length
+    await step($, { agentId: 'sub-1' })
+    const ranFirst = seen.stepModels.length - first
+    await $.tool.call({ tool: 'SubagentHandback', message: 'Fertig', agentId: 'sub-1' } as never)
+    await $.turn.complete({ ...done1, turnId: 't2', answer: 'Fertig' })
+    await $.turn.start({ text: 'Noch was', turnId: 't3', agentId: 'sub-1' } as never)
+    const second = seen.stepModels.length
+    await step($, { agentId: 'sub-1' })
+    expect([ranFirst, seen.stepModels.length - second]).toEqual([1, 1])
+    await ui.unmount()
+  })
+
+  test('genau 60 s nach dem Ende wird der Weckruf noch gestoppt', de, async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await detail($)
+    await steer(ui, 'halt:sub-1')
+    await $.turn.complete(done1)
+    await clock.advance(60_000)
+    const before = seen.stepModels.length
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepModels.length - before).toBe(0)
     await ui.unmount()
   })
 })

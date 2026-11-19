@@ -568,6 +568,11 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
   }
   const before = current.corrections?.[agentId]
   const now = await clock($)
+  if (node.status === 'running' && isStopping(current, agentId)) {
+    await change($, t => correctionFailed(t, { agentId, text, before }, now))
+    $.ui.status(w.correctionFailedStatus)
+    return false
+  }
   await change($, t => wakeStopDropped(t, agentId)).catch(() => undefined)
   const framed = codeMode ? w.correctionFrameCode(text) : w.correctionFrame(text, HANDBACK)
   const running = node.status === 'running'
@@ -1088,10 +1093,18 @@ export const register: Register = (on, options) => {
         return { deny: wordsFor(lang).stopAnswer(current.agents.find(n => n.id === agentId)?.toolCount ?? 0) }
       }
       if (stopSentIds.has(agentId)) return next(e)
+      const own = await next(e)
+      if (!succeeded(own)) return own
       const outranAt = await clock($)
+      const handed = toolLabel(String(e.tool), input)
       await change($, s =>
-        stopOutran(stopKeptForWake(stopCancelled(s, agentId), agentId, pendingCorrection(s, agentId) !== undefined, outranAt), agentId),
+        toolRan(
+          stopOutran(stopKeptForWake(stopCancelled(s, agentId), agentId, pendingCorrection(s, agentId) !== undefined, outranAt), agentId),
+          { agentId, label: handed, kind },
+          outranAt,
+        ),
       ).catch(() => undefined)
+      return own
     }
     if (!stopping && String(e.tool) === HANDBACK) {
       const waiting = pendingCorrection(await latest($), agentId)
