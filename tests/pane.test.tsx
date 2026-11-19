@@ -886,7 +886,7 @@ describe('Agent Tree', () => {
     expect(card).toContain(`AGENT TREE ${VERSION}`)
     expect(card).toMatch(/wurde aktualisiert/)
     expect(card).toMatch(/0\.7\.7 /)
-    expect(card).toMatch(/Zeigt nach einem Update, was neu ist/)
+    expect(card).toMatch(/Verlauf: Klick zeigt deine Frage oder den Bericht/)
     expect(card).not.toMatch(/Läuft im Code Mode/)
     expect(card).not.toMatch(/Sitzungsprotokoll/)
     await clock.advance(3100)
@@ -901,7 +901,7 @@ describe('Agent Tree', () => {
     const ui = await $.ui.mount(pane(90))
     const card = await screen(ui)
     expect(card).toContain(`AGENT TREE ${VERSION}`)
-    expect(card).toMatch(/kein doppelter Lauf mehr/)
+    expect(card).toMatch(/Farben für Zeichen und Verbrauch/)
     expect(card).not.toMatch(/Läuft im Code Mode/)
     await ui.press({ key: 'notice:skip' })
     await ui.redraw()
@@ -2582,7 +2582,7 @@ describe('Fast Mode per Knopf', () => {
     await ui.redraw()
     const text = await screen(ui)
     expect(text).toContain(`Zuletzt neu, Stand ${VERSION}`)
-    expect(text).toContain('Zeigt nach einem Update, was neu ist')
+    expect(text).toContain('Filter als Leiste, bleibt gespeichert')
     expect(text).toContain('„CODE MODE“ im Titel: die Sitzung läuft im Code Mode.')
     await ui.unmount()
   })
@@ -4989,6 +4989,220 @@ describe('Gehaltener Stopp: Zeitfenster, Marken und Bereinigung', () => {
     const before = seen.stepModels.length
     await step($, { agentId: 'sub-1' })
     expect(seen.stepModels.length - before).toBe(0)
+    await ui.unmount()
+  })
+})
+
+describe('Verlauf 0.7.11: Untermenü, Aufklappen, Sprung', () => {
+  const longQuestion = 'Genau und dann haben wir bei Hilfe siehst du ja die Zeichenerklärung, da ist ja Zeichen läuft, fertig, fehlgeschlagen und gestoppt, ganz am Ende steht ZIELWORT'
+
+  test('die Filter stehen als gerahmte Leiste über der Zeile Sitzungsprotokoll', de, async ($, on) => {
+    engine(on)
+    await agents($, 1)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('"key":"log-filter-top"')
+    expect(text).toContain('"key":"log-filter-bottom"')
+    expect(text.indexOf('"key":"logfilter:all"')).toBeLessThan(text.indexOf('Sitzungsprotokoll'))
+    await ui.unmount()
+  })
+
+  test('bei 38 Spalten bleiben die Filter ohne Rahmen bedienbar', de, async ($, on) => {
+    engine(on)
+    await agents($, 1)
+    const ui = await $.ui.mount(pane(38))
+    await ui.press({ key: 'tab:log' })
+    await ui.press({ key: 'logfilter:agent' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).not.toContain('"key":"log-filter-top"')
+    expect(text).toMatch(/gestartet: Agent 1/)
+    expect(text).not.toMatch(/Runde 1/)
+    await ui.unmount()
+  })
+
+  test('die eigene Frage klappt als Kiste auf und wieder zu', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await $.turn.start({ text: longQuestion, turnId: 't1' })
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.redraw()
+    expect(await screen(ui)).not.toMatch(/ZIELWORT/)
+    await ui.press({ key: 'logopen:1' })
+    await ui.redraw()
+    const open = await screen(ui)
+    expect(open).toContain('"key":"log-question"')
+    expect(open).toMatch(/ZIELWORT/)
+    await ui.press({ key: 'logopen:1' })
+    await ui.redraw()
+    expect(await screen(ui)).not.toMatch(/ZIELWORT/)
+    await ui.unmount()
+  })
+
+  test('die ganze Frage bleibt im Arbeitsspeicher und nicht im Zustand', de, async ($, on) => {
+    const seen = engine(on)
+    await startSession($)
+    await $.turn.start({ text: longQuestion, turnId: 't1' })
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.press({ key: 'logopen:1' })
+    await ui.redraw()
+    expect(JSON.stringify(seen.tree())).not.toMatch(/ZIELWORT/)
+    expect(JSON.stringify(seen.storeSets)).not.toMatch(/ZIELWORT/)
+    await ui.unmount()
+  })
+
+  test('nach /clear klappt keine fremde Frage auf', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await $.turn.start({ text: longQuestion, turnId: 't1' })
+    await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+    await startSession($)
+    await $.turn.start({ text: 'Neue Frage', turnId: 't2' })
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.redraw()
+    const keys = [...(await screen(ui)).matchAll(/"key":"(logopen:\d+)"/g)].map(m => m[1] ?? '')
+    expect(keys.length).toBeGreaterThan(0)
+    for (const key of keys) await ui.press({ key })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).not.toMatch(/ZIELWORT/)
+    expect(text).toMatch(/Neue Frage/)
+    await ui.unmount()
+  })
+
+  test('eine klickbare Zeile bleibt mit ihrem Zeichen in einer Zeile', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await $.turn.start({ text: longQuestion, turnId: 't1' })
+    const ui = await $.ui.mount(pane(72))
+    await ui.press({ key: 'tab:log' })
+    await ui.redraw()
+    const label = (await ui.find({ key: 'logopen:1' }))?.props.label as string
+    expect(label.endsWith('›')).toBe(true)
+    expect([...label].length).toBeLessThanOrEqual(72)
+    await ui.unmount()
+  })
+
+  test('ein Eintrag eines Agenten springt zu seinem Bericht', de, async ($, on) => {
+    engine(on)
+    await agents($, 2)
+    await $.turn.complete({ answer: 'Antwort von eins', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.redraw()
+    const text = await screen(ui)
+    const key = text.match(/"key":"(logjump:sub-1:[^"]+)"/)?.[1]
+    expect(key).toBeDefined()
+    await ui.press({ key: key ?? '' })
+    await ui.redraw()
+    const shown = await screen(ui)
+    expect(shown).toContain('"key":"reports-view"')
+    expect(shown).toMatch(/Agent 1/)
+    await ui.unmount()
+  })
+
+  test('Einträge der Sitzung und des Beraters sind nicht klickbar', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.press({ key: 'logfilter:advisor' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).not.toMatch(/"key":"logjump:/)
+    expect(text).not.toMatch(/"key":"logopen:/)
+    await ui.unmount()
+  })
+
+  test('der gewählte Filter wird gespeichert', de, async ($, on) => {
+    const seen = engine(on)
+    await agents($, 1)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.press({ key: 'logfilter:agent' })
+    await ui.redraw()
+    expect(seen.storeSets).toContainEqual({ key: 'logFilter', value: 'agent' })
+    await ui.press({ key: 'logfilter:all' })
+    await ui.redraw()
+    expect(seen.storeSets).toContainEqual({ key: 'logFilter', value: null })
+    await ui.unmount()
+  })
+
+  test('der gespeicherte Filter gilt in der nächsten Sitzung', de, async ($, on) => {
+    engine(on, [], {}, { logFilter: 'agent' })
+    await agents($, 1)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toMatch(/gestartet: Agent 1/)
+    expect(text).not.toMatch(/Runde 1/)
+    await ui.unmount()
+  })
+
+  test('der Filter bleibt nach /clear', de, async ($, on) => {
+    engine(on)
+    await agents($, 1)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.press({ key: 'logfilter:agent' })
+    await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+    await startSession($)
+    await $.turn.start({ text: 'Nach dem Leeren', turnId: 't2' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('"key":"log-view"')
+    expect(text).not.toMatch(/Nach dem Leeren/)
+    await ui.unmount()
+  })
+})
+
+describe('Farben 0.7.11: Zeichen und Verbrauch', () => {
+  test('die Zeichenerklärung trägt die Farben des Baums', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:help' })
+    await ui.redraw()
+    const texts = await ui.findAll({ type: 'Text' })
+    const colorOf = (pattern: RegExp) => texts.find(f => pattern.test(f.text))?.props.color
+    const p = PALETTES.original
+    expect(colorOf(/^◐ läuft$/)).toBe(p.agent)
+    expect(colorOf(/^● fertig$/)).toBe(p.done)
+    expect(colorOf(/^✗ fehlgeschlagen$/)).toBe(p.failed)
+    expect(colorOf(/^○ gestoppt$/)).toBe(p.dim)
+    await ui.unmount()
+  })
+
+  test('der Verbrauch ist grün, gelb und ab 80 % rot', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    await $.session.measure({
+      context: { window: 200000, tokens: 50000, percent: 25 },
+      rateLimits: [{ kind: 'five_hour', percentUsed: 20 }, { kind: 'seven_day', percentUsed: 64 }],
+      cost: { usd: 1 },
+      changed: ['rateLimits'],
+    } as never)
+    const ui = await $.ui.mount(pane(90))
+    const texts = await ui.findAll({ type: 'Text' })
+    const colorOf = (pattern: RegExp) => texts.find(f => pattern.test(f.text))?.props.color
+    const p = PALETTES.original
+    expect(colorOf(/^5 h /)).toBe(p.done)
+    expect(colorOf(/Woche \S+ 64 %/)).toBe(p.warn)
+    await $.session.measure({
+      context: { window: 200000, tokens: 50000, percent: 25 },
+      rateLimits: [{ kind: 'seven_day', percentUsed: 85 }],
+      cost: { usd: 1 },
+      changed: ['rateLimits'],
+    } as never)
+    await ui.redraw()
+    const later = await ui.findAll({ type: 'Text' })
+    expect(later.find(f => /Woche \S+ 85 %/.test(f.text))?.props.color).toBe(p.failed)
     await ui.unmount()
   })
 })

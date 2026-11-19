@@ -6,6 +6,7 @@ import type {
   AgentTreeDetail,
   AgentTreeGroup,
   AgentTreeLimit,
+  AgentTreeLogEntry,
   AgentTreeLogSource,
   AgentTreeNode,
   AgentTreePhase,
@@ -144,6 +145,19 @@ export function logFiltered(s: AgentTreeState, source: string): AgentTreeState {
   if (source === 'all') return { ...s, logFilter: undefined }
   const known = LOG_SOURCES.find(x => x === source)
   return known ? { ...s, logFilter: known } : s
+}
+
+export function logSourceFrom(value: unknown): AgentTreeLogSource | undefined {
+  return LOG_SOURCES.find(x => x === value)
+}
+
+export function logToggled(s: AgentTreeState, turn: number): AgentTreeState {
+  return { ...s, logOpen: s.logOpen === turn ? undefined : turn }
+}
+
+export function logTarget(s: AgentTreeState, entry: AgentTreeLogEntry): string | undefined {
+  const id = entry.source === 'agent' ? entry.data?.agentId : undefined
+  return typeof id === 'string' && s.agents.some(n => n.id === id) ? id : undefined
 }
 
 export function hasNewReport(s: AgentTreeState): boolean {
@@ -313,13 +327,14 @@ export function restoredChoices(
   family: string | undefined,
   effort: string | undefined,
   mainEffort?: string,
+  logFilter?: AgentTreeLogSource,
 ): AgentTreeState {
-  return { ...s, choices: { ...choicesOf(s), newAgents: family, newEffort: effort, mainEffort, restored: true } }
+  return { ...s, logFilter, choices: { ...choicesOf(s), newAgents: family, newEffort: effort, mainEffort, restored: true } }
 }
 
 export function carriedChoices(from: AgentTreeState, to: AgentTreeState): AgentTreeState {
   const { newAgents, newEffort, mainEffort, restored } = choicesOf(from)
-  return { ...to, choices: { ...choicesOf(to), newAgents, newEffort, mainEffort, restored } }
+  return { ...to, logFilter: from.logFilter, choices: { ...choicesOf(to), newAgents, newEffort, mainEffort, restored } }
 }
 
 export function effortChosen(s: AgentTreeState, target: string, effort: string | undefined, now: number): AgentTreeState {
@@ -631,7 +646,7 @@ export function turnStarted(s: AgentTreeState, input: { text: string; agentId?: 
     const node = findAgent(s, input.agentId)
     if (!node || node.status === 'running') return s
     const reopened = withAgent(s, node.id, n => ({ ...n, status: 'running', endedAt: undefined, startedAt: now }))
-    return logged(reopened, 'agent', 'resumed', { type: node.type, description: node.description }, now)
+    return logged(reopened, 'agent', 'resumed', { type: node.type, description: node.description, agentId: node.id }, now)
   }
   if (AGENT_MESSAGE.test(input.text) || input.text.trim() === '') {
     return { ...s, main: { ...s.main, active: true, resumed: true, turnStartedAt: now } }
@@ -720,7 +735,7 @@ export function spawned(s: AgentTreeState, input: SpawnInput, now: number): Agen
       startedAt: now,
       endedAt: undefined,
     }))
-    return logged(pinned(resumed, existing.id, input.effort), 'agent', 'resumed', { type: existing.type, description: existing.description }, now)
+    return logged(pinned(resumed, existing.id, input.effort), 'agent', 'resumed', { type: existing.type, description: existing.description, agentId: existing.id }, now)
   }
   const orphan = s.orphans?.[input.agentId]
   const node: AgentTreeNode = {
@@ -753,9 +768,9 @@ export function spawned(s: AgentTreeState, input: SpawnInput, now: number): Agen
   if (orphan) next = returnedTo(next, node, orphan.answerTokens)
   if (runSeen) return next
   if (node.workflowRunId !== undefined) return logged(next, 'agent', 'workflowStarted', { description: node.description }, node.startedAt)
-  next = logged(next, 'agent', 'agentStarted', { type: node.type, description: node.description }, node.startedAt)
+  next = logged(next, 'agent', 'agentStarted', { type: node.type, description: node.description, agentId: node.id }, node.startedAt)
   if (!orphan) return next
-  const ended = { type: node.type, status: orphan.status, durationMs: orphan.durationMs ?? 0, tokens: orphan.answerTokens }
+  const ended = { type: node.type, status: orphan.status, durationMs: orphan.durationMs ?? 0, tokens: orphan.answerTokens, agentId: node.id }
   return logged(next, 'agent', 'agentEnded', ended, orphan.at)
 }
 
@@ -1006,7 +1021,7 @@ export function completed(s: AgentTreeState, input: CompleteInput, now: number):
   if (node.status !== 'running' && node.answerTokens !== undefined) {
     if (!wasStopSent(s, node.id)) return s
     const halted = withAgent(withoutStop(s, node.id), node.id, n => ({ ...n, status: 'stopped' }))
-    return logged(halted, 'agent', 'agentEnded', { type: node.type, status: 'stopped', durationMs: input.durationMs, tokens: answerTokens }, now)
+    return logged(halted, 'agent', 'agentEnded', { type: node.type, status: 'stopped', durationMs: input.durationMs, tokens: answerTokens, agentId: node.id }, now)
   }
   const final = node.status === 'stopped' || wasStopSent(s, node.id) ? 'stopped' : status
   let next = withAgent(withoutStop(s, node.id), node.id, n => ({
@@ -1023,7 +1038,7 @@ export function completed(s: AgentTreeState, input: CompleteInput, now: number):
     const size = next.agents.filter(n => n.workflowRunId === node.workflowRunId).length
     return logged(next, 'agent', 'workflowDone', { size }, now)
   }
-  return logged(next, 'agent', 'agentEnded', { type: node.type, status: final, durationMs: input.durationMs, tokens: answerTokens }, now)
+  return logged(next, 'agent', 'agentEnded', { type: node.type, status: final, durationMs: input.durationMs, tokens: answerTokens, agentId: node.id }, now)
 }
 
 export function measured(

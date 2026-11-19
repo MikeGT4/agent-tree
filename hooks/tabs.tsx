@@ -1,10 +1,10 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import type { Elements } from 'claude-code'
 
-import type { AgentTreeLogSource, AgentTreeNode, AgentTreeReport, AgentTreeState, AgentTreeTab } from '../types'
-import { frameEdges, restyleLine } from './looks.ts'
+import type { AgentTreeLogEntry, AgentTreeLogSource, AgentTreeNode, AgentTreeReport, AgentTreeState, AgentTreeTab } from '../types'
+import { frameEdges, restyleLine, statusColor } from './looks.ts'
 import type { Glyphs, Palette } from './looks.ts'
-import { LOG_SOURCES, MAIN, TABS, clashShown, clockTime, contextLevel, contextPercent, cut, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
+import { LOG_SOURCES, MAIN, TABS, clashShown, logTarget, clockTime, contextLevel, contextPercent, cut, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
 import { helpItems, logLine } from './words.ts'
 import type { Lang, Words } from './words.ts'
 import { VERSION, newsBetween } from './news.ts'
@@ -144,50 +144,174 @@ function moreLine(ui: Ui, o: ViewInput, hidden: readonly AgentTreeNode[]) {
   return <Text color={o.palette.dim}>{o.w.more(hidden.length, hidden.filter(n => n.status === 'running').length)}</Text>
 }
 
-export function drawLog(ui: Ui, o: ViewInput & { filter?: (source: string) => void }) {
+export const QUESTION_SHOWN = 1500
+export const LOG_QUESTION_INDENT = 17
+export const LOG_LINKS = 20
+export const LOG_ROW_PREFIX = 19
+export const LOG_ROW_ROOM = 30
+
+export type LogInput = ViewInput & {
+  filter?: (source: string) => void
+  open?: (turn: number) => void
+  jump?: (agentId: string) => void
+  questions?: ReadonlyMap<number, string>
+}
+
+function capital(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+function questionTurn(row: AgentTreeLogEntry): number | undefined {
+  const turn = row.data?.turn
+  return row.source === 'main' && row.kind === 'turn' && typeof turn === 'number' ? turn : undefined
+}
+
+function drawLogFilters(ui: Ui, o: LogInput) {
   const { Box, Text, Button } = ui
   const filter = o.filter
   const active = o.s.logFilter
-  const rows = [...o.s.log].reverse().filter(row => !active || row.source === active)
-  const sourceColor = (source: AgentTreeLogSource) => (source === 'session' ? o.palette.dim : o.palette[source])
-  const chip = (id: string, text: string, chosen: boolean) => {
+  const cells = [
+    { id: 'all', text: capital(o.w.logAll), chosen: !active },
+    ...LOG_SOURCES.map(source => ({ id: source, text: capital(o.w.source[source]), chosen: active === source })),
+  ]
+  const chip = (cell: { id: string; text: string; chosen: boolean }) => {
     const shown = (
-      <Text bold={chosen} inverse={chosen} color={chosen ? o.palette.main : o.palette.dim}>
-        {` ${text} `}
+      <Text bold={cell.chosen} inverse={cell.chosen} color={cell.chosen ? o.palette.main : o.palette.dim}>
+        {` ${cell.text} `}
       </Text>
     )
     return filter ? (
-      <Button key={`logfilter:${id}`} plain onPress={() => filter(id)}>
+      <Button key={`logfilter:${cell.id}`} plain onPress={() => filter(cell.id)}>
         {shown}
       </Button>
     ) : (
-      <Box key={`logfilter:${id}`}>{shown}</Box>
+      <Box key={`logfilter:${cell.id}`}>{shown}</Box>
     )
+  }
+  const inner = cells.reduce((sum, c) => sum + [...c.text].length + 2, 0) + cells.length - 1
+  if (inner + 2 > o.width) {
+    return (
+      <Box key="log-filters" flexDirection="row" flexWrap="wrap" columnGap={1} width={o.width}>
+        {cells.map(chip)}
+      </Box>
+    )
+  }
+  const edges = frameEdges(o.glyphs, inner + 2)
+  const divider = restyleLine('│', o.glyphs)
+  return (
+    <Box key="log-filters" flexDirection="column" width={o.width}>
+      <Box key="log-filter-top">
+        <Text color={o.palette.dim}>{edges.top}</Text>
+      </Box>
+      <Box key="log-filter-row" flexDirection="row">
+        <Text color={o.palette.dim}>{o.glyphs.frame.l}</Text>
+        {cells.map((cell, i) => (
+          <Box key={`log-filter-cell:${cell.id}`} flexDirection="row" flexShrink={0}>
+            {i ? <Text color={o.palette.dim}>{divider}</Text> : null}
+            {chip(cell)}
+          </Box>
+        ))}
+        <Text color={o.palette.dim}>{o.glyphs.frame.r}</Text>
+      </Box>
+      <Box key="log-filter-bottom">
+        <Text color={o.palette.dim}>{edges.bottom}</Text>
+      </Box>
+    </Box>
+  )
+}
+
+function drawQuestion(ui: Ui, o: LogInput, question: string) {
+  const { Box, Text } = ui
+  const indent = o.width >= LOG_QUESTION_INDENT + 24 ? LOG_QUESTION_INDENT : 0
+  const boxWidth = Math.max(8, o.width - indent)
+  const total = [...question].length
+  const shown = total > QUESTION_SHOWN ? `${cut(question, QUESTION_SHOWN - 1)}…` : question
+  const body = [
+    <Text key="log-question-text" wrap="wrap">
+      {shown}
+    </Text>,
+    total > QUESTION_SHOWN ? (
+      <Text key="log-question-size" color={o.palette.dim}>
+        {o.w.logQuestionSize(total)}
+      </Text>
+    ) : null,
+  ]
+  if (o.glyphs.border) {
+    return (
+      <Box key="log-question" marginLeft={indent} width={boxWidth} flexDirection="column" borderStyle={o.glyphs.border} borderColor={o.palette.main} paddingX={1}>
+        {body}
+      </Box>
+    )
+  }
+  const edges = frameEdges(o.glyphs, boxWidth)
+  return (
+    <Box key="log-question" marginLeft={indent} width={boxWidth} flexDirection="column">
+      <Text color={o.palette.main}>{edges.top}</Text>
+      <Box key="log-question-body" flexDirection="column" paddingX={1}>
+        {body}
+      </Box>
+      <Text color={o.palette.main}>{edges.bottom}</Text>
+    </Box>
+  )
+}
+
+export function drawLog(ui: Ui, o: LogInput) {
+  const { Box, Text, Button } = ui
+  const active = o.s.logFilter
+  const rows = [...o.s.log].reverse().filter(row => !active || row.source === active)
+  const sourceColor = (source: AgentTreeLogSource) => (source === 'session' ? o.palette.dim : o.palette[source])
+  const drawRow = (row: AgentTreeLogEntry, i: number) => {
+    const linked = i < LOG_LINKS
+    const turn = questionTurn(row)
+    const question = turn === undefined || !o.open || !linked ? undefined : o.questions?.get(turn)
+    const target = o.jump && linked ? logTarget(o.s, row) : undefined
+    const isOpen = question !== undefined && o.s.logOpen === turn
+    const marker = question !== undefined ? (isOpen ? '  ⌄' : '  ›') : target !== undefined ? '  ›' : ''
+    const said = logLine(row, o.lang)
+    const room = o.width - LOG_ROW_PREFIX - [...marker].length
+    const text = marker && room >= LOG_ROW_ROOM && [...said].length > room ? `${cut(said, room - 1)}…` : said
+    const line = (
+      <Text key={`log-row:${i}`} wrap="wrap">
+        <Text color={o.palette.dim}>{`${clockTime(row.at)}  `}</Text>
+        <Text bold color={sourceColor(row.source)}>
+          {o.w.source[row.source].padEnd(9)}
+        </Text>
+        {text}
+        {isOpen ? (
+          <Text bold color={o.palette.main}>
+            {marker}
+          </Text>
+        ) : (
+          marker
+        )}
+      </Text>
+    )
+    if (question !== undefined && turn !== undefined && o.open) {
+      const open = o.open
+      return [
+        <Button key={`logopen:${turn}`} plain onPress={() => open(turn)}>
+          {line}
+        </Button>,
+        isOpen ? drawQuestion(ui, o, question) : null,
+      ]
+    }
+    if (target !== undefined && o.jump) {
+      const jump = o.jump
+      return [
+        <Button key={`logjump:${target}:${i}`} plain onPress={() => jump(target)}>
+          {line}
+        </Button>,
+      ]
+    }
+    return [line]
   }
   return (
     <Box key="log-view" flexDirection="column" width={o.width} marginTop={1}>
-      <Text color={o.palette.dim} wrap="truncate-end">
+      {drawLogFilters(ui, o)}
+      <Text key="log-head" color={o.palette.dim} wrap="truncate-end">
         {`${o.w.log} · ${o.w.logEntries(rows.length)} · ${o.w.logOrder}`}
       </Text>
-      <Box key="log-filters" flexDirection="row" flexWrap="wrap" columnGap={1} width={o.width}>
-        {chip('all', o.w.logAll, !active)}
-        {LOG_SOURCES.map(source => chip(source, o.w.source[source], active === source))}
-      </Box>
-      {rows.length === 0 ? (
-        active ? null : (
-          <Text color={o.palette.dim}>{o.w.logEmpty}</Text>
-        )
-      ) : (
-        rows.map((row, i) => (
-          <Text key={`log-row:${i}`} wrap="wrap">
-            <Text color={o.palette.dim}>{`${clockTime(row.at)}  `}</Text>
-            <Text bold color={sourceColor(row.source)}>
-              {o.w.source[row.source].padEnd(9)}
-            </Text>
-            {logLine(row, o.lang)}
-          </Text>
-        ))
-      )}
+      {rows.length === 0 ? (active ? null : <Text color={o.palette.dim}>{o.w.logEmpty}</Text>) : rows.flatMap(drawRow)}
     </Box>
   )
 }
@@ -277,7 +401,7 @@ export function usageRows(s: AgentTreeState): AgentTreeNode[] {
 
 export type UsageInput = ViewInput & {
   now: number
-  limits: readonly { text: string; warn: boolean }[]
+  limits: readonly { text: string; color: string }[]
   mainLine: string
 }
 
@@ -303,7 +427,7 @@ export function drawUsage(ui: Ui, o: UsageInput) {
   return (
     <Box key="usage-view" flexDirection="column" width={o.width} marginTop={1}>
       {o.limits.map((l, i) => (
-        <Text key={`usage-limit:${i}`} color={l.warn ? o.palette.failed : o.palette.dim} wrap="truncate-end">
+        <Text key={`usage-limit:${i}`} color={l.color} wrap="truncate-end">
           {l.text}
         </Text>
       ))}
@@ -359,24 +483,30 @@ export function drawUsage(ui: Ui, o: UsageInput) {
 
 export function drawHelp(ui: Ui, o: ViewInput) {
   const { Box, Text } = ui
-  const section = (key: string, title: string, lines: readonly string[]) => (
+  const section = (key: string, title: string, lines: readonly (string | { text: string; color: string })[]) => (
     <Box key={key} flexDirection="column" width={o.width} marginTop={1}>
       <Text bold color={o.palette.main}>
         {title}
       </Text>
-      {lines.map((line, i) => (
-        <Text key={`${key}:${i}`} wrap="wrap">
-          {line}
-        </Text>
-      ))}
+      {lines.map((line, i) =>
+        typeof line === 'string' ? (
+          <Text key={`${key}:${i}`} wrap="wrap">
+            {line}
+          </Text>
+        ) : (
+          <Text key={`${key}:${i}`} wrap="wrap" color={line.color}>
+            {line.text}
+          </Text>
+        ),
+      )}
     </Box>
   )
   const glyphLines = [
-    `${o.glyphs.spinner[0] ?? ''} ${o.w.status.running}`,
-    `${o.glyphs.marks.done} ${o.w.status.done}`,
-    `${o.glyphs.marks.failed} ${o.w.status.failed}`,
-    `${o.glyphs.marks.stopped} ${o.w.status.stopped}`,
-    `⚠ ${o.w.filesClash}`,
+    { text: `${o.glyphs.spinner[0] ?? ''} ${o.w.status.running}`, color: statusColor(o.palette, 'running') },
+    { text: `${o.glyphs.marks.done} ${o.w.status.done}`, color: statusColor(o.palette, 'done') },
+    { text: `${o.glyphs.marks.failed} ${o.w.status.failed}`, color: statusColor(o.palette, 'failed') },
+    { text: `${o.glyphs.marks.stopped} ${o.w.status.stopped}`, color: statusColor(o.palette, 'stopped') },
+    { text: `⚠ ${o.w.filesClash}`, color: o.palette.warn },
   ]
   return (
     <Box key="help-view" flexDirection="column" width={o.width}>

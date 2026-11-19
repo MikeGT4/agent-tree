@@ -71,6 +71,8 @@ import {
   runningIds,
   isNewInput,
   restoredChoices,
+  logSourceFrom,
+  logToggled,
   selectionToggled,
   deselected,
   shortId,
@@ -113,6 +115,9 @@ const STAR_KEY = 'star'
 const MODEL_KEY = 'model'
 const EFFORT_KEY = 'effort'
 const MAIN_EFFORT_KEY = 'mainEffort'
+const LOG_FILTER_KEY = 'logFilter'
+const QUESTIONS_KEPT = 150
+const QUESTION_LIMIT = 20000
 const INLINE_ROWS = 40
 const FRAME_MS = 250
 const HANDBACK = 'SubagentHandback'
@@ -134,6 +139,7 @@ let introTicker: Timer | undefined
 let introOpenedAt: number | undefined
 let introStartedAt: number | undefined
 const changers: Map<string, { file: string; ids: Set<string> }> = new Map()
+const questions: Map<number, string> = new Map()
 let introRun = 0
 let introShown: IntroInfo | undefined
 let introModelSetting: string | undefined
@@ -468,7 +474,8 @@ async function restoreChoices($: EngineInterface, interactive: boolean): Promise
   const model = await $.store.get(MODEL_KEY).catch(() => undefined)
   const effort = await $.store.get(EFFORT_KEY).catch(() => undefined)
   const mainEffort = await $.store.get(MAIN_EFFORT_KEY).catch(() => undefined)
-  await change($, s => restoredChoices(s, familyFrom(model), effortFrom(effort), effortFrom(mainEffort)))
+  const logFilter = await $.store.get(LOG_FILTER_KEY).catch(() => undefined)
+  await change($, s => restoredChoices(s, familyFrom(model), effortFrom(effort), effortFrom(mainEffort), logSourceFrom(logFilter)))
   return true
 }
 
@@ -483,6 +490,20 @@ async function chooseEffort($: EngineInterface, target: string, effort: string |
   await change($, t => effortChosen(t, target, effort, now))
   if (target === NEW_AGENTS) await $.store.set(EFFORT_KEY, effort ?? null).catch(() => undefined)
   if (target === MAIN) await $.store.set(MAIN_EFFORT_KEY, effort ?? null).catch(() => undefined)
+}
+
+async function chooseLogFilter($: EngineInterface, source: string): Promise<void> {
+  const next = await change($, t => logFiltered(t, source))
+  await $.store.set(LOG_FILTER_KEY, next.logFilter ?? null).catch(() => undefined)
+}
+
+function noteQuestion(turn: number, text: string): void {
+  questions.set(turn, text.slice(0, QUESTION_LIMIT))
+  while (questions.size > QUESTIONS_KEPT) {
+    const oldest = questions.keys().next().value
+    if (oldest === undefined) break
+    questions.delete(oldest)
+  }
 }
 
 async function catchUp($: EngineInterface, now: number, keep: number): Promise<void> {
@@ -759,7 +780,8 @@ function actionsFor($: EngineInterface): TreeActions {
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
     restyle: (row, id) => void applyLook($, row, id).catch(ignore),
     restyleDefault: () => void resetLook($).catch(ignore),
-    logFilter: source => void change($, t => logFiltered(t, source)).catch(ignore),
+    logFilter: source => void chooseLogFilter($, source).catch(ignore),
+    logOpen: turn => void change($, t => logToggled(t, turn)).catch(ignore),
     tab: id => {
       void clock($)
         .then(now => change($, t => tabChosen(t, id, now)))
@@ -915,6 +937,7 @@ export const register: Register = (on, options) => {
     if (arg === 'clear') {
       const alive = runningIds(await latest($))
       await change($, s => freshTree(s, now))
+      questions.clear()
       await update($, unreadTexts, texts => withoutTexts(texts, id => !alive.has(id)))
       return { text: w.cleared }
     }
@@ -930,7 +953,11 @@ export const register: Register = (on, options) => {
     await takeOver($).catch(() => undefined)
     const result = await next(e)
     const now = await clock($)
-    await change($, s => turnStarted(s, { text: e.text, agentId: e.agentId }, now)).catch(() => undefined)
+    await change($, s => {
+      const started = turnStarted(s, { text: e.text, agentId: e.agentId }, now)
+      if (!e.agentId && started.main.turn > s.main.turn) noteQuestion(started.main.turn, e.text)
+      return started
+    }).catch(() => undefined)
     if (!e.agentId) await readAdvisor($).catch(() => undefined)
     if (!e.agentId) await readFast($).catch(() => undefined)
     if (!e.agentId) await readMainModels($).catch(() => undefined)
@@ -1185,6 +1212,7 @@ export const register: Register = (on, options) => {
       const ending = carried ?? (await snapshot($))
       if (ending) {
         carried = { ...ending, sessionId: e.sessionId }
+        questions.clear()
         handing = undefined
         generation += 1
         delivered.delete(MAIN)
@@ -1247,6 +1275,7 @@ export const register: Register = (on, options) => {
       appearance: look,
       canAdvise: advisorCommand,
       reports,
+      questions,
       docked: e.props.placement === 'dock',
     })
   })

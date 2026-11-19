@@ -391,6 +391,7 @@ describe('Datenmodell', () => {
       restyleDefault: () => undefined,
       tab: () => undefined,
       logFilter: () => undefined,
+      logOpen: () => undefined,
       report: () => undefined,
       deselect: () => void calls.push('deselect'),
       write: () => undefined,
@@ -433,7 +434,7 @@ describe('Datenmodell', () => {
   test('der Fast-Mode-Knopf zählt beim Umbruch der Zeile „an Unteragenten“ mit', () => {
     const ui = { Box: 'Box', Text: 'Text', Button: 'Button' } as never
     const noop = () => {}
-    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, fast: noop, look: noop, restyle: noop, restyleDefault: noop, deselect: noop, write: noop, tab: noop, logFilter: noop, report: noop }
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, fast: noop, look: noop, restyle: noop, restyleDefault: noop, deselect: noop, write: noop, tab: noop, logFilter: noop, logOpen: noop, report: noop }
     let s = createTree(0)
     for (let i = 0; i < 8; i++) s = turnStarted(s, { text: `Runde ${i}` }, 1000 + i)
     const logRows = (t: typeof s, height: number) => (JSON.stringify(drawTree(ui, t, 77, height, { frame: 0, animate: false, now: 5000, actions })).match(/"key":"log:\d+:/g) ?? []).length
@@ -748,7 +749,7 @@ describe('Korrekturen', () => {
 describe('Stopp am Kasten', () => {
   test('pressKey kennt halt', () => {
     const stopped: string[] = []
-    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), advisor: () => {}, fast: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, deselect: () => {}, write: () => {}, tab: () => {}, logFilter: () => {}, report: () => {} }
+    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), advisor: () => {}, fast: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, deselect: () => {}, write: () => {}, tab: () => {}, logFilter: () => {}, logOpen: () => {}, report: () => {} }
     expect(pressKey(actions, 'halt:sub-1')).toBe(true)
     expect(stopped).toEqual(['sub-1'])
   })
@@ -868,7 +869,7 @@ describe('Aussehen', () => {
     const ui = { Box: 'Box', Text: 'Text', Button: 'Button' } as never
     const s = detailOpened(spawned(createTree(0), spawn('sub-1'), 1), 'sub-1')
     const noop = () => {}
-    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, fast: noop, look: noop, restyle: noop, restyleDefault: noop, deselect: noop, write: noop, tab: noop, logFilter: noop, report: noop }
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, fast: noop, look: noop, restyle: noop, restyleDefault: noop, deselect: noop, write: noop, tab: noop, logFilter: noop, logOpen: noop, report: noop }
     const text = JSON.stringify(drawTree(ui, s, 90, 60, { frame: 0, animate: false, now: 5000, actions }))
     expect(text).not.toMatch(/say:sub-1/)
   })
@@ -1323,7 +1324,7 @@ describe('Aktionszeile schließen', () => {
   test('pressKey kennt das Schließen der Aktionszeile', () => {
     const calls: string[] = []
     const noop = () => {}
-    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, fast: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop, tab: noop, logFilter: noop, report: noop, deselect: () => void calls.push('deselect') }
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, fast: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop, tab: noop, logFilter: noop, logOpen: noop, report: noop, deselect: () => void calls.push('deselect') }
     expect(pressKey(actions, 'actions:close')).toBe(true)
     expect(calls).toEqual(['deselect'])
   })

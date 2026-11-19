@@ -77,6 +77,7 @@ export type Words = {
   logAll: string
   logOrder: string
   logEntries: (count: number) => string
+  logQuestionSize: (count: number) => string
   task: string
   reply: string
   loading: string
@@ -270,6 +271,7 @@ export const WORDS: Record<Lang, Words> = {
     logAll: 'alle',
     logOrder: 'neueste zuerst',
     logEntries: count => (count === 1 ? '1 Eintrag' : `${count} Einträge`),
+    logQuestionSize: count => `… · ${count} Zeichen`,
     task: 'Auftrag',
     reply: 'Antwort',
     loading: 'lädt …',
@@ -471,6 +473,7 @@ export const WORDS: Record<Lang, Words> = {
     logAll: 'all',
     logOrder: 'newest first',
     logEntries: count => (count === 1 ? '1 entry' : `${count} entries`),
+    logQuestionSize: count => `… · ${count} characters`,
     task: 'Task',
     reply: 'Answer',
     loading: 'loading …',

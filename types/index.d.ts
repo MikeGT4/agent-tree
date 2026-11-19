@@ -143,6 +143,7 @@ export type AgentTreeState = {
   reportsSeen?: number
   reportOf?: string
   logFilter?: AgentTreeLogSource
+  logOpen?: number
   choices?: AgentTreeChoices
   detail?: AgentTreeDetail
   stopping?: string[]

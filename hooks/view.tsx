@@ -50,7 +50,7 @@ import {
   TABS,
 } from './model.ts'
 import type { Feedback } from './model.ts'
-import { LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, lightColor, lookFrom, restyleLine } from './looks.ts'
+import { LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, lightColor, lookFrom, restyleLine, statusColor } from './looks.ts'
 import type { Glyphs, LookRow, Palette } from './looks.ts'
 import { WORDS, activityText, familyOr, helpItems, logLine, lookOptionLabel, toolText, wordsFor } from './words.ts'
 import type { Lang, Words } from './words.ts'
@@ -107,9 +107,6 @@ function statusMark(glyphs: Glyphs, status: AgentTreeStatus): string {
   return status === 'running' ? runningMark(0, false, glyphs.spinner) : glyphs.marks[status]
 }
 
-function statusColor(palette: Palette, status: AgentTreeStatus): string {
-  return status === 'running' ? palette.agent : status === 'done' ? palette.done : status === 'failed' ? palette.failed : palette.dim
-}
 
 function sourceColor(palette: Palette, source: AgentTreeLogSource): string {
   return source === 'session' ? palette.dim : palette[source]
@@ -132,6 +129,7 @@ export type TreeActions = {
   deselect: () => void
   tab: (id: AgentTreeTab) => void
   logFilter: (source: string) => void
+  logOpen: (turn: number) => void
   report: (agentId: string) => void
 }
 
@@ -145,6 +143,7 @@ export type TreeLook = {
   canAdvise?: boolean
   docked?: boolean
   reports?: Record<string, AgentTreeReport>
+  questions?: ReadonlyMap<number, string>
 }
 
 export function pressKey(actions: TreeActions, key: string): boolean {
@@ -159,6 +158,8 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   else if (kind === 'tab' && TABS.some(t => t === rest)) actions.tab(rest as AgentTreeTab)
   else if (kind === 'logfilter') actions.logFilter(rest)
   else if (kind === 'report') actions.report(rest)
+  else if (kind === 'logopen') return logOpenKey(actions, rest)
+  else if (kind === 'logjump') return logJumpKey(actions, rest)
   else if (kind === 'look') return lookKey(actions, rest)
   else if (kind === 'select') actions.select(rest)
   else if (kind === 'pick' || kind === 'level') actions.pick(rest)
@@ -171,6 +172,20 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   return true
 }
 
+
+function logOpenKey(actions: TreeActions, rest: string): boolean {
+  const turn = Number(rest)
+  if (!Number.isInteger(turn) || turn < 1) return false
+  actions.logOpen(turn)
+  return true
+}
+
+function logJumpKey(actions: TreeActions, rest: string): boolean {
+  const colon = rest.lastIndexOf(':')
+  if (colon < 1) return false
+  actions.report(rest.slice(0, colon))
+  return true
+}
 
 function targetKey(rest: string, apply: (target: string, value: string | undefined) => void): boolean {
   const colon = rest.lastIndexOf(':')
@@ -248,6 +263,11 @@ export type RowPlan = { shown: number; logRows: number; advisor?: false }
 export const LIMIT_BAR = 8
 export const CONTEXT_BAR = 3
 export const LIMIT_WARN = 80
+export const LIMIT_MID = 50
+
+export function limitColor(palette: Palette, percent: number): string {
+  return percent >= LIMIT_WARN ? palette.failed : percent >= LIMIT_MID ? palette.warn : palette.done
+}
 
 function cellBar(percent: number, cells: Glyphs['bar'], size: number): string {
   const filled = Math.round((Math.min(100, Math.max(0, percent)) / 100) * size)
@@ -1436,7 +1456,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const limitRow = limits.length ? (
     <Box key="limits" flexDirection="row" width={width}>
       {limits.map((l, i) => (
-        <Text key={`limit:${l.kind}`} size={SIZE.note} color={l.percent >= LIMIT_WARN ? palette.failed : palette.dim} wrap="truncate-end">
+        <Text key={`limit:${l.kind}`} size={SIZE.note} color={limitColor(palette, l.percent)} wrap="truncate-end">
           {limitTexts[i]}
         </Text>
       ))}
@@ -1504,11 +1524,11 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
               w,
               lang,
               now,
-              limits: (s.main.limits ?? []).map(l => ({ text: limitSegments([l], w, glyphs, width)[0] ?? '', warn: l.percent >= LIMIT_WARN })),
+              limits: (s.main.limits ?? []).map(l => ({ text: limitSegments([l], w, glyphs, width)[0] ?? '', color: limitColor(palette, l.percent) })),
               mainLine: `${contextLine(s, w)} · ${roundLine}`,
             })
           : null}
-        {tab === 'log' ? drawLog(ui, { s, width, palette, glyphs, w, lang, ...(actions ? { filter: (source: string) => actions.logFilter(source) } : {}) }) : null}
+        {tab === 'log' ? drawLog(ui, { s, width, palette, glyphs, w, lang, ...(look.questions ? { questions: look.questions } : {}), ...(actions ? { filter: (source: string) => actions.logFilter(source), open: (turn: number) => actions.logOpen(turn), jump: (agentId: string) => actions.report(agentId) } : {}) }) : null}
       </Box>
     )
   }

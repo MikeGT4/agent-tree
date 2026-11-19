@@ -1,5 +1,5 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
-import type { AgentTreeColors, AgentTreeLight, AgentTreeLook, AgentTreeStyle } from '../types'
+import type { AgentTreeColors, AgentTreeLight, AgentTreeLook, AgentTreeStatus, AgentTreeStyle } from '../types'
 
 export type Palette = { main: string; agent: string; advisor: string; done: string; dim: string; failed: string; warn: string }
 
@@ -151,6 +151,10 @@ function luminance(hex: string): number {
   const channels = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
   const [r, g, b] = channels.map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
   return 0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (b ?? 0)
+}
+
+export function statusColor(palette: Palette, status: AgentTreeStatus): string {
+  return status === 'running' ? palette.agent : status === 'done' ? palette.done : status === 'failed' ? palette.failed : palette.dim
 }
 
 export function contrast(fg: string, bg: string): number {
