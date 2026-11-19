@@ -21,9 +21,12 @@ import {
   choicesOf,
   chosen,
   clashed,
-  stopOnWake,
+  stopKeptForWake,
+  stopOutran,
   stopRevived,
-  wakeStopDue,
+  wakeStopDropped,
+  wakeStopKnown,
+  wasStopOutrun,
   CODE_TOOL,
   codeBlocksRan,
   codeModeOf,
@@ -565,6 +568,7 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
   }
   const before = current.corrections?.[agentId]
   const now = await clock($)
+  await change($, t => wakeStopDropped(t, agentId)).catch(() => undefined)
   const framed = codeMode ? w.correctionFrameCode(text) : w.correctionFrame(text, HANDBACK)
   const running = node.status === 'running'
   if (!running) {
@@ -931,7 +935,8 @@ export const register: Register = (on, options) => {
     const agentId = e.agentId
     const fed = delivered.delete(agentId ?? MAIN)
     const earlier = agentId !== undefined || e.effort !== undefined ? await latest($).catch(() => undefined) : undefined
-    const before = agentId && earlier && wakeStopDue(earlier, agentId) ? await change($, s => stopRevived(s, agentId)).catch(() => earlier) : earlier
+    const wokenAt = agentId && earlier && wakeStopKnown(earlier, agentId) ? await clock($) : undefined
+    const before = agentId && wokenAt !== undefined ? await change($, s => stopRevived(s, agentId, wokenAt)).catch(() => earlier) : earlier
     if (agentId && before && isStopping(before, agentId)) {
       const report = wordsFor(lang).stopAnswer(before.agents.find(n => n.id === agentId)?.toolCount ?? 0)
       const first = !wasStopSent(before, agentId)
@@ -1083,8 +1088,10 @@ export const register: Register = (on, options) => {
         return { deny: wordsFor(lang).stopAnswer(current.agents.find(n => n.id === agentId)?.toolCount ?? 0) }
       }
       if (stopSentIds.has(agentId)) return next(e)
-      const unread = pendingCorrection(await latest($), agentId) !== undefined
-      await change($, s => (unread ? stopOnWake(stopCancelled(s, agentId), agentId) : stopCancelled(s, agentId))).catch(() => undefined)
+      const outranAt = await clock($)
+      await change($, s =>
+        stopOutran(stopKeptForWake(stopCancelled(s, agentId), agentId, pendingCorrection(s, agentId) !== undefined, outranAt), agentId),
+      ).catch(() => undefined)
     }
     if (!stopping && String(e.tool) === HANDBACK) {
       const waiting = pendingCorrection(await latest($), agentId)
@@ -1117,10 +1124,13 @@ export const register: Register = (on, options) => {
     const now = await clock($)
     const ended = e.agentId
     const stopAsked = ended !== undefined && stoppingIds.has(ended)
-    const stopPending = stopAsked && ended !== undefined && !stopSentIds.has(ended) && pendingCorrection(await latest($), ended) !== undefined
+    const outranNow = stopAsked && ended !== undefined && !stopSentIds.has(ended)
     const after = await change($, s => {
       const done = completed(s, { agentId: e.agentId, answer: e.answer, reason: e.reason, isAborted: e.isAborted, durationMs: e.durationMs }, now)
-      return stopPending && ended !== undefined ? stopOnWake(done, ended) : done
+      if (ended === undefined) return done
+      const outran = outranNow || wasStopOutrun(s, ended)
+      const endedWell = done.agents.find(n => n.id === ended)?.status === 'done'
+      return stopKeptForWake(done, ended, outran && endedWell, now)
     }).catch(() => undefined)
     if (e.agentId && after) await settleUnread($, after, e.agentId, now, stopAsked).catch(() => undefined)
     if (e.agentId && (await read($, reportTexts).catch(() => undefined))?.[e.agentId]) await loadReport($, e.agentId).catch(() => undefined)

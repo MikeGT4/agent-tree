@@ -8,7 +8,7 @@ A newer marketplace version makes it run `plugin update agent-tree`.
 
 The Auto-update option turns this off, as do DO_NOT_TRACK=1, DISABLE_AUTOUPDATER, DISABLE_UPDATES and Claude Code's switch for nonessential traffic.
 
-Claude Code's plugin storage keeps your look, model and effort choices, update state, last version shown and a start count for the star hint. No telemetry, account or cookie.
+Claude Code's plugin storage keeps your look, model and effort choices, update state, last version seen and a start count for the star hint. No telemetry, account or cookie.
 
 ## Hooks
 

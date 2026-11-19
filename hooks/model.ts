@@ -241,18 +241,43 @@ export function wasStopSent(s: AgentTreeState, agentId: string | undefined): boo
   return agentId !== undefined && (s.stopSent ?? []).includes(agentId)
 }
 
-export function stopOnWake(s: AgentTreeState, agentId: string): AgentTreeState {
-  return (s.stopWake ?? []).includes(agentId) ? s : { ...s, stopWake: [...(s.stopWake ?? []), agentId] }
+export const WAKE_STOP_MS = 60_000
+
+export function stopOutran(s: AgentTreeState, agentId: string): AgentTreeState {
+  return (s.stopOutrun ?? []).includes(agentId) ? s : { ...s, stopOutrun: [...(s.stopOutrun ?? []), agentId] }
 }
 
-export function wakeStopDue(s: AgentTreeState, agentId: string | undefined): boolean {
-  return agentId !== undefined && (s.stopWake ?? []).includes(agentId)
+export function wasStopOutrun(s: AgentTreeState, agentId: string): boolean {
+  return (s.stopOutrun ?? []).includes(agentId)
 }
 
-export function stopRevived(s: AgentTreeState, agentId: string): AgentTreeState {
-  if (!wakeStopDue(s, agentId)) return s
-  const stopWake = (s.stopWake ?? []).filter(id => id !== agentId)
+export function stopKeptForWake(s: AgentTreeState, agentId: string, keep: boolean, now: number): AgentTreeState {
+  const stopOutrun = (s.stopOutrun ?? []).filter(id => id !== agentId)
+  const others = Object.fromEntries(Object.entries(s.stopWake ?? {}).filter(([id, at]) => id !== agentId && now - at <= WAKE_STOP_MS))
+  const stopWake = keep ? { ...others, [agentId]: now } : others
+  if (!s.stopOutrun && !s.stopWake && !keep) return s
+  return { ...s, stopOutrun, stopWake }
+}
+
+export function wakeStopKnown(s: AgentTreeState, agentId: string | undefined): boolean {
+  return agentId !== undefined && s.stopWake?.[agentId] !== undefined
+}
+
+export function stopRevived(s: AgentTreeState, agentId: string, now: number): AgentTreeState {
+  const at = s.stopWake?.[agentId]
+  if (at === undefined) return s
+  const stopWake = Object.fromEntries(Object.entries(s.stopWake ?? {}).filter(([id]) => id !== agentId))
+  if (now - at > WAKE_STOP_MS) return { ...s, stopWake }
   return { ...s, stopWake, stopping: isStopping(s, agentId) ? s.stopping : [...(s.stopping ?? []), agentId] }
+}
+
+export function wakeStopDropped(s: AgentTreeState, agentId: string): AgentTreeState {
+  if (!wakeStopKnown(s, agentId) && !wasStopOutrun(s, agentId)) return s
+  return {
+    ...s,
+    stopOutrun: (s.stopOutrun ?? []).filter(id => id !== agentId),
+    stopWake: Object.fromEntries(Object.entries(s.stopWake ?? {}).filter(([id]) => id !== agentId)),
+  }
 }
 
 export function stopCancelled(s: AgentTreeState, agentId: string): AgentTreeState {
@@ -970,7 +995,7 @@ export function completed(s: AgentTreeState, input: CompleteInput, now: number):
     const kept = Object.entries({ ...s.orphans, [input.agentId]: { status, at: now, answerTokens, answer, durationMs: input.durationMs } }).slice(
       -ORPHANS_KEPT,
     )
-    return { ...s, orphans: Object.fromEntries(kept) }
+    return { ...withoutStop(s, input.agentId), orphans: Object.fromEntries(kept) }
   }
   if (node.status !== 'running' && node.answerTokens !== undefined) return s
   const final = node.status === 'stopped' || wasStopSent(s, node.id) ? 'stopped' : status
@@ -1039,7 +1064,8 @@ export function freshTree(from: AgentTreeState, now: number): AgentTreeState {
     choices: { ...choicesOf(base), agents: { ...old.agents }, efforts: { ...(old.efforts ?? {}) }, ...(old.chosenAt ? { chosenAt: { ...old.chosenAt } } : {}) },
     ...(from.stopping ? { stopping: from.stopping.filter(id => alive.has(id)) } : {}),
     ...(from.stopSent ? { stopSent: from.stopSent.filter(id => alive.has(id)) } : {}),
-    ...(from.stopWake?.length ? { stopWake: from.stopWake } : {}),
+    ...(from.stopWake ? { stopWake: from.stopWake } : {}),
+    ...(from.stopOutrun ? { stopOutrun: from.stopOutrun } : {}),
     ...(from.corrections ? { corrections: without(from.corrections, gone) } : {}),
     ...(from.codeMode ? { codeMode: true } : {}),
     ...(from.selected === MAIN || from.selected === NEW_AGENTS || (from.selected !== undefined && alive.has(from.selected)) ? { selected: from.selected } : {}),

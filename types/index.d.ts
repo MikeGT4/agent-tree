@@ -147,7 +147,8 @@ export type AgentTreeState = {
   detail?: AgentTreeDetail
   stopping?: string[]
   stopSent?: string[]
-  stopWake?: string[]
+  stopWake?: Record<string, number>
+  stopOutrun?: string[]
   corrections?: Record<string, AgentTreeCorrection>
   lookOpen?: boolean
   selected?: string
