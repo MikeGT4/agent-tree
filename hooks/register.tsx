@@ -328,6 +328,21 @@ async function replayIntro($: EngineInterface): Promise<void> {
   startIntro($, await clock($))
 }
 
+function startNotice($: EngineInterface, now: number): void {
+  if (!notice || noticeTicker) return
+  const run = ++noticeRun
+  noticeOpenedAt = now
+  noticeStartedAt = undefined
+  try {
+    noticeTicker = $.clock.every(INTRO_FRAME_MS, () => {
+      void noticeTick($, run).catch(() => undefined)
+    })
+  } catch {
+    noticeTicker = undefined
+    notice = undefined
+  }
+}
+
 async function endIntro($: EngineInterface): Promise<void> {
   if (!introTicker) return
   introTicker.cancel()
@@ -343,21 +358,6 @@ async function prepareNotice($: EngineInterface): Promise<void> {
   const starred = await $.store.get(STAR_KEY).catch(() => undefined)
   notice = noticeFor(seen, VERSION, updated !== undefined || starred !== undefined, lang)
   if (!notice && seen !== VERSION) await $.store.set(SEEN_VERSION_KEY, VERSION).catch(() => undefined)
-}
-
-function startNotice($: EngineInterface, now: number): void {
-  if (!notice || noticeTicker) return
-  const run = ++noticeRun
-  noticeOpenedAt = now
-  noticeStartedAt = undefined
-  try {
-    noticeTicker = $.clock.every(INTRO_FRAME_MS, () => {
-      void noticeTick($, run).catch(() => undefined)
-    })
-  } catch {
-    noticeTicker = undefined
-    notice = undefined
-  }
 }
 
 async function noticeTick($: EngineInterface, run: number): Promise<void> {
