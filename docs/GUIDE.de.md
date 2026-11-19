@@ -32,9 +32,9 @@ Dateien: geändert und gelesen je Agent, doppelte oben. Gelesene mit geschätzte
 
 Verbrauch: Limits, Kontext, Werkzeugaufrufe, Laufzeit.
 
-![Verlauf](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-de-6.png)
+![Verlauf](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.11/guide-de-6.png)
 
-Verlauf: Sitzungsereignisse, nach Quelle.
+Verlauf: Ereignisse nach Quelle, Klick auf › zeigt Frage oder Bericht.
 
 ![Hilfe](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/guide-de-7.png)
 
@@ -42,4 +42,4 @@ Hilfe: Tasten, Zeichen, Befehle, Neues.
 
 ## Neu
 
-Code Mode: „CODE MODE“ im Titel, Codeblöcke zählen als Schritte. Nach Updates: Karte mit dem Neuen.
+Limits färben sich grün, gelb, rot. Code Mode: Titelkennzeichen.
