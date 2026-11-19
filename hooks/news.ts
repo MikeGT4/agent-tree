@@ -17,8 +17,8 @@ export const NEWS: Readonly<Record<string, Readonly<Record<Lang, readonly string
     en: ['Shows what is new after an update'],
   },
   '0.7.9': {
-    de: ['Nachrichten an laufende Agenten kommen zuverlässig an'],
-    en: ['Messages to running agents arrive reliably'],
+    de: ['Nachrichten an Agenten: ein Weg in jeder Sitzung'],
+    en: ['Messages to agents: one path in every session'],
   },
 }
 

@@ -14,7 +14,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; fast?: boolean; fastFails?: boolean; model?: string; modelOptions?: string[]; modelFails?: boolean; modelLocked?: boolean; codeMode?: boolean; stepTools?: string[] } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; fast?: boolean; fastFails?: boolean; model?: string; modelOptions?: string[]; modelFails?: boolean; modelLocked?: boolean; codeMode?: boolean; stepTools?: string[] } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -111,7 +111,6 @@ function engine(on: On, listed: unknown[] = [], refuse: { append?: boolean; send
   const sent: { to: unknown; text: string }[] = []
   on('session.append', async (_, e, next) => {
     const row = e as unknown as Appended
-    if (refuse.append && row.agentId) return { deny: 'no running loop' } as never
     appended.push(row)
     return next(e)
   })
@@ -1629,24 +1628,14 @@ describe('Korrektur', () => {
     await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
     const ui = await openDetail($)
     await sayCommand($, 'Bitte noch die Tests')
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Korrektur: geschickt/)
     await ui.unmount()
     expect(seen.sent.length).toBe(1)
     expect(JSON.stringify(seen.sent[0]?.to)).toContain('sub-1')
     expect(seen.sent[0]?.text).toContain('Bitte noch die Tests')
     expect(seen.sent[0]?.text).toMatch(/Bericht über SubagentHandback/)
     expect(seen.appended.filter(row => row.agentId === 'sub-1').length).toBe(0)
-  })
-
-  test('die Korrektur geht per send, auch wenn die Engine das Anhängen an Agenten ablehnt', de, async ($, on) => {
-    const seen = engine(on, [], { append: true })
-    await oneAgentWithAdvisor($)
-    const ui = await openDetail($)
-    await sayCommand($, 'Nur lesen')
-    await ui.unmount()
-    expect(seen.sent.length).toBe(1)
-    expect(seen.sent[0]?.text).toContain('Nur lesen')
-    expect(seen.appended.length).toBe(1)
-    expect(seen.appended[0]?.agentId).toBeUndefined()
   })
 
   test('eine ungelesene Korrektur hält SubagentHandback einmal an', de, async ($, on) => {
@@ -1686,7 +1675,7 @@ describe('Korrektur', () => {
   })
 
   test('lehnt Claude Code die Zustellung ab, meldet sich die Korrektur in der Statuszeile und im Protokoll', de, async ($, on) => {
-    const seen = engine(on, [], { append: true, send: true })
+    const seen = engine(on, [], { send: true })
     await oneAgentWithAdvisor($)
     const ui = await openDetail($)
     await sayCommand($, 'Nur lesen')
@@ -1755,7 +1744,7 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     expect(seen.sent.length).toBe(1)
   })
 
-  test('eine eingereihte Korrektur hält den Abschluss an, bis der Agent sie gelesen hat', de, async ($, on) => {
+  test('eine eingereihte Korrektur hält den Abschluss einmal an, nach dem Lesen geht er durch', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
     const ui = await openDetail($)
@@ -1780,6 +1769,95 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     expect(await screen(ui)).toMatch(/Korrektur: nicht zugestellt/)
     expect(seen.appended.some(row => !row.agentId && (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(true)
     await ui.unmount()
+  })
+
+  test('ein Schritt während des Sendens der zweiten Korrektur lässt sie ungelesen, beim Ende geht nur sie nach', de, async ($, on) => {
+    const refuse: { onSend?: () => Promise<unknown> } = {}
+    const seen = engine(on, [], refuse)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Erstens A')
+    refuse.onSend = () => step($, { agentId: 'sub-1' })
+    await sayCommand($, 'Zweitens B')
+    refuse.onSend = undefined
+    await $.turn.complete(finished)
+    await ui.redraw()
+    expect(seen.sent.length).toBe(3)
+    expect(seen.sent[2]?.text).toContain('Zweitens B')
+    expect(seen.sent[2]?.text).not.toContain('Erstens A')
+    expect(await screen(ui)).not.toMatch(/nicht zugestellt/)
+    await ui.unmount()
+  })
+
+  test('nach angefordertem Stopp wird eine spätere Korrektur nicht nachgeschickt, auch wenn der Agent selbst endet', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await steer(ui, 'halt:sub-1')
+    await sayCommand($, 'Nimm b.ts')
+    await $.turn.complete(finished)
+    await ui.redraw()
+    expect(seen.sent.length).toBe(1)
+    expect(await screen(ui)).toMatch(/Korrektur: nicht zugestellt/)
+    await ui.unmount()
+  })
+
+  test('eine Korrektur nach dem Stoppwunsch geht an den gestoppten Agenten nicht nach', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await steer(ui, 'halt:sub-1')
+    await sayCommand($, 'Nimm b.ts')
+    const stopped = await step($, { agentId: 'sub-1' })
+    await $.tool.call({ tool: 'SubagentHandback', message: stopped.answer, agentId: 'sub-1' } as never)
+    const last = await step($, { agentId: 'sub-1' })
+    await $.turn.complete({ ...finished, answer: last.answer })
+    await ui.redraw()
+    expect(seen.sent.length).toBe(1)
+    const text = await screen(ui)
+    expect(text).toMatch(/○ gestoppt/)
+    expect(text).toMatch(/Korrektur: nicht zugestellt/)
+    await ui.unmount()
+  })
+
+  test('beim Nachschicken liest ein sofort startender Agent die Korrektur ohne Anhalten', de, async ($, on) => {
+    const refuse: { onSend?: () => Promise<unknown> } = {}
+    engine(on, [], refuse)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Nimm b.ts')
+    await ui.unmount()
+    refuse.onSend = () => step($, { agentId: 'sub-1' })
+    await $.turn.complete(finished)
+    const handback = await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
+    expect(JSON.stringify(handback)).not.toMatch(/deny/)
+  })
+
+  test('an einen fehlgeschlagenen Agenten geht nichts nach, die Korrektur gilt als nicht zugestellt', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Nimm b.ts')
+    await $.turn.complete({ ...finished, answer: '', reason: 'error' })
+    await ui.redraw()
+    expect(seen.sent.length).toBe(1)
+    expect(await screen(ui)).toMatch(/Korrektur: nicht zugestellt/)
+    await ui.unmount()
+  })
+
+  test('scheitert dieselbe Korrektur beim zweiten Mal, geht die erste beim Ende trotzdem nach', de, async ($, on) => {
+    const refuse = { send: false }
+    const seen = engine(on, [], refuse)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Nimm b.ts')
+    refuse.send = true
+    await sayCommand($, 'Nimm b.ts')
+    refuse.send = false
+    await ui.unmount()
+    await $.turn.complete(finished)
+    expect(seen.sent.length).toBe(2)
+    expect(seen.sent[1]?.text).toMatch(/blieb ungelesen[\s\S]*Nimm b\.ts/)
   })
 
   test('scheitert eine zweite Korrektur, geht beim Ende nur die erste nach', de, async ($, on) => {
@@ -1807,6 +1885,7 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     refuse.onSend = () => $.turn.complete(finished)
     await sayCommand($, 'Nur lesen', 'sub-2')
     expect(seen.sent.some(row => JSON.stringify(row.to).includes('sub-1'))).toBe(false)
+    expect(seen.appended.some(row => row.agentId === 'sub-1')).toBe(false)
   })
 
   test('nach einem Stopp bleibt keine ungelesene Korrektur als geschickt stehen', de, async ($, on) => {
@@ -2833,7 +2912,7 @@ describe('Schreiben an Unteragenten', () => {
   })
 
   test('lehnt Claude Code die Zustellung ab, sagt der Befehl das', de, async ($, on) => {
-    engine(on, [], { append: true, send: true })
+    engine(on, [], { send: true })
     await oneAgentWithAdvisor($)
     expect((await run($, 'an sub-1 Hallo')).text).toMatch(/nicht zugestellt/)
   })

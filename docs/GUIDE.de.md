@@ -1,6 +1,6 @@
 # Agent Tree Anleitung
 
-Agent Tree zeigt deine Agenten in Claude Code als lebenden Baum neben dem Chat, mit einem Hebel für jeden.
+Agent Tree zeigt deine Agenten als lebenden Baum neben dem Chat.
 
 ## Was du siehst
 
@@ -16,11 +16,7 @@ Kasten je Unteragent: Aufgabe, aktueller Schritt, Kontext (gelb ab 70 %, rot ab 
 
 ![Aktionszeile](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-de-2.png)
 
-Kasten anklicken, oder ctrl+x tab, Tab, Enter: Stoppen (s), Schreiben, Modell, Denkstufe, Details.
-
-Schreiben füllt deine Eingabe, der Agent liest sie beim nächsten Schritt. Ohne Code Mode hält Agent Tree seine Abgabe einmal an, bis er sie gelesen hat; endet er trotzdem vorher, schickt Agent Tree sie einmal nach.
-
-e: Denkstufe der Hauptsitzung, m: neue Unteragenten, a: Aussehen.
+Kasten anklicken, oder ctrl+x tab, Tab, Enter: Stoppen (s), Schreiben, Modell, Denkstufe, Details. Schreiben füllt deine Eingabe, der Agent liest sie beim nächsten Schritt. e: Denkstufe der Hauptsitzung, m: neue Unteragenten, a: Aussehen.
 
 ## Tabs
 
@@ -42,18 +38,8 @@ Verlauf: jedes Ereignis, nach Quelle.
 
 ![Hilfe](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/guide-de-7.png)
 
-Hilfe: Tasten, Zeichen, Befehle und was zuletzt neu ist.
+Hilfe: Tasten, Zeichen, Befehle, Neues.
 
-## Code Mode
+## Neu
 
-Läuft Claude Code im Code Mode, steht „CODE MODE“ im Titel. Jeder Codeblock eines Agenten zählt als Schritt („führt Code aus“), die Aufrufe darin erscheinen einzeln. Stoppen: Der laufende Aufruf endet noch, jeder weitere aus dem Code des Agenten wird abgelehnt, auch wenn der Code den Agenten überdauert. Schreiben: Die Nachricht erreicht den laufenden Agenten. Endet er, bevor er sie liest, schickt Agent Tree sie einmal nach; nach einem Stopp gilt sie als „nicht zugestellt“.
-
-## Nach einem Update
-
-Startet Agent Tree zum ersten Mal in einer neuen Version, steht für 3 Sekunden eine Karte in der Leiste: alte und neue Versionsnummer und was neu ist. Ein Klick auf „weiter“ oder Tippen schließt sie früher. Nach einer Erstinstallation kommt keine Karte.
-
-## Was es dir bringt
-
-Einen Agenten stoppen statt der ganzen Sitzung.
-
-Einen laufenden Agenten auf ein günstigeres Modell setzen.
+Code Mode: „CODE MODE“ im Titel, Codeblöcke zählen als Schritte. Nach Updates: Karte mit dem Neuen.

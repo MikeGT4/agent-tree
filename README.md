@@ -28,7 +28,7 @@ Needs Claude Code 2.1.292+, tested with 2.1.327.
 
 Once a day, in interactive sessions, it runs Claude Code's `plugin list --json`, reads its version from raw.githubusercontent.com and, if newer, runs `plugin update agent-tree`. It sends nothing else ([PRIVACY.md](PRIVACY.md)).
 
-Its hooks act only after you act in the pane; typing only ends the start intro.
+Its hooks act only after you act in the pane; typing only ends intro or card.
 
 [Guide](docs/GUIDE.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/agent-tree-guide.pdf)
 

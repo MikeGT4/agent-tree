@@ -28,7 +28,7 @@ Braucht Claude Code 2.1.292+, getestet mit 2.1.327.
 
 Einmal am Tag, in Sitzungen mit Bedienung, ruft es Claude Codes `plugin list --json` auf, liest seine Version von raw.githubusercontent.com und startet bei einer neueren `plugin update agent-tree`. Sonst sendet es nichts ([PRIVACY.md](PRIVACY.md)).
 
-Seine Hooks greifen nur, wenn du in der Leiste handelst; Tippen beendet nur das Start-Intro.
+Seine Hooks greifen nur, wenn du in der Leiste handelst; Tippen beendet nur Intro oder Update-Karte.
 
 [Anleitung](docs/GUIDE.de.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/agent-tree-anleitung.pdf)
 

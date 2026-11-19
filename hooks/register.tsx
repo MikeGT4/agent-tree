@@ -412,7 +412,21 @@ async function remember($: EngineInterface, agentId: string, text: string): Prom
 }
 
 async function unremember($: EngineInterface, agentId: string, text: string): Promise<void> {
-  await update($, unreadTexts, texts => ({ ...texts, [agentId]: (texts[agentId] ?? []).filter(kept => kept !== text) }))
+  await update($, unreadTexts, texts => {
+    const kept = [...(texts[agentId] ?? [])]
+    const last = kept.lastIndexOf(text)
+    if (last >= 0) kept.splice(last, 1)
+    return kept.length ? { ...texts, [agentId]: kept } : withoutTexts(texts, id => id === agentId)
+  })
+}
+
+async function toolNames($: EngineInterface): Promise<string[]> {
+  try {
+    const tools = await $.tool.list()
+    return tools.map(t => t.name)
+  } catch {
+    return []
+  }
 }
 
 async function forget($: EngineInterface, agentId: string): Promise<void> {
@@ -551,15 +565,18 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
   const now = await clock($)
   const framed = codeMode ? w.correctionFrameCode(text) : w.correctionFrame(text, HANDBACK)
   const running = node.status === 'running'
-  await remember($, agentId, framed)
-  if (!running) await change($, t => correctionSent(t, { agentId, text, via: 'send', recount: false }, now))
+  if (!running) {
+    await remember($, agentId, framed)
+    await change($, t => correctionSent(t, { agentId, text, via: 'send', recount: false }, now))
+  }
   const sent = await $.session.send({ to: { agentId }, text: framed }).catch(() => undefined)
   if (!sent?.isDelivered) {
-    await unremember($, agentId, framed)
+    if (!running) await unremember($, agentId, framed)
     await change($, t => correctionFailed(t, { agentId, text, before }, now))
     $.ui.status(w.correctionFailedStatus)
     return false
   }
+  if (running) await remember($, agentId, framed)
   await change($, t => (running ? correctionSent(t, { agentId, text, via: 'send' }, now) : correctionCounted(t, agentId)))
   const note = w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text)
   await appendRow($, note)
@@ -683,14 +700,14 @@ async function chooseMainModel($: EngineInterface, family: string | undefined): 
   await change($, s => withMainModel(s, typeof model === 'string' ? model : undefined))
 }
 
-async function settleUnread($: EngineInterface, s: AgentTreeState, agentId: string, now: number): Promise<void> {
+async function settleUnread($: EngineInterface, s: AgentTreeState, agentId: string, now: number, stopAsked: boolean): Promise<void> {
   const texts = (await read($, unreadTexts))[agentId] ?? []
   await forget($, agentId)
   const waiting = pendingCorrection(s, agentId)
   const node = s.agents.find(n => n.id === agentId)
   if (!waiting || !node) return
   const w = wordsFor(lang)
-  if (node.status === 'done' && texts.length) {
+  if (node.status === 'done' && texts.length && !stopAsked) {
     await change($, t => correctionResent(t, agentId, now))
     const sent = await $.session.send({ to: { agentId }, text: w.resendFrame(texts.join('\n\n')) }).catch(() => undefined)
     if (sent?.isDelivered) return
@@ -804,8 +821,7 @@ export const register: Register = (on, options) => {
     standing.clear()
     changers.clear()
     const result = await next(e)
-    const tools = await $.tool.list().catch(() => [])
-    codeMode = codeModeOf(tools.map(t => t.name))
+    codeMode = codeModeOf(await toolNames($))
     await change($, s => codeModeSeen(s, codeMode)).catch(() => undefined)
     if (options.language !== 'de' && options.language !== 'en') {
       lang = resolveLang(options.language, await $.settings.read({ key: 'language' }).catch(() => undefined))
@@ -1085,10 +1101,11 @@ export const register: Register = (on, options) => {
     await takeOver($).catch(() => undefined)
     const result = await next(e)
     const now = await clock($)
+    const stopAsked = e.agentId !== undefined && stoppingIds.has(e.agentId)
     const after = await change($, s =>
       completed(s, { agentId: e.agentId, answer: e.answer, reason: e.reason, isAborted: e.isAborted, durationMs: e.durationMs }, now),
     ).catch(() => undefined)
-    if (e.agentId && after) await settleUnread($, after, e.agentId, now).catch(() => undefined)
+    if (e.agentId && after) await settleUnread($, after, e.agentId, now, stopAsked).catch(() => undefined)
     if (e.agentId && (await read($, reportTexts).catch(() => undefined))?.[e.agentId]) await loadReport($, e.agentId).catch(() => undefined)
     if (after) await ensureReport($, after).catch(() => undefined)
     if (!e.agentId) await catchUp($, now, keep).catch(() => undefined)
