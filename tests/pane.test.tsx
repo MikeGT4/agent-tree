@@ -14,7 +14,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; fast?: boolean; fastFails?: boolean; model?: string; modelOptions?: string[]; modelFails?: boolean; modelLocked?: boolean; codeMode?: boolean; stepTools?: string[] } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; fast?: boolean; fastFails?: boolean; model?: string; modelOptions?: string[]; modelFails?: boolean; modelLocked?: boolean; codeMode?: boolean; stepTools?: string[]; mainStepTools?: string[] } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -180,7 +180,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { send?: boolean; comman
       turnId: e.turnId,
       index: e.index,
       answer: '',
-      toolUses: e.agentId ? (refuse.stepTools ?? []).map(name => ({ name, input: {} })) : [],
+      toolUses: (e.agentId ? (refuse.stepTools ?? []) : (refuse.mainStepTools ?? [])).map(name => ({ name, input: {} })),
       stopReason: 'end_turn' as const,
       usage: { ...usage, model: answering(e.model) },
       ...(e.messageCount === 99
@@ -1614,6 +1614,37 @@ describe('Korrektur', () => {
     await ui.unmount()
   })
 
+  test('ein am Codeblock erkannter Code Mode bleibt, wenn die Werkzeugliste erneut ohne Code-Werkzeug kommt', de, async ($, on) => {
+    engine(on, [], { codeMode: false, stepTools: ['REPL'] })
+    await oneAgentWithAdvisor($)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/CODE MODE/)
+    await ui.unmount()
+  })
+
+  test('ein Codeblock der Hauptsitzung erkennt den Code Mode, der Stopp eines Unteragenten kommt dann ohne Werkzeugaufruf', de, async ($, on) => {
+    engine(on, [], { codeMode: false, mainStepTools: ['REPL'] })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toMatch(/CODE MODE/)
+    await steer(ui, 'detail:sub-1')
+    await ui.redraw()
+    await steer(ui, 'halt:sub-1')
+    const chunks: unknown[] = []
+    await step($, { agentId: 'sub-1', chunks })
+    expect(chunks.map(c => (c as { kind: string }).kind)).toEqual(['text', 'stop'])
+    await ui.unmount()
+  })
+
+  test('Code Mode: Aufrufe eines normal beendeten und wieder geweckten Agenten bleiben erlaubt', de, async ($, on) => {
+    engine(on, [], { codeMode: true })
+    await oneAgentWithAdvisor($)
+    await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    const later = await $.tool.call({ tool: 'Bash', command: 'echo weiter', agentId: 'sub-1' } as never)
+    expect(JSON.stringify(later)).not.toMatch(/gestoppt/)
+  })
+
   test('ohne Code Mode kein Kennzeichen und kein Codeschritt', de, async ($, on) => {
     engine(on, [], { codeMode: false, stepTools: ['Bash'] })
     await oneAgentWithAdvisor($)
@@ -1791,7 +1822,7 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await ui.unmount()
   })
 
-  test('ein Schritt während des Sendens der zweiten Korrektur lässt sie ungelesen, beim Ende bleibt sie geschickt', de, async ($, on) => {
+  test('ein Schritt während des Sendens der zweiten Korrektur zählt sie nicht als gelesen, beim Ende bleibt sie geschickt', de, async ($, on) => {
     const refuse: { onSend?: () => Promise<unknown> } = {}
     const seen = engine(on, [], refuse)
     await oneAgentWithAdvisor($)
@@ -1851,6 +1882,72 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     expect(seen.appended.some(row => (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(false)
   })
 
+  test('Code Mode: Korrektur, Stoppwunsch, der Agent endet selbst: geweckt wird er sofort gestoppt', de, async ($, on) => {
+    const seen = engine(on, [], { codeMode: true })
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Nimm b.ts')
+    await steer(ui, 'halt:sub-1')
+    await $.turn.complete(finished)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Korrektur: nicht zugestellt/)
+    const before = seen.stepModels.length
+    const chunks: unknown[] = []
+    await $.turn.start({ text: 'Nimm b.ts', turnId: 't2', agentId: 'sub-1' } as never)
+    const woken = await step($, { agentId: 'sub-1', chunks })
+    expect(chunks.map(c => (c as { kind: string }).kind)).toEqual(['text', 'stop'])
+    expect(woken.answer).toMatch(/Im Agent Tree vom Nutzer gestoppt/)
+    expect(seen.stepModels.length - before).toBe(0)
+    await $.turn.complete({ ...finished, answer: woken.answer })
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/○ gestoppt/)
+    await ui.unmount()
+  })
+
+  test('Korrektur, Stoppwunsch, der Agent berichtet selbst: geweckt wird er sofort gestoppt', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await sayCommand($, 'Nimm b.ts')
+    await steer(ui, 'halt:sub-1')
+    await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
+    await $.turn.complete(finished)
+    const before = seen.stepModels.length
+    const woken = await step($, { agentId: 'sub-1' })
+    expect(woken.answer).toMatch(/Im Agent Tree vom Nutzer gestoppt/)
+    expect(seen.stepModels.length - before).toBe(0)
+    await ui.unmount()
+  })
+
+  test('ein Stoppwunsch ohne offene Korrektur stoppt einen später geweckten Agenten nicht', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    await steer(ui, 'halt:sub-1')
+    await $.tool.call({ tool: 'SubagentHandback', message: 'OK', agentId: 'sub-1' } as never)
+    await $.turn.complete(finished)
+    const before = seen.stepModels.length
+    await step($, { agentId: 'sub-1' })
+    expect(seen.stepModels.length - before).toBe(1)
+    await ui.unmount()
+  })
+
+  test('scheitert der Agent, während die Korrektur gesendet wird, gilt sie als nicht zugestellt', de, async ($, on) => {
+    const refuse: { onSend?: () => Promise<unknown> } = {}
+    const seen = engine(on, [], refuse)
+    await oneAgentWithAdvisor($)
+    const ui = await openDetail($)
+    refuse.onSend = () => $.turn.complete({ ...finished, answer: '', reason: 'error' })
+    await sayCommand($, 'Nimm b.ts')
+    refuse.onSend = undefined
+    await ui.redraw()
+    expect(seen.sent.length).toBe(1)
+    const text = await screen(ui)
+    expect(text).toMatch(/Korrektur: nicht zugestellt/)
+    expect(text).not.toMatch(/Korrektur: geschickt/)
+    await ui.unmount()
+  })
+
   test('nach angefordertem Stopp wird eine spätere Korrektur nicht nachgeschickt, auch wenn der Agent selbst endet', de, async ($, on) => {
     const seen = engine(on)
     await oneAgentWithAdvisor($)
@@ -1903,6 +2000,20 @@ describe('Textfeld, Status und Stopp am Kasten', () => {
     await $.turn.complete({ ...finished, agentId: 'sub-2', answer: '', reason: 'error' })
     expect(seen.appended.some(row => row.agentId === 'sub-1' && (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(true)
     expect(seen.appended.some(row => !row.agentId && (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(true)
+  })
+
+  test('ein beendeter Eltern-Agent bekommt keine Verlustnotiz', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    await $.agent.spawn({ prompt: 'Prüfe.', description: 'Unterauftrag', subagentType: 'general-purpose', parentAgentId: 'sub-1' } as never)
+    await step($, { agentId: 'sub-2' })
+    await sayCommand($, 'Nur lesen', 'sub-2')
+    await $.turn.complete(finished)
+    const before = seen.appended.length
+    await $.turn.complete({ ...finished, agentId: 'sub-2', answer: '', reason: 'error' })
+    expect(seen.appended.slice(before).some(row => row.agentId === 'sub-1')).toBe(false)
+    expect(seen.appended.slice(before).some(row => !row.agentId && (row.message.content[0]?.text ?? '').includes('nicht mehr angekommen'))).toBe(true)
+    expect(seen.status.some(line => /Korrektur nicht zugestellt/.test(line))).toBe(true)
   })
 
   test('endet der Eltern-Agent, während die Korrektur an sein Kind läuft, bekommt er keine Notiz', de, async ($, on) => {
@@ -3131,14 +3242,24 @@ describe('Zweites /clear, Intro, Aussehen und Eingaben', () => {
     })
     const seen = engine(on, [], { onSend: () => held })
     await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'detail:sub-1')
     const sending = run($, 'an sub-1 Bitte kürzer')
-    for (let i = 0; i < 100_000 && seen.sent.length === 0; i++) await Promise.resolve()
-    expect(seen.sent.length).toBe(1)
-    await step($, { agentId: 'sub-1' })
-    release()
+    try {
+      for (let i = 0; i < 100_000 && seen.sent.length === 0; i++) await Promise.resolve()
+      expect(seen.sent.length).toBe(1)
+      await ui.redraw()
+      expect(await screen(ui)).not.toMatch(/Korrektur: geschickt/)
+      await step($, { agentId: 'sub-1' })
+    } finally {
+      release()
+    }
     expect((await sending).text).toMatch(/geschickt/)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Korrektur: geschickt/)
     const handback = await $.tool.call({ tool: 'SubagentHandback', message: 'Bericht', agentId: 'sub-1' } as never)
     expect(JSON.stringify(handback)).toMatch(/deny/)
+    await ui.unmount()
   })
 })
 

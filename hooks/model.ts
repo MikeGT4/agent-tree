@@ -241,6 +241,20 @@ export function wasStopSent(s: AgentTreeState, agentId: string | undefined): boo
   return agentId !== undefined && (s.stopSent ?? []).includes(agentId)
 }
 
+export function stopOnWake(s: AgentTreeState, agentId: string): AgentTreeState {
+  return (s.stopWake ?? []).includes(agentId) ? s : { ...s, stopWake: [...(s.stopWake ?? []), agentId] }
+}
+
+export function wakeStopDue(s: AgentTreeState, agentId: string | undefined): boolean {
+  return agentId !== undefined && (s.stopWake ?? []).includes(agentId)
+}
+
+export function stopRevived(s: AgentTreeState, agentId: string): AgentTreeState {
+  if (!wakeStopDue(s, agentId)) return s
+  const stopWake = (s.stopWake ?? []).filter(id => id !== agentId)
+  return { ...s, stopWake, stopping: isStopping(s, agentId) ? s.stopping : [...(s.stopping ?? []), agentId] }
+}
+
 export function stopCancelled(s: AgentTreeState, agentId: string): AgentTreeState {
   return isStopping(s, agentId) || wasStopSent(s, agentId) ? withoutStop(s, agentId) : s
 }
@@ -1025,6 +1039,7 @@ export function freshTree(from: AgentTreeState, now: number): AgentTreeState {
     choices: { ...choicesOf(base), agents: { ...old.agents }, efforts: { ...(old.efforts ?? {}) }, ...(old.chosenAt ? { chosenAt: { ...old.chosenAt } } : {}) },
     ...(from.stopping ? { stopping: from.stopping.filter(id => alive.has(id)) } : {}),
     ...(from.stopSent ? { stopSent: from.stopSent.filter(id => alive.has(id)) } : {}),
+    ...(from.stopWake?.length ? { stopWake: from.stopWake } : {}),
     ...(from.corrections ? { corrections: without(from.corrections, gone) } : {}),
     ...(from.codeMode ? { codeMode: true } : {}),
     ...(from.selected === MAIN || from.selected === NEW_AGENTS || (from.selected !== undefined && alive.has(from.selected)) ? { selected: from.selected } : {}),

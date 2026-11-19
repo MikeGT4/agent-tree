@@ -34,7 +34,7 @@ Verbrauch: Limits, Kontext, Werkzeugaufrufe, Laufzeit.
 
 ![Verlauf](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-de-6.png)
 
-Verlauf: jedes Ereignis, nach Quelle.
+Verlauf: Sitzungsereignisse, nach Quelle.
 
 ![Hilfe](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/guide-de-7.png)
 

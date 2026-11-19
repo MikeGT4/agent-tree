@@ -21,6 +21,9 @@ import {
   choicesOf,
   chosen,
   clashed,
+  stopOnWake,
+  stopRevived,
+  wakeStopDue,
   CODE_TOOL,
   codeBlocksRan,
   codeModeOf,
@@ -576,7 +579,14 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
     return false
   }
   if (running) await remember($, agentId, framed)
-  await change($, t => (running ? correctionSent(t, { agentId, text, via: 'send' }, now) : correctionCounted(t, agentId)))
+  const marked = await change($, t => (running ? correctionSent(t, { agentId, text, via: 'send' }, now) : correctionCounted(t, agentId)))
+  const ended = running ? marked.agents.find(n => n.id === agentId)?.status : undefined
+  if (ended === 'failed' || ended === 'stopped') {
+    await forget($, agentId)
+    await change($, t => correctionFailed(t, { agentId, text, count: marked.corrections?.[agentId]?.count }, now))
+    $.ui.status(w.correctionFailedStatus)
+    return false
+  }
   const note = w.mainNote(`${typeLabel(node.type)} · ${node.description}`, text)
   await appendRow($, note)
   const parent = node.parentId ? (await latest($)).agents.find(n => n.id === node.parentId) : undefined
@@ -819,7 +829,7 @@ export const register: Register = (on, options) => {
     standing.clear()
     changers.clear()
     const result = await next(e)
-    codeMode = codeModeOf(await toolNames($))
+    codeMode = codeModeOf(await toolNames($)) || (await latest($).catch(() => undefined))?.codeMode === true
     await change($, s => codeModeSeen(s, codeMode)).catch(() => undefined)
     if (options.language !== 'de' && options.language !== 'en') {
       lang = resolveLang(options.language, await $.settings.read({ key: 'language' }).catch(() => undefined))
@@ -920,7 +930,8 @@ export const register: Register = (on, options) => {
     await takeOver($).catch(() => undefined)
     const agentId = e.agentId
     const fed = delivered.delete(agentId ?? MAIN)
-    const before = agentId !== undefined || e.effort !== undefined ? await latest($).catch(() => undefined) : undefined
+    const earlier = agentId !== undefined || e.effort !== undefined ? await latest($).catch(() => undefined) : undefined
+    const before = agentId && earlier && wakeStopDue(earlier, agentId) ? await change($, s => stopRevived(s, agentId)).catch(() => earlier) : earlier
     if (agentId && before && isStopping(before, agentId)) {
       const report = wordsFor(lang).stopAnswer(before.agents.find(n => n.id === agentId)?.toolCount ?? 0)
       const first = !wasStopSent(before, agentId)
@@ -1072,7 +1083,8 @@ export const register: Register = (on, options) => {
         return { deny: wordsFor(lang).stopAnswer(current.agents.find(n => n.id === agentId)?.toolCount ?? 0) }
       }
       if (stopSentIds.has(agentId)) return next(e)
-      await change($, s => stopCancelled(s, agentId)).catch(() => undefined)
+      const unread = pendingCorrection(await latest($), agentId) !== undefined
+      await change($, s => (unread ? stopOnWake(stopCancelled(s, agentId), agentId) : stopCancelled(s, agentId))).catch(() => undefined)
     }
     if (!stopping && String(e.tool) === HANDBACK) {
       const waiting = pendingCorrection(await latest($), agentId)
@@ -1103,10 +1115,13 @@ export const register: Register = (on, options) => {
     await takeOver($).catch(() => undefined)
     const result = await next(e)
     const now = await clock($)
-    const stopAsked = e.agentId !== undefined && stoppingIds.has(e.agentId)
-    const after = await change($, s =>
-      completed(s, { agentId: e.agentId, answer: e.answer, reason: e.reason, isAborted: e.isAborted, durationMs: e.durationMs }, now),
-    ).catch(() => undefined)
+    const ended = e.agentId
+    const stopAsked = ended !== undefined && stoppingIds.has(ended)
+    const stopPending = stopAsked && ended !== undefined && !stopSentIds.has(ended) && pendingCorrection(await latest($), ended) !== undefined
+    const after = await change($, s => {
+      const done = completed(s, { agentId: e.agentId, answer: e.answer, reason: e.reason, isAborted: e.isAborted, durationMs: e.durationMs }, now)
+      return stopPending && ended !== undefined ? stopOnWake(done, ended) : done
+    }).catch(() => undefined)
     if (e.agentId && after) await settleUnread($, after, e.agentId, now, stopAsked).catch(() => undefined)
     if (e.agentId && (await read($, reportTexts).catch(() => undefined))?.[e.agentId]) await loadReport($, e.agentId).catch(() => undefined)
     if (after) await ensureReport($, after).catch(() => undefined)

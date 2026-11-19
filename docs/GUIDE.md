@@ -34,12 +34,12 @@ Usage: limits, context, tools, time.
 
 ![Log](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-6.png)
 
-Log: every event, by source.
+Log: session events, by source.
 
 ![Help](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/guide-7.png)
 
 Help: keys, signs, commands, news.
 
-## Also
+## New
 
 Code Mode: title mark, code blocks count as steps. Updates: a card shows the news.

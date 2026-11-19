@@ -17,6 +17,7 @@ describe('Update-Hinweis', () => {
     expect(newsBetween(undefined, '0.7.8', 'de').length).toBe(NOTICE_LINES)
     expect(newsBetween('0.7.6', '0.7.7', 'de')).toEqual(['Läuft im Code Mode von Claude Code', 'Stopp und Schreiben auch im Code Mode'])
     expect(newsBetween('0.7.8', '0.7.8', 'de')).toEqual([])
+    expect(newsBetween(undefined, '0.7.10', 'de')).toEqual(['Späte Nachricht an einen Agenten: kein doppelter Lauf mehr', 'Nachrichten an Agenten: ein Weg in jeder Sitzung', 'Zeigt nach einem Update, was neu ist'])
   })
 
   test('der Hinweis kommt nur nach einem echten Sprung oder für bisherige Nutzer', () => {
