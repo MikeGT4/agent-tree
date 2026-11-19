@@ -78,6 +78,7 @@ export type Words = {
   logOrder: string
   logEntries: (count: number) => string
   logQuestionSize: (count: number) => string
+  logHint: string
   task: string
   reply: string
   loading: string
@@ -272,6 +273,7 @@ export const WORDS: Record<Lang, Words> = {
     logOrder: 'neueste zuerst',
     logEntries: count => (count === 1 ? '1 Eintrag' : `${count} Einträge`),
     logQuestionSize: count => `… · ${count} Zeichen`,
+    logHint: 'Zeile mit › anklicken: deine Frage oder den Bericht zeigen',
     task: 'Auftrag',
     reply: 'Antwort',
     loading: 'lädt …',
@@ -474,6 +476,7 @@ export const WORDS: Record<Lang, Words> = {
     logOrder: 'newest first',
     logEntries: count => (count === 1 ? '1 entry' : `${count} entries`),
     logQuestionSize: count => `… · ${count} characters`,
+    logHint: 'Click a row with ›: show your prompt or the report',
     task: 'Task',
     reply: 'Answer',
     loading: 'loading …',

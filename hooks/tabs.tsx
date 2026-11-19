@@ -307,13 +307,19 @@ export function drawLog(ui: Ui, o: LogInput) {
     }
     return [line]
   }
+  const drawn = rows.flatMap(drawRow)
   return (
     <Box key="log-view" flexDirection="column" width={o.width} marginTop={1}>
       {drawLogFilters(ui, o)}
       <Text key="log-head" color={o.palette.dim} wrap="truncate-end">
         {`${o.w.log} · ${o.w.logEntries(rows.length)} · ${o.w.logOrder}`}
       </Text>
-      {rows.length === 0 ? (active ? null : <Text color={o.palette.dim}>{o.w.logEmpty}</Text>) : rows.flatMap(drawRow)}
+      {links > 0 ? (
+        <Text key="log-hint" color={o.palette.dim} wrap="wrap">
+          {o.w.logHint}
+        </Text>
+      ) : null}
+      {rows.length === 0 ? (active ? null : <Text color={o.palette.dim}>{o.w.logEmpty}</Text>) : drawn}
     </Box>
   )
 }

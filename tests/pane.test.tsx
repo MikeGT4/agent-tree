@@ -5124,6 +5124,19 @@ describe('Verlauf 0.7.11: Untermenü, Aufklappen, Sprung', () => {
     await ui.unmount()
   })
 
+  test('ein Hinweis sagt, was der Klick auf eine Zeile tut, nur wenn eine klickbar ist', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:log' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('Zeile mit › anklicken: deine Frage oder den Bericht zeigen')
+    await ui.press({ key: 'logfilter:advisor' })
+    await ui.redraw()
+    expect(await screen(ui)).not.toContain('Zeile mit › anklicken')
+    await ui.unmount()
+  })
+
   test('Einträge der Sitzung und des Beraters sind nicht klickbar', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
