@@ -271,6 +271,10 @@ export function stopRevived(s: AgentTreeState, agentId: string, now: number): Ag
   return { ...s, stopWake, stopping: isStopping(s, agentId) ? s.stopping : [...(s.stopping ?? []), agentId] }
 }
 
+export function wakeStopRestored(s: AgentTreeState, agentId: string, at: number | undefined): AgentTreeState {
+  return at === undefined ? s : { ...s, stopWake: { ...(s.stopWake ?? {}), [agentId]: at } }
+}
+
 export function wakeStopDropped(s: AgentTreeState, agentId: string): AgentTreeState {
   const idle = findAgent(s, agentId)?.status !== 'running'
   const stuck = idle && (isStopping(s, agentId) || wasStopSent(s, agentId))

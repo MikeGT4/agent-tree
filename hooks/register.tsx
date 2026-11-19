@@ -26,6 +26,7 @@ import {
   stopRevived,
   wakeStopDropped,
   wakeStopKnown,
+  wakeStopRestored,
   wasStopOutrun,
   CODE_TOOL,
   codeBlocksRan,
@@ -573,6 +574,7 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
     $.ui.status(w.correctionFailedStatus)
     return false
   }
+  const keptStop = current.stopWake?.[agentId]
   await change($, t => wakeStopDropped(t, agentId)).catch(() => undefined)
   const framed = codeMode ? w.correctionFrameCode(text) : w.correctionFrame(text, HANDBACK)
   const running = node.status === 'running'
@@ -583,6 +585,7 @@ async function sayTo($: EngineInterface, agentId: string, text: string): Promise
   const sent = await $.session.send({ to: { agentId }, text: framed }).catch(() => undefined)
   if (!sent?.isDelivered) {
     if (!running) await unremember($, agentId, framed)
+    await change($, t => wakeStopRestored(t, agentId, keptStop)).catch(() => undefined)
     await change($, t => correctionFailed(t, { agentId, text, before }, now))
     $.ui.status(w.correctionFailedStatus)
     return false
@@ -962,6 +965,10 @@ export const register: Register = (on, options) => {
         stopReason,
         usage: null,
       }
+    }
+    if (agentId && before && before.agents.some(n => n.id === agentId && n.status !== 'running')) {
+      const wokenNow = await clock($)
+      await change($, s => turnStarted(s, { text: '', agentId }, wokenNow)).catch(() => undefined)
     }
     const carriesInput = e.index === 0 || fed || Boolean(agentId && before && pendingCorrection(before, agentId))
     if (agentId && before && pendingCorrection(before, agentId)) {
