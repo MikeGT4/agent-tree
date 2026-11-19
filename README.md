@@ -22,7 +22,7 @@ Then start Claude Code; the pane opens.
 
 Inside a session: `/plugin install agent-tree --marketplace MikeGT4/agent-tree`
 
-Needs Claude Code 2.1.292+, tested with 2.1.327.
+Needs Claude Code 2.1.292+, tested with 2.1.328.
 
 ## What it runs
 
