@@ -144,7 +144,7 @@ const questions: Map<number, string> = new Map()
 let introRun = 0
 let introShown: IntroInfo | undefined
 let introModelSetting: string | undefined
-let notice: UpdateNotice | undefined
+let newsCard: UpdateNotice | undefined
 let noticeTicker: Timer | undefined
 let noticeOpenedAt: number | undefined
 let noticeStartedAt: number | undefined
@@ -329,7 +329,7 @@ async function replayIntro($: EngineInterface): Promise<void> {
 }
 
 function startNotice($: EngineInterface, now: number): void {
-  if (!notice || noticeTicker) return
+  if (!newsCard || noticeTicker) return
   const run = ++noticeRun
   noticeOpenedAt = now
   noticeStartedAt = undefined
@@ -339,7 +339,7 @@ function startNotice($: EngineInterface, now: number): void {
     })
   } catch {
     noticeTicker = undefined
-    notice = undefined
+    newsCard = undefined
   }
 }
 
@@ -356,8 +356,8 @@ async function prepareNotice($: EngineInterface): Promise<void> {
   const seen = await $.store.get(SEEN_VERSION_KEY).catch(() => undefined)
   const updated = await $.store.get(UPDATE_KEY).catch(() => undefined)
   const starred = await $.store.get(STAR_KEY).catch(() => undefined)
-  notice = noticeFor(seen, VERSION, updated !== undefined || starred !== undefined, lang)
-  if (!notice && seen !== VERSION) await $.store.set(SEEN_VERSION_KEY, VERSION).catch(() => undefined)
+  newsCard = noticeFor(seen, VERSION, updated !== undefined || starred !== undefined, lang)
+  if (!newsCard && seen !== VERSION) await $.store.set(SEEN_VERSION_KEY, VERSION).catch(() => undefined)
 }
 
 async function noticeTick($: EngineInterface, run: number): Promise<void> {
@@ -369,7 +369,7 @@ async function noticeTick($: EngineInterface, run: number): Promise<void> {
 }
 
 async function endNotice($: EngineInterface): Promise<void> {
-  notice = undefined
+  newsCard = undefined
   if (!noticeTicker) return
   noticeTicker.cancel()
   noticeTicker = undefined
@@ -1270,12 +1270,12 @@ export const register: Register = (on, options) => {
       )
       if (intro) return intro
     }
-    if (noticeTicker && notice) {
+    if (noticeTicker && newsCard) {
       if (noticeStartedAt === undefined) {
         noticeStartedAt = now
         await $.store.set(SEEN_VERSION_KEY, VERSION).catch(() => undefined)
       }
-      return drawNotice({ Box, Text, Button } as never, e.props.bodyColumns, notice, now - noticeStartedAt, { palette: PALETTES[look.colors], animate, words: wordsFor(lang) }, () => void endNotice($).catch(() => undefined))
+      return drawNotice({ Box, Text, Button } as never, e.props.bodyColumns, newsCard, now - noticeStartedAt, { palette: PALETTES[look.colors], animate, words: wordsFor(lang) }, () => void endNotice($).catch(() => undefined))
     }
     return drawTree({ Box, Text, Button, Markdown } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {
       frame: tick,
