@@ -10,7 +10,7 @@ Hauptsitzung: Modell, Denkstufe, Kontext, Kosten.
 
 Kasten je Unteragent: Aufgabe, aktueller Schritt, Kontext (gelb ab 70 %, rot ab 85 %).
 
-⚠: Zwei laufende Agenten ändern dieselbe Datei.
+⚠: Warnung, bevor zwei Agenten dieselbe Datei ändern.
 
 ## Was du tun kannst
 

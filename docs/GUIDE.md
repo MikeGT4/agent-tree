@@ -10,7 +10,7 @@ Main session: model, effort, context, cost.
 
 One box per sub-agent: task, current step, context (yellow from 70%, red from 85%).
 
-⚠: two running agents change one file.
+⚠: warns before two agents edit one file.
 
 ## What you can do
 
