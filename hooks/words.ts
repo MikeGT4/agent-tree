@@ -141,6 +141,7 @@ export type Words = {
   readFiles: string
   changedFiles: string
   alsoChanges: (file: string, other: string) => string
+  changedFirst: (file: string, other: string) => string
   feedback: {
     modelPending: (x: string) => string
     modelDone: (x: string) => string
@@ -348,6 +349,7 @@ export const WORDS: Record<Lang, Words> = {
     readFiles: 'Gelesen',
     changedFiles: 'Geändert',
     alsoChanges: (file, other) => `⚠ ${other} ändert ${file} auch`,
+    changedFirst: (file, other) => `Agent Tree: ${other} hat ${file} in diesem Lauf schon geändert. Lies die Datei neu ein und nimm deine Änderung dann vor.`,
     feedback: {
       modelPending: x => `✓ Modell auf ${x} gestellt, gilt ab seinem nächsten Schritt`,
       modelDone: x => `✓ läuft jetzt mit ${x}`,
@@ -558,6 +560,7 @@ export const WORDS: Record<Lang, Words> = {
     readFiles: 'Read',
     changedFiles: 'Changed',
     alsoChanges: (file, other) => `⚠ ${other} edits ${file} too`,
+    changedFirst: (file, other) => `Agent Tree: ${other} already changed ${file} during this run. Read the file again, then make your change.`,
     feedback: {
       modelPending: x => `✓ Model set to ${x}, applies from its next step`,
       modelDone: x => `✓ now running on ${x}`,

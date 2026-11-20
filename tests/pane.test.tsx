@@ -3808,6 +3808,42 @@ describe('Gleiche Datei', () => {
     expect(clashOf(tree(), 'sub-1')).toBeUndefined()
   })
 
+  test('meldet sich vor dem zweiten Schreiben, einmal je Datei', { options: { language: 'en', intro: false, tips: false } }, async ($, on) => {
+    const { tree } = engine(on)
+    await twoAgents($)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/api.ts', agentId: 'sub-1' } as never)
+    const held = (await $.tool.call({ tool: 'Edit', file_path: '/p/src/api.ts', agentId: 'sub-2' } as never)) as { deny?: string }
+    expect(held.deny).toBe('Agent Tree: Agent A already changed api.ts during this run. Read the file again, then make your change.')
+    expect(clashOf(tree(), 'sub-2')).toEqual({ file: 'api.ts', with: 'sub-1' })
+    const again = (await $.tool.call({ tool: 'Edit', file_path: '/p/src/api.ts', agentId: 'sub-2' } as never)) as { deny?: string }
+    expect(again.deny).toBeUndefined()
+  })
+
+  test('nach dem Ende des ersten Agenten kein Halt', { options: { language: 'en', intro: false, tips: false } }, async ($, on) => {
+    engine(on)
+    await twoAgents($)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/api.ts', agentId: 'sub-1' } as never)
+    await $.turn.complete({ answer: 'OK', durationMs: 900, isAborted: false, turnId: 't1', agentId: 'sub-1', reason: 'answer' })
+    const free = (await $.tool.call({ tool: 'Edit', file_path: '/p/src/api.ts', agentId: 'sub-2' } as never)) as { deny?: string }
+    expect(free.deny).toBeUndefined()
+  })
+
+  test('Hauptsitzung wird vor einer Datei des Agenten gewarnt', { options: { language: 'en', intro: false, tips: false } }, async ($, on) => {
+    engine(on)
+    await twoAgents($)
+    await $.tool.call({ tool: 'Write', file_path: '/p/src/api.ts', agentId: 'sub-1' } as never)
+    const held = (await $.tool.call({ tool: 'Edit', file_path: '/p/src/api.ts' } as never)) as { deny?: string }
+    expect(held.deny).toContain('Agent A already changed api.ts')
+  })
+
+  test('Lesen hält nicht an', { options: { language: 'en', intro: false, tips: false } }, async ($, on) => {
+    engine(on)
+    await twoAgents($)
+    await $.tool.call({ tool: 'Edit', file_path: '/p/src/api.ts', agentId: 'sub-1' } as never)
+    const read = (await $.tool.call({ tool: 'Read', file_path: '/p/src/api.ts', agentId: 'sub-2' } as never)) as { deny?: string }
+    expect(read.deny).toBeUndefined()
+  })
+
   test('kein Pfad im Zustand', de, async ($, on) => {
     const { tree } = engine(on)
     await twoAgents($)

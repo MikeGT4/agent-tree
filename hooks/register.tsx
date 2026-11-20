@@ -140,6 +140,7 @@ let introTicker: Timer | undefined
 let introOpenedAt: number | undefined
 let introStartedAt: number | undefined
 const changers: Map<string, { file: string; ids: Set<string> }> = new Map()
+const cautioned: Set<string> = new Set()
 const questions: Map<number, string> = new Map()
 let introRun = 0
 let introShown: IntroInfo | undefined
@@ -214,7 +215,23 @@ async function noteChange($: EngineInterface, who: string, path: string) {
   if (entry.ids.size > 1) await settleClashes($)
 }
 
+async function clashHold($: EngineInterface, who: string, path: string): Promise<string | undefined> {
+  const cwd = await $.session.cwd().catch(() => '')
+  const key = pathKey(resolvedPath(path, cwd))
+  const entry = changers.get(key)
+  if (!entry || entry.ids.has(who) || cautioned.has(`${who}|${key}`)) return undefined
+  const s = await latest($)
+  const first = [...entry.ids].find(id => id === MAIN || s.agents.some(n => n.id === id && n.status === 'running'))
+  if (first === undefined) return undefined
+  cautioned.add(`${who}|${key}`)
+  await noteChange($, who, path)
+  const w = wordsFor(lang)
+  const other = first === MAIN ? w.main : s.agents.find(n => n.id === first)?.description || first
+  return w.changedFirst(entry.file, other)
+}
+
 async function dropChanger($: EngineInterface, who: string) {
+  for (const mark of cautioned) if (mark.startsWith(`${who}|`)) cautioned.delete(mark)
   let touched = false
   for (const [key, entry] of changers) {
     touched = entry.ids.delete(who) || touched
@@ -872,6 +889,7 @@ export const register: Register = (on, options) => {
     starting.clear()
     standing.clear()
     changers.clear()
+    cautioned.clear()
     const result = await next(e)
     codeMode = codeModeOf(await toolNames($)) || (await latest($).catch(() => undefined))?.codeMode === true
     await change($, s => codeModeSeen(s, codeMode)).catch(() => undefined)
@@ -1123,6 +1141,8 @@ export const register: Register = (on, options) => {
     const kind = toolKind(String(e.tool))
     const path = kind === 'change' ? pathOf(input) : undefined
     if (!agentId) {
+      const held = path ? await clashHold($, MAIN, path).catch(() => undefined) : undefined
+      if (held) return { deny: held }
       const result = await next(e)
       if (path && succeeded(result)) await noteChange($, MAIN, path).catch(() => undefined)
       return result
@@ -1158,6 +1178,8 @@ export const register: Register = (on, options) => {
         return { deny: wordsFor(lang).correctionWaiting(HANDBACK) }
       }
     }
+    const held = path ? await clashHold($, agentId, path).catch(() => undefined) : undefined
+    if (held) return { deny: held }
     const label = toolLabel(String(e.tool), input)
     const file = fileNameOf(input)
     const noted = (async () => {
