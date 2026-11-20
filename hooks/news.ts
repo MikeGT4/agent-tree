@@ -2,7 +2,7 @@
 import { isNewer } from './update.ts'
 import type { Lang } from './words.ts'
 
-export const VERSION = '0.7.12'
+export const VERSION = '0.7.13'
 export const SEEN_VERSION_KEY = 'seenVersion'
 export const NOTICE_MS = 3000
 export const NOTICE_LINES = 3
@@ -31,6 +31,10 @@ export const NEWS: Readonly<Record<string, Readonly<Record<Lang, readonly string
   '0.7.12': {
     de: ['Unten in der Leiste: ein Tipp je Sitzung', 'Die Option „Tips“ schaltet ihn ab'],
     en: ['A tip per session at the bottom of the pane', 'The Tips option turns it off'],
+  },
+  '0.7.13': {
+    de: ['Gleiche Datei: Warnung, bevor der zweite Agent schreibt'],
+    en: ['Same file: warns before the second agent writes'],
   },
 }
 
