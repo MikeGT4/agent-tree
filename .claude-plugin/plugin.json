@@ -2,7 +2,7 @@
   "name": "agent-tree",
   "displayName": "Agent Tree",
   "version": "0.7.19",
-  "description": "Terminal side pane that shows a session's agents as a live tree: what each one does, how full its context is, which file two of them change. Tabs open each agent's full report, files, log and usage. Stop one, send it new instructions, switch its model and effort.",
+  "description": "Terminal side pane that shows your agents as a live tree, across all open terminals: what each one does, how full its context is, what it costs, which file two of them change. Tabs open reports, files, log, cost and terminals. Stop or redirect an agent, switch its model and effort, and hand simple tasks to a local model to save tokens.",
   "author": {
     "name": "Mike Pollow, Digitalroots"
   },
@@ -29,10 +29,11 @@
     "themes",
     "usage-monitor",
     "context-window",
-    "tabs",
-    "reports",
-    "activity-log",
-    "code-mode"
+    "code-mode",
+    "local-llm",
+    "ollama",
+    "token-usage",
+    "multi-terminal"
   ],
   "types": "./types/index.d.ts",
   "userConfig": {
