@@ -12,6 +12,8 @@ import { introInfo } from './intro-model.ts'
 import { rowsOf, withScrollBar } from './scrollbar.tsx'
 import { PEER_BEAT_MS, changeNoted, crossClashes, folderOf, isForgotten, isMarkdown, isOpen, isPeerKey, peerKey, peerNews, peerOf } from './peers.ts'
 import type { Peer, PeerNews } from './peers.ts'
+import { LOCAL_SCHEMA, LOCAL_TOOL, localAnswerOf, localAskOf, localBody, localDescription, localSetup, tallied } from './local.ts'
+import type { LocalSetup, LocalTally } from './local.ts'
 import type { LimitSample } from './model.ts'
 import type { PeerView } from './tabs.tsx'
 import type { IntroInfo } from './intro-model.ts'
@@ -194,6 +196,8 @@ let peerPublishedAt = 0
 const droppedNotes: Set<string> = new Set()
 const toldPeers: Set<string> = new Set()
 const limitSamples: Map<string, LimitSample[]> = new Map()
+let localUse: LocalSetup | undefined
+let localCount: LocalTally = { calls: 0, tokens: 0, ms: 0, failed: 0 }
 
 async function takeOver($: EngineInterface): Promise<void> {
   if (handing) return handing
@@ -1042,6 +1046,7 @@ export const register: Register = (on, options) => {
   animate = options.animate !== false
   introOn = options.intro !== false
   const tipsOn = options.tips !== false
+  const localWanted = localSetup(options.localModel, options.localUrl)
   lang = resolveLang(options.language, undefined)
 
   on('session.start', async ($, e, next) => {
@@ -1083,6 +1088,11 @@ export const register: Register = (on, options) => {
     tip = tipsOn && e.isInteractive !== false ? await nextTip($).catch(() => undefined) : undefined
     starAsk = e.isInteractive !== false ? await starAskDue($).catch(() => false) : false
     if (e.isInteractive !== false) void peerStart($, formerId).catch(() => undefined)
+    localUse = undefined
+    if (localWanted) {
+      const added = await $.tool.register({ name: LOCAL_TOOL, description: localDescription(localWanted.model), inputSchema: LOCAL_SCHEMA, isDeferred: false }).catch(() => undefined)
+      if (added) localUse = localWanted
+    }
     await maybeStartIntro($, e.isInteractive !== false).catch(() => undefined)
     if (!introTicker) startNotice($, await clock($))
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
@@ -1393,6 +1403,21 @@ export const register: Register = (on, options) => {
     return result
   })
 
+  on('tool.run', { tool: /^mcp__agent-tree__local_model$/ }, async ($, e) => {
+    const w = wordsFor(lang)
+    const ask = localAskOf(e)
+    const setup = localUse
+    if (!setup) return { deny: w.localOff }
+    if (!ask) return { deny: w.localNoPrompt }
+    const startedAt = await clock($)
+    const reply = await $.http.fetch(`${setup.url}/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: localBody(setup, ask) }).catch(() => undefined)
+    const answer = reply?.ok ? localAnswerOf(reply.text) : undefined
+    localCount = tallied(localCount, answer, (await clock($)) - startedAt)
+    await update($, introBeat, n => (n + 1) % 1_000_000).catch(() => undefined)
+    if (!answer) return { deny: w.localFailed(setup.url, reply?.status) }
+    return { result: answer.text }
+  })
+
   on('session.measure', async ($, e, next) => {
     await takeOver($).catch(() => undefined)
     const result = await next(e)
@@ -1496,7 +1521,7 @@ export const register: Register = (on, options) => {
       questions,
       ...(tip !== undefined ? { tip } : {}),
       ...(starAsk ? { starAsk } : {}),
-      ...(starAsk && starAskClosable ? { starAskClosable } : {}), ...(peerViewNow(now) ? { peers: peerViewNow(now) } : {}),
+      ...(starAsk && starAskClosable ? { starAskClosable } : {}), ...(localUse ? { local: { model: localUse.model, tally: localCount } } : {}), ...(peerViewNow(now) ? { peers: peerViewNow(now) } : {}),
       docked: e.props.placement === 'dock',
     }
     const columns = e.props.bodyColumns

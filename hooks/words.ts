@@ -47,6 +47,13 @@ export type Words = {
   usageEffort: string
   usageTokens: string
   quiet: (time: string) => string
+  localName: string
+  localCalls: (n: number) => string
+  localFails: (n: number) => string
+  localHint: string
+  localOff: string
+  localNoPrompt: string
+  localFailed: (url: string, status: number | undefined) => string
   limitRest: (time: string) => string
   minutes: (n: number) => string
   hoursMinutes: (h: number, m: number) => string
@@ -271,6 +278,13 @@ export const WORDS: Record<Lang, Words> = {
     usageEffort: 'Stufe',
     usageTokens: 'Tokens',
     quiet: time => `still seit ${time}`,
+    localName: 'Lokales Modell',
+    localCalls: n => (n === 1 ? '1 Aufruf' : `${n} Aufrufe`),
+    localFails: n => (n === 1 ? '1 Fehler' : `${n} Fehler`),
+    localHint: 'Lokales Modell aus: in den Plugin-Optionen ein Modell eintragen (Ollama, LM Studio), dann gibt Claude ihm einfache Aufgaben',
+    localOff: 'Das lokale Modell ist in dieser Sitzung nicht eingeschaltet.',
+    localNoPrompt: 'Der Aufruf braucht einen Text im Feld prompt.',
+    localFailed: (url, status) => `Das lokale Modell unter ${url} hat nicht geantwortet${status ? ` (HTTP ${status})` : ''}. Erledige die Aufgabe selbst.`,
     limitRest: time => `bei diesem Tempo voll in ~${time}`,
     minutes: n => `${n} min`,
     hoursMinutes: (h, m) => `${h} h ${m} min`,
@@ -510,6 +524,13 @@ export const WORDS: Record<Lang, Words> = {
     usageEffort: 'Effort',
     usageTokens: 'Tokens',
     quiet: time => `quiet for ${time}`,
+    localName: 'Local model',
+    localCalls: n => (n === 1 ? '1 call' : `${n} calls`),
+    localFails: n => (n === 1 ? '1 failure' : `${n} failures`),
+    localHint: 'Local model off: enter a model in the plugin options (Ollama, LM Studio) and Claude hands it simple tasks',
+    localOff: 'The local model is not turned on in this session.',
+    localNoPrompt: 'The call needs text in the prompt field.',
+    localFailed: (url, status) => `The local model at ${url} did not answer${status ? ` (HTTP ${status})` : ''}. Do the task yourself.`,
     limitRest: time => `full in ~${time} at this pace`,
     minutes: n => `${n} min`,
     hoursMinutes: (h, m) => `${h} h ${m} min`,

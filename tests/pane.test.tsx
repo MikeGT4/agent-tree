@@ -4683,6 +4683,62 @@ describe('Tab Fenster', () => {
   })
 })
 
+describe('Lokales Modell', () => {
+  const localOn = { options: { language: 'de', intro: false, tips: false, localModel: 'qwen2.5-coder:7b', localUrl: 'http://127.0.0.1:11434/v1/' } }
+
+  test('ab Werk aus: kein Werkzeug, im Reiter Kosten steht, wie man es einschaltet', de, async ($, on) => {
+    engine(on)
+    const registered: unknown[] = []
+    on('tool.register', (_, e) => {
+      registered.push(e)
+      return { value: { tool: 'x' } } as never
+    })
+    await startSession($)
+    expect(registered).toEqual([])
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:usage' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('Lokales Modell aus')
+    await ui.unmount()
+  })
+
+  test('eingeschaltet meldet es ein Werkzeug an, fragt den Server im OpenAI-Format und zählt mit', localOn, async ($, on) => {
+    engine(on)
+    const registered: { name?: string }[] = []
+    on('tool.register', (_, e) => {
+      registered.push(e as { name?: string })
+      return { value: { tool: 'mcp__agent-tree__local_model' } } as never
+    })
+    const asked: { url: string; body: string }[] = []
+    on('http.fetch', (_, e) => {
+      const r = e as { url: string; init?: { body?: string } }
+      asked.push({ url: r.url, body: r.init?.body ?? '' })
+      return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify({ choices: [{ message: { content: 'kurz gefasst' } }], usage: { total_tokens: 1200 } }) } } as never
+    })
+    await startSession($)
+    expect(registered.map(r => r.name)).toEqual(['local_model'])
+    const answered = (await $.tool.call({ tool: 'mcp__agent-tree__local_model', prompt: 'Fasse zusammen: lang', system: 'kurz' } as never)) as { result?: unknown }
+    expect(answered.result).toBe('kurz gefasst')
+    expect(asked[0]?.url).toBe('http://127.0.0.1:11434/v1/chat/completions')
+    expect(JSON.parse(asked[0]?.body ?? '{}')).toEqual({ model: 'qwen2.5-coder:7b', stream: false, messages: [{ role: 'system', content: 'kurz' }, { role: 'user', content: 'Fasse zusammen: lang' }] })
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:usage' })
+    await ui.redraw()
+    const text = await screen(ui)
+    for (const word of ['Lokales Modell', 'qwen2.5-coder:7b', '1 Aufruf', '1,2k Tokens']) expect(text).toContain(word)
+    await ui.unmount()
+  })
+
+  test('antwortet der Server nicht, bekommt Claude eine Absage mit der Bitte, es selbst zu tun', localOn, async ($, on) => {
+    engine(on)
+    on('tool.register', () => ({ value: { tool: 'mcp__agent-tree__local_model' } }) as never)
+    on('http.fetch', () => ({ value: { status: 500, ok: false, headers: {}, text: '' } }) as never)
+    await startSession($)
+    const answered = (await $.tool.call({ tool: 'mcp__agent-tree__local_model', prompt: 'x' } as never)) as { deny?: string; isError?: boolean; text?: string }
+    expect(JSON.stringify(answered)).toContain('HTTP 500')
+  })
+})
+
 describe('Tab Hilfe', () => {
   test('zeigt Tasten, Zeichen, Befehle und den Weg zur Anleitung', de, async ($, on) => {
     engine(on)

@@ -58,6 +58,7 @@ import { WORDS, activityText, familyOr, helpItems, logLine, lookOptionLabel, too
 import type { Lang, Words } from './words.ts'
 import { drawFiles, drawHelp, drawLog, drawReports, drawTabBar, drawTerminals, drawUsage, tabNames, tabRows } from './tabs.tsx'
 import type { PeerView } from './tabs.tsx'
+import type { LocalTally } from './local.ts'
 
 export { WORDS, logLine, wordsFor }
 export type { Lang }
@@ -154,6 +155,7 @@ export type TreeLook = {
   starAsk?: boolean
   starAskClosable?: boolean
   peers?: PeerView
+  local?: { model: string; tally: LocalTally }
 }
 
 export function pressKey(actions: TreeActions, key: string): boolean {
@@ -1545,6 +1547,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
               now,
               limits: (s.main.limits ?? []).map(l => ({ text: limitSegments([l], w, glyphs, width, now)[0] ?? '', color: limitColor(palette, l.percent) })),
               mainLine: `${contextLine(s, w)} · ${roundLine}`,
+              ...(look.local ? { local: look.local } : {}),
             })
           : null}
         {tab === 'log' ? drawLog(ui, { s, width, palette, glyphs, w, lang, ...(look.questions ? { questions: look.questions } : {}), ...(actions ? { filter: (source: string) => actions.logFilter(source), open: (turn: number) => actions.logOpen(turn), jump: (agentId: string) => actions.report(agentId) } : {}) }) : null}

@@ -88,6 +88,18 @@
       "title": "Auto-update",
       "description": "Once a day, install a newer Agent Tree from its marketplace",
       "default": true
+    },
+    "localModel": {
+      "type": "string",
+      "title": "Local model",
+      "description": "Name of a model on your own server (for example qwen2.5-coder:7b in Ollama); Claude can then hand it simple tasks. Empty turns it off",
+      "default": ""
+    },
+    "localUrl": {
+      "type": "string",
+      "title": "Local model address",
+      "description": "OpenAI-compatible address of that server: Ollama http://127.0.0.1:11434/v1, LM Studio http://127.0.0.1:1234/v1",
+      "default": "http://127.0.0.1:11434/v1"
     }
   }
 }

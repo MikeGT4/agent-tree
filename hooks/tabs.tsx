@@ -5,6 +5,7 @@ import type { AgentTreeLogEntry, AgentTreeLogSource, AgentTreeNode, AgentTreeRep
 import { frameEdges, restyleLine, statusColor } from './looks.ts'
 import type { Glyphs, Palette } from './looks.ts'
 import type { Peer, PeerClash, PeerNews } from './peers.ts'
+import type { LocalTally } from './local.ts'
 import { EFFORT_LEVELS, pathKey, quietFor, LOG_SOURCES, MAIN, TABS, clashShown, effortLabel, logTarget, clockTime, contextLevel, contextPercent, cut, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
 import { helpItems, logLine } from './words.ts'
 import type { Lang, Words } from './words.ts'
@@ -420,6 +421,7 @@ export type UsageInput = ViewInput & {
   now: number
   limits: readonly { text: string; color: string }[]
   mainLine: string
+  local?: { model: string; tally: LocalTally }
 }
 
 export type UsageGroup = { effort?: string; agents: number; tokens: number; usd?: number; ms: number }
@@ -523,6 +525,18 @@ export function drawUsage(ui: Ui, o: UsageInput) {
             {l.text}
           </Text>
         ))}
+        {o.local ? (
+          <Text key="usage-local" wrap="truncate-end">
+            <Text bold color={o.palette.main}>
+              {o.w.localName}
+            </Text>
+            {` · ${[o.local.model, o.w.localCalls(o.local.tally.calls), ...(o.local.tally.tokens ? [`${fmtTokens(o.local.tally.tokens, o.w.decimal)} Tokens`] : []), ...(o.local.tally.calls ? [fmtShortDuration(o.local.tally.ms)] : []), ...(o.local.tally.failed ? [o.w.localFails(o.local.tally.failed)] : [])].join(' · ')}`}
+          </Text>
+        ) : (
+          <Text key="usage-local" color={o.palette.dim} wrap="wrap">
+            {o.w.localHint}
+          </Text>
+        )}
       </Box>
     </Box>
   )
