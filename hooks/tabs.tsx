@@ -133,6 +133,8 @@ export type ViewInput = {
   docked?: boolean
 }
 
+export type HelpInput = ViewInput & { starAsk?: boolean; starOff?: () => void }
+
 export const TAB_AGENTS = 40
 export const FILES_BUDGET = 16000
 export const FILE_NAME_LIMIT = 48
@@ -489,8 +491,8 @@ export function drawUsage(ui: Ui, o: UsageInput) {
   )
 }
 
-export function drawHelp(ui: Ui, o: ViewInput) {
-  const { Box, Text } = ui
+export function drawHelp(ui: Ui, o: HelpInput) {
+  const { Box, Text, Button } = ui
   const section = (key: string, title: string, lines: readonly (string | { text: string; color: string })[]) => (
     <Box key={key} flexDirection="column" width={o.width} marginTop={1}>
       <Text bold color={o.palette.main}>
@@ -524,6 +526,14 @@ export function drawHelp(ui: Ui, o: ViewInput) {
       {section('help-glyphs', o.w.helpGlyphs, glyphLines)}
       {section('help-commands', o.w.helpCommands, [`/agent-tree ${o.w.commandHint}`])}
       {section('help-guide', o.w.helpGuide, [o.w.guideUrl])}
+      {o.starAsk ? (
+        <Box key="help-star" flexDirection="column" width={o.width} marginTop={1}>
+          <Text key="help-star:text" wrap="wrap" bold color={o.palette.warn}>
+            {o.w.starAsk}
+          </Text>
+          {o.starOff ? <Button key="star:off" plain label={`× ${o.w.starAskOff}`} onPress={o.starOff} /> : null}
+        </Box>
+      ) : null}
     </Box>
   )
 }

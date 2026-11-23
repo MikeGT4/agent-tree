@@ -2584,9 +2584,38 @@ describe('Fast Mode per Knopf', () => {
     await ui.redraw()
     const text = await screen(ui)
     expect(text).toContain(`Zuletzt neu, Stand ${VERSION}`)
-    expect(text).toContain('Die Option „Tips“ schaltet ihn ab')
+    expect(text).toContain('Verschiedene kleine Code-Änderungen')
     expect(text).toContain('„CODE MODE“ im Titel: die Sitzung läuft im Code Mode.')
     await ui.unmount()
+  })
+
+  test('die Hilfe bittet in jeder vierten Sitzung um einen Stern, bis man ihn wegklickt', de, async ($, on) => {
+    engine(on)
+    const helpText = async () => {
+      const ui = await $.ui.mount(pane(90))
+      await ui.press({ key: 'tab:help' })
+      await ui.redraw()
+      const text = await screen(ui)
+      return { ui, text }
+    }
+    for (let i = 1; i <= 3; i++) {
+      await startSession($)
+      const { ui, text } = await helpText()
+      expect(text).not.toContain('Stern auf GitHub')
+      await ui.unmount()
+    }
+    await startSession($)
+    const { ui, text } = await helpText()
+    expect(text).toContain('Stern auf GitHub')
+    expect(text).toContain('Nicht mehr zeigen')
+    await ui.press({ key: 'star:off' })
+    await ui.redraw()
+    expect(await screen(ui)).not.toContain('Stern auf GitHub')
+    await ui.unmount()
+    for (let i = 1; i <= 8; i++) await startSession($)
+    const later = await helpText()
+    expect(later.text).not.toContain('Stern auf GitHub')
+    await later.ui.unmount()
   })
 
   test('ohne den Knopf führt die Hilfe die Taste f nicht', de, async ($, on) => {

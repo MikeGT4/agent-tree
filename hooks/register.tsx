@@ -113,6 +113,8 @@ const LOOK_SHAPE = 'agent-tree-look-1'
 const LOOK_KEY = 'look'
 const STAR_KEY = 'star'
 const TIP_KEY = 'tip'
+const STAR_ASK_KEY = 'starAsk'
+const STAR_ASK_EVERY = 4
 const MODEL_KEY = 'model'
 const EFFORT_KEY = 'effort'
 const MAIN_EFFORT_KEY = 'mainEffort'
@@ -158,6 +160,7 @@ let stopSentIds = new Set<string>()
 let lastAdvisor = 'opus'
 let advisorCommand = true
 let tip: number | undefined
+let starAsk = false
 type Carried = { tree: AgentTreeState; look: AgentTreeLook; unread: Record<string, string[]>; sessionId?: string }
 type Pin = string | undefined
 type Level = string | number
@@ -795,6 +798,7 @@ function actionsFor($: EngineInterface): TreeActions {
     write: agentId => void startWrite($, agentId).catch(ignore),
     advisor: () => void toggleAdvisor($).catch(ignore),
     fast: () => void toggleFast($).catch(ignore),
+    starOff: () => void starAskEnd($).catch(ignore),
     deselect: () => void change($, t => deselected(t)).catch(ignore),
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
     restyle: (row, id) => void applyLook($, row, id).catch(ignore),
@@ -821,6 +825,21 @@ async function nextTip($: EngineInterface): Promise<number | undefined> {
   const shown = Number.isInteger(stored) && stored >= 0 ? stored : 0
   await $.store.set(TIP_KEY, shown + 1).catch(() => undefined)
   return shown
+}
+
+async function starAskDue($: EngineInterface): Promise<boolean> {
+  const stored = await $.store.get(STAR_ASK_KEY).catch(() => undefined)
+  if (stored === 'off') return false
+  const starts = Number(stored ?? 0)
+  const count = Number.isInteger(starts) && starts >= 0 ? starts + 1 : 1
+  await $.store.set(STAR_ASK_KEY, count).catch(() => undefined)
+  return count % STAR_ASK_EVERY === 0
+}
+
+async function starAskEnd($: EngineInterface): Promise<void> {
+  starAsk = false
+  await $.store.set(STAR_ASK_KEY, 'off').catch(() => undefined)
+  await update($, introBeat, n => (n + 1) % 1_000_000)
 }
 
 async function starDue($: EngineInterface): Promise<boolean> {
@@ -916,6 +935,7 @@ export const register: Register = (on, options) => {
     await catchUp($, await clock($), keep).catch(() => undefined)
     if (e.isInteractive !== false) await prepareNotice($).catch(() => undefined)
     tip = tipsOn && e.isInteractive !== false ? await nextTip($).catch(() => undefined) : undefined
+    starAsk = e.isInteractive !== false ? await starAskDue($).catch(() => false) : false
     await maybeStartIntro($, e.isInteractive !== false).catch(() => undefined)
     if (!introTicker) startNotice($, await clock($))
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
@@ -1310,6 +1330,7 @@ export const register: Register = (on, options) => {
       reports,
       questions,
       ...(tip !== undefined ? { tip } : {}),
+      ...(starAsk ? { starAsk } : {}),
       docked: e.props.placement === 'dock',
     })
   })

@@ -131,6 +131,7 @@ export type TreeActions = {
   logFilter: (source: string) => void
   logOpen: (turn: number) => void
   report: (agentId: string) => void
+  starOff: () => void
 }
 
 export type TreeLook = {
@@ -145,6 +146,7 @@ export type TreeLook = {
   reports?: Record<string, AgentTreeReport>
   questions?: ReadonlyMap<number, string>
   tip?: number
+  starAsk?: boolean
 }
 
 export function pressKey(actions: TreeActions, key: string): boolean {
@@ -155,6 +157,7 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   if (key === 'picker:close' || key === 'detail:close' || key === 'look:close') actions.close()
   else if (key === 'advisor:toggle') actions.advisor()
   else if (key === 'fast:toggle') actions.fast()
+  else if (key === 'star:off') actions.starOff()
   else if (key === 'actions:close') actions.deselect()
   else if (kind === 'tab' && TABS.some(t => t === rest)) actions.tab(rest as AgentTreeTab)
   else if (kind === 'logfilter') actions.logFilter(rest)
@@ -1500,7 +1503,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         {header}
         {tabBar}
         {tab === 'help' ? legend : null}
-        {tab === 'help' ? drawHelp(ui, { s, width, palette, glyphs, w, lang, docked: look.docked }) : null}
+        {tab === 'help' ? drawHelp(ui, { s, width, palette, glyphs, w, lang, docked: look.docked, starAsk: look.starAsk === true, ...(actions ? { starOff: () => actions.starOff() } : {}) }) : null}
         {tab === 'reports'
           ? drawReports(ui, {
               s,
