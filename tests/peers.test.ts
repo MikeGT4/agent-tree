@@ -38,6 +38,14 @@ describe('Terminals', () => {
     expect(crossClashes(self, [open, gone], 1000)).toEqual([{ name: 'auth.ts', folder: 'ordner-b', id: 'b' }])
   })
 
+  test('nur Änderungen der letzten halben Stunde auf beiden Seiten zählen als Konflikt', () => {
+    const self = changeNoted(peer('a', 0), { key: 'h1', name: 'SESSION_LOG.md', at: 0 }, undefined)
+    const other = changeNoted(peer('b', 40 * 60_000), { key: 'h1', name: 'SESSION_LOG.md', at: 40 * 60_000 }, undefined)
+    expect(crossClashes(self, [other], 40 * 60_000)).toEqual([])
+    const fresh = changeNoted(self, { key: 'h1', name: 'SESSION_LOG.md', at: 39 * 60_000 }, undefined)
+    expect(crossClashes(fresh, [other], 40 * 60_000).length).toBe(1)
+  })
+
   test('Markdown aus einem anderen Projekt erscheint, aus demselben Projekt und nach dem Wegklicken nicht', () => {
     const self = peer('a', 0, 'projekt')
     const other = changeNoted(peer('b', 0), { key: 'h', name: 'CLAUDE.md', at: 100 }, { path: '/b/CLAUDE.md', name: 'CLAUDE.md', at: 100 })

@@ -107,7 +107,8 @@ export type AgentTreeLimit = {
   kind: string
   percent: number
   resetsAt?: string
-  restMs?: number
+  fullAt?: number
+  paceAt?: number
 }
 
 export type AgentTreeOrphanEnd = {

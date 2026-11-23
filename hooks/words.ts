@@ -65,6 +65,7 @@ export type Words = {
   peerClashLine: (name: string, folder: string) => string
   peerClashToast: (name: string, folder: string) => string
   peerNoteToast: (folder: string, name: string) => string
+  peerNotesToast: (folder: string, count: number) => string
   peerNotePrompt: (folder: string, path: string) => string
   peerNoteFilled: string
   notAsked: string
@@ -288,6 +289,7 @@ export const WORDS: Record<Lang, Words> = {
     peerClashLine: (name, folder) => `${name} · hier und in ${folder}`,
     peerClashToast: (name, folder) => `⚠ ${name} wurde auch im Terminal ${folder} geändert`,
     peerNoteToast: (folder, name) => `Terminal ${folder} hat ${name} geändert, siehe Reiter Fenster`,
+    peerNotesToast: (folder, count) => `Terminal ${folder} hat ${count} Markdown-Dateien geändert, siehe Reiter Fenster`,
     peerNotePrompt: (folder, path) => `Im Terminal ${folder} wurde ${path} geändert. Lies die Änderung und prüfe, ob sie auch die Markdown-Dateien dieses Projekts betrifft. Frag mich, bevor du etwas einträgst.`,
     peerNoteFilled: 'Die Frage steht in der Eingabe, Enter schickt sie ab',
     notAsked: 'noch nie gefragt',
@@ -526,6 +528,7 @@ export const WORDS: Record<Lang, Words> = {
     peerClashLine: (name, folder) => `${name} · here and in ${folder}`,
     peerClashToast: (name, folder) => `⚠ ${name} was also changed in the terminal ${folder}`,
     peerNoteToast: (folder, name) => `The terminal ${folder} changed ${name}, see the Terminals tab`,
+    peerNotesToast: (folder, count) => `The terminal ${folder} changed ${count} Markdown files, see the Terminals tab`,
     peerNotePrompt: (folder, path) => `In the terminal ${folder}, ${path} was changed. Read the change and check whether it also concerns the Markdown files of this project. Ask me before you write anything.`,
     peerNoteFilled: 'The question is in your prompt, Enter sends it',
     notAsked: 'not asked yet',

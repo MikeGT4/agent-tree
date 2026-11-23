@@ -38,6 +38,7 @@ import {
   familyLabel,
   fmtShortDuration,
   quietFor,
+  restOf,
   fmtTokens,
   groups,
   modelLabel,
@@ -134,8 +135,8 @@ export type TreeActions = {
   logOpen: (turn: number) => void
   report: (agentId: string) => void
   starOff: () => void
-  noteTake: (index: number) => void
-  noteDrop: (index: number) => void
+  noteTake: (mark: string) => void
+  noteDrop: (mark: string) => void
 }
 
 export type TreeLook = {
@@ -164,8 +165,8 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   else if (key === 'advisor:toggle') actions.advisor()
   else if (key === 'fast:toggle') actions.fast()
   else if (key === 'star:off') actions.starOff()
-  else if (kind === 'notetake' && /^\d+$/.test(rest)) actions.noteTake(Number(rest))
-  else if (kind === 'notedrop' && /^\d+$/.test(rest)) actions.noteDrop(Number(rest))
+  else if (kind === 'notetake' && rest) actions.noteTake(rest)
+  else if (kind === 'notedrop' && rest) actions.noteDrop(rest)
   else if (key === 'actions:close') actions.deselect()
   else if (kind === 'tab' && TABS.some(t => t === rest)) actions.tab(rest as AgentTreeTab)
   else if (kind === 'logfilter') actions.logFilter(rest)
@@ -300,11 +301,11 @@ function restText(ms: number, w: Words): string {
   return minutes < 60 ? w.minutes(minutes) : w.hoursMinutes(Math.floor(minutes / 60), minutes % 60)
 }
 
-export function limitSegments(limits: readonly AgentTreeLimit[], w: Words, glyphs: Glyphs, width: number): string[] {
+export function limitSegments(limits: readonly AgentTreeLimit[], w: Words, glyphs: Glyphs, width: number, now?: number): string[] {
   const build = (bars: boolean) =>
     limits.map((l, i) => {
       const reset = resetTime(l.kind, l.resetsAt, w.locale)
-      const parts = [w.limitKind(l.kind), ...(bars ? [limitBar(l.percent, glyphs.bar)] : []), w.percent(Math.round(l.percent)), ...(reset ? [w.limitReset(reset)] : []), ...(l.restMs !== undefined ? [w.limitRest(restText(l.restMs, w))] : [])]
+      const parts = [w.limitKind(l.kind), ...(bars ? [limitBar(l.percent, glyphs.bar)] : []), w.percent(Math.round(l.percent)), ...(reset ? [w.limitReset(reset)] : []), ...(now !== undefined && restOf(l, now) !== undefined ? [w.limitRest(restText(restOf(l, now) ?? 0, w))] : [])]
       return `${i ? ' · ' : ''}${parts.join(' ')}`
     })
   const full = build(true)
@@ -1469,7 +1470,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   ) : null
 
   const limits = s.main.limits ?? []
-  const limitTexts = limitSegments(limits, w, glyphs, width)
+  const limitTexts = limitSegments(limits, w, glyphs, width, now)
   const limitRow = limits.length ? (
     <Box key="limits" flexDirection="row" width={width}>
       {limits.map((l, i) => (
@@ -1532,7 +1533,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             })
           : null}
         {tab === 'files' ? drawFiles(ui, { s, width, palette, glyphs, w, lang }) : null}
-        {tab === 'terminals' ? drawTerminals(ui, { s, width, palette, glyphs, w, lang, now, ...(look.peers ? { peers: look.peers } : {}), ...(actions ? { take: (index: number) => actions.noteTake(index), drop: (index: number) => actions.noteDrop(index) } : {}) }) : null}
+        {tab === 'terminals' ? drawTerminals(ui, { s, width, palette, glyphs, w, lang, now, ...(look.peers ? { peers: look.peers } : {}), ...(actions ? { take: (mark: string) => actions.noteTake(mark), drop: (mark: string) => actions.noteDrop(mark) } : {}) }) : null}
         {tab === 'usage'
           ? drawUsage(ui, {
               s,
@@ -1542,7 +1543,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
               w,
               lang,
               now,
-              limits: (s.main.limits ?? []).map(l => ({ text: limitSegments([l], w, glyphs, width)[0] ?? '', color: limitColor(palette, l.percent) })),
+              limits: (s.main.limits ?? []).map(l => ({ text: limitSegments([l], w, glyphs, width, now)[0] ?? '', color: limitColor(palette, l.percent) })),
               mainLine: `${contextLine(s, w)} · ${roundLine}`,
             })
           : null}

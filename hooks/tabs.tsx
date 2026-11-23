@@ -5,7 +5,7 @@ import type { AgentTreeLogEntry, AgentTreeLogSource, AgentTreeNode, AgentTreeRep
 import { frameEdges, restyleLine, statusColor } from './looks.ts'
 import type { Glyphs, Palette } from './looks.ts'
 import type { Peer, PeerClash, PeerNews } from './peers.ts'
-import { EFFORT_LEVELS, quietFor, LOG_SOURCES, MAIN, TABS, clashShown, effortLabel, logTarget, clockTime, contextLevel, contextPercent, cut, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
+import { EFFORT_LEVELS, pathKey, quietFor, LOG_SOURCES, MAIN, TABS, clashShown, effortLabel, logTarget, clockTime, contextLevel, contextPercent, cut, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
 import { helpItems, logLine } from './words.ts'
 import type { Lang, Words } from './words.ts'
 import { VERSION, newsBetween } from './news.ts'
@@ -533,8 +533,8 @@ export type PeerView = { self: Peer; others: readonly Peer[]; clashes: readonly 
 export type TerminalsInput = ViewInput & {
   now: number
   peers?: PeerView
-  take?: (index: number) => void
-  drop?: (index: number) => void
+  take?: (mark: string) => void
+  drop?: (mark: string) => void
 }
 
 export function drawTerminals(ui: Ui, o: TerminalsInput) {
@@ -591,13 +591,13 @@ export function drawTerminals(ui: Ui, o: TerminalsInput) {
           <Text bold color={o.palette.main}>
             {o.w.peerNotesTitle}
           </Text>
-          {view.news.map((n, i) => (
-            <Box key={`peer-note:${i}`} flexDirection="row" columnGap={1} width={o.width}>
-              <Box key={`peer-note-text:${i}`} flexGrow={1} flexShrink={1}>
+          {view.news.map(n => (
+            <Box key={`peer-note:${pathKey(n.mark)}`} flexDirection="row" columnGap={1} width={o.width}>
+              <Box key={`peer-note-text:${pathKey(n.mark)}`} flexGrow={1} flexShrink={1}>
                 <Text wrap="truncate-end">{`${n.folder} · ${n.name} · ${o.w.peerAgo(fmtShortDuration(Math.max(0, o.now - n.at)))}`}</Text>
               </Box>
-              {o.take ? <Button key={`notetake:${i}`} label={o.w.peerTake} onPress={() => o.take?.(i)} /> : null}
-              {o.drop ? <Button key={`notedrop:${i}`} plain label="×" onPress={() => o.drop?.(i)} /> : null}
+              {o.take ? <Button key={`notetake:${pathKey(n.mark)}`} label={o.w.peerTake} onPress={() => o.take?.(pathKey(n.mark))} /> : null}
+              {o.drop ? <Button key={`notedrop:${pathKey(n.mark)}`} plain label="×" onPress={() => o.drop?.(pathKey(n.mark))} /> : null}
             </Box>
           ))}
         </Box>

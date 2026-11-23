@@ -1086,6 +1086,11 @@ export function limitRest(samples: readonly LimitSample[], now: number, resetsAt
   return Number.isFinite(reset) && now + rest >= reset ? undefined : rest
 }
 
+export function restOf(l: AgentTreeLimit, now: number): number | undefined {
+  if (l.fullAt === undefined || l.paceAt === undefined || now - l.paceAt > RATE_WINDOW_MS || l.fullAt <= now) return undefined
+  return l.fullAt - now
+}
+
 export function limitsFrom(value: unknown): AgentTreeLimit[] {
   if (!Array.isArray(value)) return []
   const rank = (kind: string) => (LIMIT_ORDER.includes(kind) ? LIMIT_ORDER.indexOf(kind) : LIMIT_ORDER.length)

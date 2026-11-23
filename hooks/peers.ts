@@ -6,6 +6,7 @@ export const PEER_BEAT_MS = 30_000
 export const PEER_FILES = 40
 export const PEER_NOTES = 10
 export const NOTE_FRESH_MS = 60 * 60_000
+export const CLASH_WINDOW_MS = 30 * 60_000
 
 export type PeerFile = { key: string; name: string; at: number }
 export type PeerNote = { path: string; name: string; at: number }
@@ -90,11 +91,12 @@ export function changeNoted(p: Peer, file: PeerFile, note: PeerNote | undefined)
 }
 
 export function crossClashes(self: Peer, others: readonly Peer[], now: number): PeerClash[] {
-  const mine = new Map(self.changed.map(f => [f.key, f]))
+  const recent = (f: PeerFile) => now - f.at <= CLASH_WINDOW_MS
+  const mine = new Set(self.changed.filter(recent).map(f => f.key))
   const found: PeerClash[] = []
   for (const other of others) {
     if (other.id === self.id || !isOpen(other, now)) continue
-    for (const f of other.changed) if (mine.has(f.key)) found.push({ name: f.name, folder: other.folder, id: other.id })
+    for (const f of other.changed) if (recent(f) && mine.has(f.key)) found.push({ name: f.name, folder: other.folder, id: other.id })
   }
   return found
 }

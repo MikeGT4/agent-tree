@@ -4628,7 +4628,7 @@ describe('Tab Fenster', () => {
     for (const word of ['Dieses Terminal', 'Andere Terminals', 'claude_hermes', 'main', '1 Agent läuft', '0,42 $', 'Markdown in anderen Terminals geändert', 'CLAUDE.md', 'Hier prüfen']) expect(text).toContain(word)
     expect(Object.keys(t.stored).filter(k => k.startsWith('peer:')).length).toBe(2)
     expect(t.toasts.some(x => x.includes('claude_hermes hat CLAUDE.md geändert'))).toBe(true)
-    await ui.press({ key: 'notetake:0' })
+    await ui.press({ key: `notetake:${pathKey('other|/home/u/claude_hermes/CLAUDE.md|5000000')}` })
     await ui.redraw()
     expect(t.fills.at(-1)).toContain('/home/u/claude_hermes/CLAUDE.md')
     expect(await screen(ui)).not.toContain('Hier prüfen')
@@ -4651,6 +4651,24 @@ describe('Tab Fenster', () => {
     expect(text).toContain('auth.ts · hier und in claude_hermes')
     expect(t.stored['peer:alt']).toBeUndefined()
     expect(t.toasts.some(x => x.includes('auth.ts wurde auch im Terminal claude_hermes geändert'))).toBe(true)
+    await ui.unmount()
+  })
+
+  test('das Limit sagt, wann es bei diesem Tempo voll ist, auch in der schmalen Leiste, und vergisst es ohne neue Messung', de, async ($, on) => {
+    engine(on)
+    const clock = mock.clock(on, { now: 5_000_000 })
+    await startSession($)
+    const measure = (percentUsed: number) =>
+      $.session.measure({ context: { window: 200000, tokens: 50000, percent: 25 }, rateLimits: [{ kind: 'five_hour', percentUsed }], changed: ['rateLimits'] } as never)
+    await measure(50)
+    await clock.advance(10 * 60_000)
+    await measure(70)
+    const ui = await $.ui.mount(pane(56))
+    await ui.redraw()
+    expect(await screen(ui)).toContain('voll in ~15 min')
+    await clock.advance(31 * 60_000)
+    await ui.redraw()
+    expect(await screen(ui)).not.toContain('voll in ~')
     await ui.unmount()
   })
 

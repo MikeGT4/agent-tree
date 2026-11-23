@@ -589,7 +589,7 @@ async function peerTick($: EngineInterface): Promise<void> {
 async function gitNoted($: EngineInterface): Promise<void> {
   if (!selfPeer) return
   const head = await $.process.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], { timeoutMs: 5000 }).catch(() => undefined)
-  const status = await $.process.run(['git', 'status', '--porcelain'], { timeoutMs: 5000 }).catch(() => undefined)
+  const status = await $.process.run(['git', '--no-optional-locks', 'status', '--porcelain'], { timeoutMs: 5000 }).catch(() => undefined)
   const { branch: _branch, dirty: _dirty, ...rest } = selfPeer
   selfPeer = {
     ...rest,
@@ -631,10 +631,11 @@ async function peerRefresh($: EngineInterface): Promise<void> {
     toldPeers.add(mark)
     $.ui.toast(w.peerClashToast(clash.name, clash.folder))
   }
-  for (const news of peerNews(selfPeer, peers, droppedNotes, now)) {
-    if (toldPeers.has(news.mark)) continue
-    toldPeers.add(news.mark)
-    $.ui.toast(w.peerNoteToast(news.folder, news.name))
+  const fresh = peerNews(selfPeer, peers, droppedNotes, now).filter(news => !toldPeers.has(news.mark))
+  for (const news of fresh) toldPeers.add(news.mark)
+  for (const folder of new Set(fresh.map(news => news.folder))) {
+    const mine = fresh.filter(news => news.folder === folder)
+    $.ui.toast(mine.length === 1 ? w.peerNoteToast(folder, mine[0]?.name ?? '') : w.peerNotesToast(folder, mine.length))
   }
   await update($, introBeat, n => (n + 1) % 1_000_000).catch(() => undefined)
 }
@@ -658,8 +659,8 @@ function peerNewsNow(now: number): PeerNews[] {
   return selfPeer ? peerNews(selfPeer, peers, droppedNotes, now) : []
 }
 
-async function noteTake($: EngineInterface, index: number): Promise<void> {
-  const news = peerNewsNow(await clock($))[index]
+async function peerNoteTaken($: EngineInterface, mark: string): Promise<void> {
+  const news = peerNewsNow(await clock($)).find(n => pathKey(n.mark) === mark)
   if (!news) return
   const w = wordsFor(lang)
   const filled = await $.prompt.fill({ text: w.peerNotePrompt(news.folder, news.path) }).catch(() => undefined)
@@ -668,8 +669,8 @@ async function noteTake($: EngineInterface, index: number): Promise<void> {
   await update($, introBeat, n => (n + 1) % 1_000_000).catch(() => undefined)
 }
 
-async function noteDrop($: EngineInterface, index: number): Promise<void> {
-  const news = peerNewsNow(await clock($))[index]
+async function peerNoteDropped($: EngineInterface, mark: string): Promise<void> {
+  const news = peerNewsNow(await clock($)).find(n => pathKey(n.mark) === mark)
   if (!news) return
   droppedNotes.add(news.mark)
   await update($, introBeat, n => (n + 1) % 1_000_000).catch(() => undefined)
@@ -940,8 +941,8 @@ function actionsFor($: EngineInterface): TreeActions {
     advisor: () => void toggleAdvisor($).catch(ignore),
     fast: () => void toggleFast($).catch(ignore),
     starOff: () => void starAskEnd($).catch(ignore),
-    noteTake: index => void noteTake($, index).catch(ignore),
-    noteDrop: index => void noteDrop($, index).catch(ignore),
+    noteTake: mark => void peerNoteTaken($, mark).catch(ignore),
+    noteDrop: mark => void peerNoteDropped($, mark).catch(ignore),
     deselect: () => void change($, t => deselected(t)).catch(ignore),
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
     restyle: (row, id) => void applyLook($, row, id).catch(ignore),
@@ -1081,7 +1082,7 @@ export const register: Register = (on, options) => {
     if (e.isInteractive !== false) await prepareNotice($).catch(() => undefined)
     tip = tipsOn && e.isInteractive !== false ? await nextTip($).catch(() => undefined) : undefined
     starAsk = e.isInteractive !== false ? await starAskDue($).catch(() => false) : false
-    if (e.isInteractive !== false) await peerStart($, formerId).catch(() => undefined)
+    if (e.isInteractive !== false) void peerStart($, formerId).catch(() => undefined)
     await maybeStartIntro($, e.isInteractive !== false).catch(() => undefined)
     if (!introTicker) startNotice($, await clock($))
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
@@ -1401,7 +1402,7 @@ export const register: Register = (on, options) => {
         const samples = samplesKept(limitSamples.get(l.kind) ?? [], { at: measuredAt, percent: l.percent })
         limitSamples.set(l.kind, samples)
         const rest = limitRest(samples, measuredAt, l.resetsAt)
-        return rest === undefined ? l : { ...l, restMs: rest }
+        return rest === undefined ? l : { ...l, fullAt: measuredAt + rest, paceAt: samples.at(-1)?.at ?? measuredAt }
       })
       await change($, s =>
         measured(s, {
