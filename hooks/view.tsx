@@ -58,7 +58,8 @@ import { WORDS, activityText, familyOr, helpItems, logLine, lookOptionLabel, too
 import type { Lang, Words } from './words.ts'
 import { drawFiles, drawHelp, drawLog, drawReports, drawTabBar, drawTerminals, drawUsage, tabNames, tabRows } from './tabs.tsx'
 import type { PeerView } from './tabs.tsx'
-import type { LocalTally } from './local.ts'
+import type { LocalView } from './local.ts'
+import { hostOf } from './local.ts'
 
 export { WORDS, logLine, wordsFor }
 export type { Lang }
@@ -113,7 +114,7 @@ function statusMark(glyphs: Glyphs, status: AgentTreeStatus): string {
 
 
 function sourceColor(palette: Palette, source: AgentTreeLogSource): string {
-  return source === 'session' ? palette.dim : palette[source]
+  return source === 'session' ? palette.dim : source === 'local' ? palette.done : palette[source]
 }
 
 export type TreeActions = {
@@ -138,6 +139,8 @@ export type TreeActions = {
   starOff: () => void
   noteTake: (mark: string) => void
   noteDrop: (mark: string) => void
+  local: (what: string) => void
+  localPick: (index: number) => void
 }
 
 export type TreeLook = {
@@ -155,7 +158,7 @@ export type TreeLook = {
   starAsk?: boolean
   starAskClosable?: boolean
   peers?: PeerView
-  local?: { model: string; tally: LocalTally }
+  local?: LocalView
 }
 
 export function pressKey(actions: TreeActions, key: string): boolean {
@@ -168,6 +171,8 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   else if (key === 'fast:toggle') actions.fast()
   else if (key === 'star:off') actions.starOff()
   else if (kind === 'notetake' && rest) actions.noteTake(rest)
+  else if (kind === 'local' && ['open', 'mode', 'search', 'guide', 'setup'].includes(rest)) actions.local(rest)
+  else if (kind === 'localpick' && /^\d+$/.test(rest)) actions.localPick(Number(rest))
   else if (kind === 'notedrop' && rest) actions.noteDrop(rest)
   else if (key === 'actions:close') actions.deselect()
   else if (kind === 'tab' && TABS.some(t => t === rest)) actions.tab(rest as AgentTreeTab)
@@ -301,6 +306,15 @@ function levelColor(palette: Palette, percent: number | undefined, otherwise: st
 function restText(ms: number, w: Words): string {
   const minutes = Math.max(1, Math.round(ms / 60_000))
   return minutes < 60 ? w.minutes(minutes) : w.hoursMinutes(Math.floor(minutes / 60), minutes % 60)
+}
+
+export function localRowsOf(local: LocalView | undefined, active: boolean, wide: boolean): number {
+  if (!local || !active) return 0
+  if (!local.choice.model && !local.open) return 1
+  const head = wide ? 3 : 1
+  const state = local.busy || local.error ? (wide ? 3 : 1) : 0
+  const list = local.open ? 2 + (local.searching ? 1 : local.picks.length ? local.picks.length + 1 : local.searched ? 2 : 0) + (wide ? 2 : 0) : 0
+  return 2 + head + state + list
 }
 
 export function limitSegments(limits: readonly AgentTreeLimit[], w: Words, glyphs: Glyphs, width: number, now?: number): string[] {
@@ -698,7 +712,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     asRows,
     perRow,
     total: current.length,
-    advisorRows: wide ? ADVISOR_BASE_ROWS + recentCalls.length : ADVISOR_COMPACT_ROWS,
+    advisorRows: (wide ? ADVISOR_BASE_ROWS + recentCalls.length : ADVISOR_COMPACT_ROWS) + localRowsOf(look.local, actions !== undefined, wide),
     earlier: earlier > 0,
     pickerRows: (pickerTarget && actions ? 1 + (pickerTarget === MAIN ? mainPickerLines(width, lang, s.main.modelOffer) : pickerLines(pickerName, width, lang, pickerTarget !== NEW_AGENTS)) : 0) + (s.lookOpen && actions ? lookLines(width, lang) : 0),
     detailRows: detailNode && actions ? DETAIL_ROWS : 0,
@@ -1280,6 +1294,72 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     </Box>
   )
 
+  const localView = look.local
+  const localBox = (boxWidth: number) => {
+    if (!localView || !actions) return null
+    const lv = localView
+    const chosen = lv.choice.model
+    const picks = lv.open ? lv.picks : []
+    const toolsRow = (key: string) => (
+      <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={1}>
+        <Button key="local:search" plain label={w.localSearchAgain} onPress={() => actions.local('search')} />
+        <Button key="local:guide" plain label={w.localGuide} onPress={() => actions.local('guide')} />
+        <Button key="local:setup" plain label={w.localSetup} onPress={() => actions.local('setup')} />
+      </Box>
+    )
+    if (!chosen && !lv.open) {
+      return (
+        <Box key="local" width={boxWidth} flexDirection="row">
+          <Button key="local:open" plain label={w.localSetupLine} onPress={() => actions.local('open')} />
+        </Box>
+      )
+    }
+    return (
+      <Box key="local" width={boxWidth} {...frameProps(palette.done)} flexDirection="column">
+        <Box key="local-head" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          <Text bold color={palette.done}>
+            {w.localName}
+          </Text>
+          {chosen ? <Button key="local:open" plain label={`${chosen} ▾`} onPress={() => actions.local('open')} /> : null}
+          {chosen ? <Button key="local:mode" plain label={`${w.localModes[lv.choice.mode]} ▾`} onPress={() => actions.local('mode')} /> : null}
+          {chosen && lv.tally.calls ? <Text color={palette.dim}>{`${w.localCalls(lv.tally.calls)} · ${fmtTokens(lv.tally.tokens, w.decimal)} Tokens`}</Text> : null}
+          {!chosen ? <Button key="local:open" plain label="×" onPress={() => actions.local('open')} /> : null}
+        </Box>
+        {lv.busy ? (
+          <Text size={SIZE.detail} color={palette.done} wrap="truncate-end">
+            {w.localWorking}
+          </Text>
+        ) : lv.error ? (
+          <Text size={SIZE.detail} color={palette.warn} wrap="wrap">
+            {lv.error}
+          </Text>
+        ) : null}
+        {lv.open && lv.searching ? (
+          <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
+            {w.localSearching}
+          </Text>
+        ) : null}
+        {lv.open && !lv.searching && lv.searched && lv.picks.length === 0 ? (
+          <Text size={SIZE.detail} color={palette.dim} wrap="wrap">
+            {w.localNone}
+          </Text>
+        ) : null}
+        {lv.open && !lv.searching && picks.length > 0 ? (
+          <Box key="local-picks" flexDirection="column">
+            <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
+              {w.localChoose(picks.length)}
+            </Text>
+            {picks.map((p, i) => (
+              <Button key={`localpick:${i}`} plain label={`${p.model === chosen ? '● ' : '  '}${p.model} · ${hostOf(p.url)}`} onPress={() => actions.localPick(i)} />
+            ))}
+          </Box>
+        ) : null}
+        {lv.open ? toolsRow('local-tools') : null}
+        {frameParts('local', boxWidth, palette.done)}
+      </Box>
+    )
+  }
+
   const advisorCompact = (
     <Box key="advisor" width={width} {...frameProps(palette.advisor)} flexDirection="column">
       <Box key="advisor-head" flexDirection="row" columnGap={1}>
@@ -1563,12 +1643,16 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       {lookRow}
       {wide ? (
         <Box key="body" flexDirection="row" columnGap={2} marginTop={1}>
-          {advisorColumn}
+          <Box key="side" flexDirection="column" width={ADVISOR_WIDTH} flexShrink={0}>
+            {advisorColumn}
+            {localBox(ADVISOR_WIDTH)}
+          </Box>
           {tree}
         </Box>
       ) : (
         <Box key="body" flexDirection="column" marginTop={1}>
           {plan.advisor === false ? null : advisorCompact}
+          {plan.advisor === false ? null : localBox(width)}
           {tree}
         </Box>
       )}

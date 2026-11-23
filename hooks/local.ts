@@ -82,3 +82,64 @@ export function localErrorOf(text: string | undefined): string | undefined {
 export function tallied(t: LocalTally, answer: LocalAnswer | undefined, ms: number): LocalTally {
   return answer ? { calls: t.calls + 1, tokens: t.tokens + (answer.tokens ?? 0), ms: t.ms + ms, failed: t.failed } : { ...t, failed: t.failed + 1 }
 }
+
+export type LocalMode = 'off' | 'ask' | 'auto'
+export const LOCAL_MODES: readonly LocalMode[] = ['off', 'ask', 'auto']
+export const LOCAL_KEY = 'localChoice'
+export const LOCAL_CANDIDATES: readonly string[] = ['http://127.0.0.1:11434/v1', 'http://127.0.0.1:1234/v1']
+export const LOCAL_GUIDE_URL = 'https://github.com/MikeGT4/agent-tree/blob/main/docs/LOCAL.md'
+export const LOCAL_PICKS = 12
+
+export type LocalChoice = { model?: string; url?: string; mode: LocalMode }
+export type LocalFound = { url: string; models: string[] }
+export type LocalPick = { url: string; model: string }
+export type LocalView = { choice: LocalChoice; tally: LocalTally; picks: readonly LocalPick[]; searched: boolean; searching: boolean; busy: boolean; error?: string; open: boolean }
+
+export function choiceOf(stored: unknown, fallback: LocalSetup | undefined): LocalChoice {
+  const c = stored as Partial<LocalChoice> | null
+  const mode = c && LOCAL_MODES.includes(c.mode as LocalMode) ? (c.mode as LocalMode) : undefined
+  if (c && mode) {
+    const setup = localSetup(c.model, c.url)
+    return setup ? { model: setup.model, url: setup.url, mode } : { mode: 'off' }
+  }
+  return fallback ? { model: fallback.model, url: fallback.url, mode: 'ask' } : { mode: 'off' }
+}
+
+export function setupOf(choice: LocalChoice): LocalSetup | undefined {
+  return choice.mode !== 'off' && choice.model ? localSetup(choice.model, choice.url) : undefined
+}
+
+export function nextMode(mode: LocalMode): LocalMode {
+  return LOCAL_MODES[(LOCAL_MODES.indexOf(mode) + 1) % LOCAL_MODES.length] ?? 'off'
+}
+
+export function modelsOf(text: string | undefined): string[] {
+  if (!text) return []
+  try {
+    const d = JSON.parse(text) as { data?: { id?: unknown }[]; models?: { name?: unknown }[] }
+    const ids = (d.data ?? []).map(m => m.id).concat((d.models ?? []).map(m => m.name))
+    return [...new Set(ids.filter((id): id is string => typeof id === 'string' && id.trim() !== ''))]
+  } catch {
+    return []
+  }
+}
+
+export function candidatesOf(choice: LocalChoice, optionUrl: string | undefined): string[] {
+  return [...new Set([choice.url, optionUrl, ...LOCAL_CANDIDATES].filter((u): u is string => typeof u === 'string' && u !== ''))]
+}
+
+export function picksOf(found: readonly LocalFound[]): LocalPick[] {
+  return found.flatMap(f => f.models.map(model => ({ url: f.url, model }))).slice(0, LOCAL_PICKS)
+}
+
+export function hostOf(url: string): string {
+  return url.replace(/^https?:\/\//i, '').replace(/\/.*$/, '')
+}
+
+export function localDescriptionFor(model: string, mode: LocalMode): string {
+  if (mode === 'off') return 'Turned off by the user in Agent Tree. Do not call this tool.'
+  const base = localDescription(model)
+  return mode === 'ask'
+    ? `${base} Call it only when the user asks for the local model; otherwise do the work yourself.`
+    : `${base} Prefer it for longer texts where it saves real work, not for a sentence or two.`
+}

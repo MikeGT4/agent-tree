@@ -48,6 +48,19 @@ export type Words = {
   usageTokens: string
   quiet: (time: string) => string
   localName: string
+  localSetupLine: string
+  localNone: string
+  localSearching: string
+  localChoose: (n: number) => string
+  localSearchAgain: string
+  localGuide: string
+  localSetup: string
+  localWorking: string
+  localModes: Record<'off' | 'ask' | 'auto', string>
+  localModeToast: (mode: string) => string
+  localChosenToast: (model: string, mode: string) => string
+  localGuideToast: (url: string) => string
+  localSetupPrompt: string
   localCalls: (n: number) => string
   localFails: (n: number) => string
   localHint: string
@@ -217,6 +230,7 @@ export type Words = {
   commandFailed: string
   lines: {
     turn: (d: Record<string, string | number>) => string
+    local: (d: Record<string, string | number>) => string
     mainDone: (d: Record<string, string | number>) => string
     agentStarted: (d: Record<string, string | number>) => string
     workflowStarted: (d: Record<string, string | number>) => string
@@ -279,6 +293,19 @@ export const WORDS: Record<Lang, Words> = {
     usageTokens: 'Tokens',
     quiet: time => `still seit ${time}`,
     localName: 'Lokales Modell',
+    localSetupLine: 'Lokales Modell einrichten ▾',
+    localNone: 'kein lokaler Server gefunden (Ollama, LM Studio)',
+    localSearching: 'suche Ollama und LM Studio …',
+    localChoose: n => (n === 1 ? '1 Modell gefunden, wählen' : `${n} Modelle gefunden, wählen`),
+    localSearchAgain: 'erneut suchen',
+    localGuide: 'Anleitung',
+    localSetup: 'Einrichten lassen',
+    localWorking: 'arbeitet …',
+    localModes: { off: 'aus', ask: 'auf Zuruf', auto: 'selbstständig' },
+    localModeToast: mode => `Lokales Modell: ${mode}`,
+    localChosenToast: (model, mode) => `Lokales Modell ${model}, ${mode}`,
+    localGuideToast: url => `Link kopiert: ${url}`,
+    localSetupPrompt: 'Richte auf diesem Rechner ein lokales Sprachmodell für Agent Tree ein: Prüfe, ob Ollama installiert ist, und installiere es sonst auf dem offiziellen Weg für dieses Betriebssystem. Lade danach ein kleines Modell für einfache Aufgaben, etwa qwen2.5:3b, und starte den Dienst auf 127.0.0.1:11434. Zeig mir jeden Befehl und frag mich vor jedem Schritt.',
     localCalls: n => (n === 1 ? '1 Aufruf' : `${n} Aufrufe`),
     localFails: n => (n === 1 ? '1 Fehler' : `${n} Fehler`),
     localHint: 'Lokales Modell aus: in den Plugin-Optionen ein Modell eintragen (Ollama, LM Studio), dann gibt Claude Code ihm einfache Aufgaben',
@@ -310,7 +337,7 @@ export const WORDS: Record<Lang, Words> = {
     writes: ['schreibt nie', 'selbst Code'],
     log: 'Sitzungsprotokoll',
     logEmpty: 'noch nichts geschehen',
-    source: { session: 'sitzung', main: 'haupt', agent: 'agent', advisor: 'berater' },
+    source: { session: 'sitzung', main: 'haupt', agent: 'agent', advisor: 'berater', local: 'lokal' },
     pickerFor: name => `Modell für ${name}:`,
     effortFor: 'Denkstufe:',
     mainEffortFor: 'Denkstufe der Hauptsitzung:',
@@ -463,6 +490,7 @@ export const WORDS: Record<Lang, Words> = {
     commandFailed: 'Agent Tree: Befehl gescheitert',
     lines: {
       turn: d => `Runde ${d.turn}: ${d.excerpt}`,
+      local: d => `Lokales Modell ${d.model}: ${Number(d.ok) ? `${d.tokens} Tokens in ${fmtDuration(Number(d.ms))}` : 'keine Antwort'} · ${d.ask}`,
       mainDone: d => `Hauptsitzung ${WORDS.de.mainEnd[d.status as AgentTreeStatus] ?? d.status} nach ${fmtDuration(Number(d.durationMs))}`,
       agentStarted: d => `${d.type} gestartet: ${d.description}`,
       workflowStarted: d => `Workflow gestartet: ${d.description}`,
@@ -525,6 +553,19 @@ export const WORDS: Record<Lang, Words> = {
     usageTokens: 'Tokens',
     quiet: time => `quiet for ${time}`,
     localName: 'Local model',
+    localSetupLine: 'Set up a local model ▾',
+    localNone: 'no local server found (Ollama, LM Studio)',
+    localSearching: 'looking for Ollama and LM Studio …',
+    localChoose: n => (n === 1 ? '1 model found, choose' : `${n} models found, choose`),
+    localSearchAgain: 'search again',
+    localGuide: 'Guide',
+    localSetup: 'Set it up for me',
+    localWorking: 'working …',
+    localModes: { off: 'off', ask: 'on request', auto: 'on its own' },
+    localModeToast: mode => `Local model: ${mode}`,
+    localChosenToast: (model, mode) => `Local model ${model}, ${mode}`,
+    localGuideToast: url => `Link copied: ${url}`,
+    localSetupPrompt: 'Set up a local language model for Agent Tree on this computer: check whether Ollama is installed and install it the official way for this operating system if not. Then pull a small model for simple tasks, such as qwen2.5:3b, and start the service on 127.0.0.1:11434. Show me every command and ask me before each step.',
     localCalls: n => (n === 1 ? '1 call' : `${n} calls`),
     localFails: n => (n === 1 ? '1 failure' : `${n} failures`),
     localHint: 'Local model off: enter a model in the plugin options (Ollama, LM Studio) and Claude Code hands it simple tasks',
@@ -556,7 +597,7 @@ export const WORDS: Record<Lang, Words> = {
     writes: ['never writes', 'code itself'],
     log: 'Session log',
     logEmpty: 'nothing happened yet',
-    source: { session: 'session', main: 'main', agent: 'agent', advisor: 'advisor' },
+    source: { session: 'session', main: 'main', agent: 'agent', advisor: 'advisor', local: 'local' },
     pickerFor: name => `Model for ${name}:`,
     effortFor: 'Effort:',
     mainEffortFor: 'Main session effort:',
@@ -707,6 +748,7 @@ export const WORDS: Record<Lang, Words> = {
     notOpened: reason => `Agent Tree: pane not opened: ${reason}`,
     commandFailed: 'Agent Tree: command failed',
     lines: {
+      local: d => `Local model ${d.model}: ${Number(d.ok) ? `${d.tokens} tokens in ${fmtDuration(Number(d.ms))}` : 'no answer'} · ${d.ask}`,
       turn: d => `Round ${d.turn}: ${d.excerpt}`,
       mainDone: d => `Main session ${WORDS.en.mainEnd[d.status as AgentTreeStatus] ?? d.status} after ${fmtDuration(Number(d.durationMs))}`,
       agentStarted: d => `${d.type} started: ${d.description}`,

@@ -1,7 +1,7 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import { describe, expect, test } from 'claude-code/testing'
 
-import { LOCAL_DEFAULT_URL, localAnswerOf, localAskOf, localErrorOf, localSetup, tallied } from '../hooks/local.ts'
+import { LOCAL_DEFAULT_URL, candidatesOf, choiceOf, localAnswerOf, localAskOf, localErrorOf, localSetup, modelsOf, nextMode, setupOf, tallied } from '../hooks/local.ts'
 
 describe('Lokales Modell, Bausteine', () => {
   test('ohne Modellname aus, Adresse ohne Schrägstrich und ohne Endpunkt, nur http und https', () => {
@@ -30,5 +30,16 @@ describe('Lokales Modell, Bausteine', () => {
   test('die Zählung trennt Aufrufe und Fehler', () => {
     const zero = { calls: 0, tokens: 0, ms: 0, failed: 0 }
     expect(tallied(tallied(zero, { text: 'a', tokens: 10 }, 500), undefined, 100)).toEqual({ calls: 1, tokens: 10, ms: 500, failed: 1 })
+  })
+
+  test('gespeicherte Wahl vor der Option, Stufen reihum, Modellliste aus OpenAI- und Ollama-Format', () => {
+    expect(choiceOf(undefined, undefined)).toEqual({ mode: 'off' })
+    expect(choiceOf(undefined, { model: 'a', url: 'http://x/v1' })).toEqual({ model: 'a', url: 'http://x/v1', mode: 'ask' })
+    expect(choiceOf({ model: 'b', url: 'http://y/v1', mode: 'auto' }, { model: 'a', url: 'http://x/v1' })).toEqual({ model: 'b', url: 'http://y/v1', mode: 'auto' })
+    expect(choiceOf({ mode: 'kaputt' }, undefined)).toEqual({ mode: 'off' })
+    expect(setupOf({ model: 'b', url: 'http://y/v1', mode: 'off' })).toBeUndefined()
+    expect([nextMode('off'), nextMode('ask'), nextMode('auto')]).toEqual(['ask', 'auto', 'off'])
+    expect(modelsOf(JSON.stringify({ data: [{ id: 'g' }, { id: 'g' }], models: [{ name: 'q' }] }))).toEqual(['g', 'q'])
+    expect(candidatesOf({ mode: 'off' }, 'http://z/v1')).toEqual(['http://z/v1', 'http://127.0.0.1:11434/v1', 'http://127.0.0.1:1234/v1'])
   })
 })

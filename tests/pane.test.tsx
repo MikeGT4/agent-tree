@@ -4719,13 +4719,85 @@ describe('Lokales Modell', () => {
     expect(registered.map(r => r.name)).toEqual(['local_model'])
     const answered = (await $.tool.call({ tool: 'mcp__agent-tree__local_model', prompt: 'Fasse zusammen: lang', system: 'kurz' } as never)) as { result?: unknown }
     expect(answered.result).toBe('kurz gefasst')
-    expect(asked[0]?.url).toBe('http://127.0.0.1:11434/v1/chat/completions')
-    expect(JSON.parse(asked[0]?.body ?? '{}')).toEqual({ model: 'qwen2.5-coder:7b', stream: false, messages: [{ role: 'system', content: 'kurz' }, { role: 'user', content: 'Fasse zusammen: lang' }] })
+    const completion = asked.find(a => a.url.endsWith('/chat/completions'))
+    expect(completion?.url).toBe('http://127.0.0.1:11434/v1/chat/completions')
+    expect(JSON.parse(completion?.body ?? '{}')).toEqual({ model: 'qwen2.5-coder:7b', stream: false, messages: [{ role: 'system', content: 'kurz' }, { role: 'user', content: 'Fasse zusammen: lang' }] })
     const ui = await $.ui.mount(pane(90))
     await ui.press({ key: 'tab:usage' })
     await ui.redraw()
     const text = await screen(ui)
-    for (const word of ['Lokales Modell', 'qwen2.5-coder:7b', '1 Aufruf', '1,2k Tokens']) expect(text).toContain(word)
+    for (const word of ['Lokales Modell', 'qwen2.5-coder:7b', 'auf Zuruf', '1 Aufruf', '1,2k Tokens']) expect(text).toContain(word)
+    await ui.press({ key: 'tab:log' })
+    await ui.redraw()
+    const log = await screen(ui)
+    expect(log).toContain('Lokales Modell qwen2.5-coder:7b: 1200 Tokens')
+    expect(log).toContain('Fasse zusammen: lang')
+    await ui.press({ key: 'logfilter:local' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('Lokales Modell qwen2.5-coder:7b')
+    await ui.unmount()
+  })
+
+  test('der Kasten im Baum: einrichten, suchen, Modell wählen, Stufe wechseln, gespeichert', de, async ($, on) => {
+    const t = engine(on)
+    const registered: { name?: string; description?: string }[] = []
+    on('tool.register', (_, e) => {
+      registered.push(e as { name?: string; description?: string })
+      return { value: { tool: 'mcp__agent-tree__local_model' } } as never
+    })
+    on('http.fetch', (_, e) => {
+      const url = (e as { url: string }).url
+      if (url === 'http://127.0.0.1:11434/v1/models') return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify({ data: [{ id: 'gemma3:12b' }, { id: 'qwen2.5:3b' }] }) } } as never
+      throw new Error('kein Server')
+    })
+    const copied: string[] = []
+    on('ui.copy', (_, e) => {
+      copied.push((e as { text: string }).text)
+      return { value: undefined } as never
+    })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.redraw()
+    expect(await screen(ui)).toContain('Lokales Modell einrichten')
+    await ui.press({ key: 'local:open' })
+    await ui.redraw()
+    let text = await screen(ui)
+    expect(text).toContain('2 Modelle gefunden, wählen')
+    expect(text).toContain('qwen2.5:3b · 127.0.0.1:11434')
+    await ui.press({ key: 'localpick:1' })
+    await ui.redraw()
+    text = await screen(ui)
+    expect(text).toContain('qwen2.5:3b ▾')
+    expect(text).toContain('auf Zuruf ▾')
+    expect(t.stored.localChoice).toEqual({ model: 'qwen2.5:3b', url: 'http://127.0.0.1:11434/v1', mode: 'ask' })
+    expect(registered.at(-1)?.description).toContain('only when the user asks')
+    await ui.press({ key: 'local:mode' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('selbstständig ▾')
+    expect(registered.at(-1)?.description).toContain('Prefer it for longer texts')
+    await ui.press({ key: 'local:mode' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('aus ▾')
+    expect(registered.at(-1)?.description).toContain('Do not call this tool')
+    await ui.press({ key: 'local:open' })
+    await ui.press({ key: 'local:guide' })
+    await ui.press({ key: 'local:setup' })
+    expect(copied).toEqual(['https://github.com/MikeGT4/agent-tree/blob/main/docs/LOCAL.md'])
+    expect(t.fills.at(-1)).toContain('Ollama')
+    await ui.unmount()
+  })
+
+  test('ohne Server: Hinweis, Anleitung und Einrichten lassen', de, async ($, on) => {
+    engine(on)
+    on('http.fetch', () => {
+      throw new Error('kein Server')
+    })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'local:open' })
+    await ui.redraw()
+    const text = await screen(ui)
+    for (const word of ['kein lokaler Server gefunden', 'erneut suchen', 'Anleitung', 'Einrichten lassen']) expect(text).toContain(word)
     await ui.unmount()
   })
 

@@ -12,8 +12,8 @@ import { introInfo } from './intro-model.ts'
 import { rowsOf, withScrollBar } from './scrollbar.tsx'
 import { PEER_BEAT_MS, changeNoted, crossClashes, folderOf, isForgotten, isMarkdown, isOpen, isPeerKey, peerKey, peerNews, peerOf } from './peers.ts'
 import type { Peer, PeerNews } from './peers.ts'
-import { LOCAL_SCHEMA, LOCAL_TOOL, localAnswerOf, localErrorOf, localAskOf, localBody, localDescription, localSetup, tallied } from './local.ts'
-import type { LocalSetup, LocalTally } from './local.ts'
+import { LOCAL_GUIDE_URL, LOCAL_KEY, LOCAL_SCHEMA, LOCAL_TOOL, candidatesOf, choiceOf, localAnswerOf, localAskOf, localBody, localDescriptionFor, localErrorOf, localSetup, modelsOf, nextMode, picksOf, setupOf, tallied } from './local.ts'
+import type { LocalChoice, LocalFound, LocalSetup, LocalTally, LocalView } from './local.ts'
 import type { LimitSample } from './model.ts'
 import type { PeerView } from './tabs.tsx'
 import type { IntroInfo } from './intro-model.ts'
@@ -91,6 +91,7 @@ import {
   stopRequested,
   stopSent,
   spent,
+  localLogged,
   limitRest,
   samplesKept,
   lifeSigns,
@@ -198,6 +199,15 @@ const toldPeers: Set<string> = new Set()
 const limitSamples: Map<string, LimitSample[]> = new Map()
 let localUse: LocalSetup | undefined
 let localCount: LocalTally = { calls: 0, tokens: 0, ms: 0, failed: 0 }
+let localChoice: LocalChoice = { mode: 'off' }
+let localFound: LocalFound[] = []
+let localSearched = false
+let localSearching = false
+let localBusy = false
+let localError: string | undefined
+let localOpen = false
+let localRegistered = false
+let localOptionUrl: string | undefined
 
 async function takeOver($: EngineInterface): Promise<void> {
   if (handing) return handing
@@ -563,6 +573,83 @@ async function recordSpend($: EngineInterface): Promise<void> {
   const list = await $.agent.list().catch(() => [])
   const now = await clock($)
   await change($, s => lifeSigns(spent(s, list), list, now))
+}
+
+function localViewNow(): LocalView {
+  return { choice: localChoice, tally: localCount, picks: picksOf(localFound), searched: localSearched, searching: localSearching, busy: localBusy, open: localOpen, ...(localError ? { error: localError } : {}) }
+}
+
+async function localRedraw($: EngineInterface): Promise<void> {
+  await update($, introBeat, n => (n + 1) % 1_000_000).catch(() => undefined)
+}
+
+async function localApply($: EngineInterface): Promise<void> {
+  localUse = setupOf(localChoice)
+  const model = localChoice.model
+  if (!model || (localChoice.mode === 'off' && !localRegistered)) return
+  const added = await $.tool.register({ name: LOCAL_TOOL, description: localDescriptionFor(model, localChoice.mode), inputSchema: LOCAL_SCHEMA, isDeferred: false }).catch(() => undefined)
+  if (added) localRegistered = true
+  else localUse = undefined
+}
+
+async function localSave($: EngineInterface): Promise<void> {
+  await $.store.set(LOCAL_KEY, localChoice).catch(() => undefined)
+  await localApply($)
+  await localRedraw($)
+}
+
+async function localSearch($: EngineInterface): Promise<void> {
+  localSearching = true
+  await localRedraw($)
+  const found: LocalFound[] = []
+  for (const url of candidatesOf(localChoice, localOptionUrl)) {
+    const setup = localSetup('probe', url)
+    if (!setup) continue
+    const reply = await $.http.fetch(`${setup.url}/models`, { method: 'GET' }).catch(() => undefined)
+    const models = reply?.ok ? modelsOf(reply.text) : []
+    if (models.length) found.push({ url: setup.url, models })
+  }
+  localFound = found
+  localSearched = true
+  localSearching = false
+  await localRedraw($)
+}
+
+async function localAct($: EngineInterface, what: string): Promise<void> {
+  const w = wordsFor(lang)
+  if (what === 'search') {
+    localOpen = true
+    await localSearch($)
+  } else if (what === 'open') {
+    localOpen = !localOpen
+    if (localOpen && !localSearched) await localSearch($)
+    else await localRedraw($)
+  } else if (what === 'mode') {
+    if (!localChoice.model) {
+      localOpen = true
+      await localRedraw($)
+      return
+    }
+    localChoice = { ...localChoice, mode: nextMode(localChoice.mode) }
+    $.ui.toast(w.localModeToast(w.localModes[localChoice.mode]))
+    await localSave($)
+  } else if (what === 'guide') {
+    await $.ui.copy({ text: LOCAL_GUIDE_URL }).catch(() => undefined)
+    $.ui.toast(w.localGuideToast(LOCAL_GUIDE_URL))
+  } else if (what === 'setup') {
+    const filled = await $.prompt.fill({ text: w.localSetupPrompt }).catch(() => undefined)
+    $.ui.toast(filled?.isFilled ? w.peerNoteFilled : w.writeNoPrompt)
+  }
+}
+
+async function localPicked($: EngineInterface, index: number): Promise<void> {
+  const pick = picksOf(localFound)[index]
+  if (!pick) return
+  localChoice = { model: pick.model, url: pick.url, mode: localChoice.mode === 'off' ? 'ask' : localChoice.mode }
+  localOpen = false
+  localError = undefined
+  $.ui.toast(wordsFor(lang).localChosenToast(pick.model, wordsFor(lang).localModes[localChoice.mode]))
+  await localSave($)
 }
 
 async function peerStart($: EngineInterface, formerId: string | undefined): Promise<void> {
@@ -946,6 +1033,8 @@ function actionsFor($: EngineInterface): TreeActions {
     fast: () => void toggleFast($).catch(ignore),
     starOff: () => void starAskEnd($).catch(ignore),
     noteTake: mark => void peerNoteTaken($, mark).catch(ignore),
+    local: what => void localAct($, what).catch(ignore),
+    localPick: index => void localPicked($, index).catch(ignore),
     noteDrop: mark => void peerNoteDropped($, mark).catch(ignore),
     deselect: () => void change($, t => deselected(t)).catch(ignore),
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
@@ -1088,11 +1177,11 @@ export const register: Register = (on, options) => {
     tip = tipsOn && e.isInteractive !== false ? await nextTip($).catch(() => undefined) : undefined
     starAsk = e.isInteractive !== false ? await starAskDue($).catch(() => false) : false
     if (e.isInteractive !== false) void peerStart($, formerId).catch(() => undefined)
-    localUse = undefined
-    if (localWanted) {
-      const added = await $.tool.register({ name: LOCAL_TOOL, description: localDescription(localWanted.model), inputSchema: LOCAL_SCHEMA, isDeferred: false }).catch(() => undefined)
-      if (added) localUse = localWanted
-    }
+    localRegistered = false
+    localOptionUrl = typeof options.localUrl === 'string' ? options.localUrl : undefined
+    localChoice = choiceOf(await $.store.get(LOCAL_KEY).catch(() => undefined), localWanted)
+    await localApply($).catch(() => undefined)
+    if (e.isInteractive !== false) void localSearch($).catch(() => undefined)
     await maybeStartIntro($, e.isInteractive !== false).catch(() => undefined)
     if (!introTicker) startNotice($, await clock($))
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
@@ -1410,12 +1499,20 @@ export const register: Register = (on, options) => {
     if (!setup) return { deny: w.localOff }
     if (!ask) return { deny: w.localNoPrompt }
     const startedAt = await clock($)
+    localBusy = true
+    localError = undefined
+    await localRedraw($)
     const reply = await $.http.fetch(`${setup.url}/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: localBody(setup, ask) }).catch(() => undefined)
     const answer = reply?.ok ? localAnswerOf(reply.text) : undefined
-    localCount = tallied(localCount, answer, (await clock($)) - startedAt)
-    await update($, introBeat, n => (n + 1) % 1_000_000).catch(() => undefined)
-    if (!answer) return { deny: w.localFailed(setup.url, reply?.status, localErrorOf(reply?.text)) }
-    return { result: answer.text }
+    const endedAt = await clock($)
+    localCount = tallied(localCount, answer, endedAt - startedAt)
+    localBusy = false
+    const failure = answer ? undefined : w.localFailed(setup.url, reply?.status, localErrorOf(reply?.text))
+    localError = failure
+    await change($, s => localLogged(s, { model: setup.model, ok: answer ? 1 : 0, tokens: answer?.tokens ?? 0, ms: endedAt - startedAt, ask: ask.prompt.slice(0, 80).replace(/\s+/g, ' ') }, endedAt)).catch(() => undefined)
+    await localRedraw($)
+    if (failure) return { deny: failure }
+    return { result: answer?.text ?? '' }
   })
 
   on('session.measure', async ($, e, next) => {
@@ -1521,7 +1618,7 @@ export const register: Register = (on, options) => {
       questions,
       ...(tip !== undefined ? { tip } : {}),
       ...(starAsk ? { starAsk } : {}),
-      ...(starAsk && starAskClosable ? { starAskClosable } : {}), ...(localUse ? { local: { model: localUse.model, tally: localCount } } : {}), ...(peerViewNow(now) ? { peers: peerViewNow(now) } : {}),
+      ...(starAsk && starAskClosable ? { starAskClosable } : {}), local: localViewNow(), ...(peerViewNow(now) ? { peers: peerViewNow(now) } : {}),
       docked: e.props.placement === 'dock',
     }
     const columns = e.props.bodyColumns

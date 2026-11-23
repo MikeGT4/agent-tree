@@ -139,7 +139,7 @@ export function reportPinned(s: AgentTreeState, agentId: string, now = 0): Agent
   return { ...tabChosen(s, 'reports', now), reportOf: agentId }
 }
 
-export const LOG_SOURCES: readonly AgentTreeLogSource[] = ['session', 'main', 'agent', 'advisor']
+export const LOG_SOURCES: readonly AgentTreeLogSource[] = ['session', 'main', 'agent', 'advisor', 'local']
 
 export function logFiltered(s: AgentTreeState, source: string): AgentTreeState {
   if (source === 'all') return { ...s, logFilter: undefined }
@@ -451,6 +451,10 @@ function logged(
   while (place > 0 && (log[place - 1]?.at ?? 0) > at) place -= 1
   log.splice(place, 0, { at, source, kind, data })
   return { ...s, log: log.slice(-LOG_LIMIT) }
+}
+
+export function localLogged(s: AgentTreeState, data: Record<string, string | number>, at: number): AgentTreeState {
+  return logged(s, 'local', 'local', data, at)
 }
 
 function findAgent(s: AgentTreeState, id: string | undefined): AgentTreeNode | undefined {

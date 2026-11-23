@@ -72,7 +72,7 @@ export type AgentTreeAdvisor = {
   calls: AgentTreeAdvisorCall[]
 }
 
-export type AgentTreeLogSource = 'session' | 'main' | 'agent' | 'advisor'
+export type AgentTreeLogSource = 'session' | 'main' | 'agent' | 'advisor' | 'local'
 
 export type AgentTreeLogEntry = {
   at: number

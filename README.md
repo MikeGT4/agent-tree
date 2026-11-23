@@ -8,7 +8,7 @@ Stop and correct running sub-agents, switch model and effort for them and the ma
 
 Tabs: full reports, files, log, cost, terminals.
 
-Optional: Claude Code hands simple tasks to your local model (Ollama, LM Studio) and saves tokens.
+Optional: Claude Code hands simple tasks to your [local model](docs/LOCAL.md) (Ollama, LM Studio) and saves tokens.
 
 <img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.7.1/readme-agent-tree-6.gif" width="560" alt="Demo of the functions above">
 

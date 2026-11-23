@@ -5,7 +5,7 @@ import type { AgentTreeLogEntry, AgentTreeLogSource, AgentTreeNode, AgentTreeRep
 import { frameEdges, restyleLine, statusColor } from './looks.ts'
 import type { Glyphs, Palette } from './looks.ts'
 import type { Peer, PeerClash, PeerNews } from './peers.ts'
-import type { LocalTally } from './local.ts'
+import type { LocalView } from './local.ts'
 import { EFFORT_LEVELS, pathKey, quietFor, LOG_SOURCES, MAIN, TABS, clashShown, effortLabel, logTarget, clockTime, contextLevel, contextPercent, cut, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
 import { helpItems, logLine } from './words.ts'
 import type { Lang, Words } from './words.ts'
@@ -263,7 +263,7 @@ export function drawLog(ui: Ui, o: LogInput) {
   const { Box, Text, Button } = ui
   const active = o.s.logFilter
   const rows = [...o.s.log].reverse().filter(row => !active || row.source === active)
-  const sourceColor = (source: AgentTreeLogSource) => (source === 'session' ? o.palette.dim : o.palette[source])
+  const sourceColor = (source: AgentTreeLogSource) => (source === 'session' ? o.palette.dim : source === 'local' ? o.palette.done : o.palette[source])
   let links = 0
   const drawRow = (row: AgentTreeLogEntry, i: number) => {
     const linked = links < LOG_LINKS
@@ -421,7 +421,7 @@ export type UsageInput = ViewInput & {
   now: number
   limits: readonly { text: string; color: string }[]
   mainLine: string
-  local?: { model: string; tally: LocalTally }
+  local?: LocalView
 }
 
 export type UsageGroup = { effort?: string; agents: number; tokens: number; usd?: number; ms: number }
@@ -525,12 +525,12 @@ export function drawUsage(ui: Ui, o: UsageInput) {
             {l.text}
           </Text>
         ))}
-        {o.local ? (
+        {o.local?.choice.model && o.local.choice.mode !== 'off' ? (
           <Text key="usage-local" wrap="truncate-end">
             <Text bold color={o.palette.main}>
               {o.w.localName}
             </Text>
-            {` · ${[o.local.model, o.w.localCalls(o.local.tally.calls), ...(o.local.tally.tokens ? [`${fmtTokens(o.local.tally.tokens, o.w.decimal)} Tokens`] : []), ...(o.local.tally.calls ? [fmtShortDuration(o.local.tally.ms)] : []), ...(o.local.tally.failed ? [o.w.localFails(o.local.tally.failed)] : [])].join(' · ')}`}
+            {` · ${[o.local.choice.model, o.w.localModes[o.local.choice.mode], o.w.localCalls(o.local.tally.calls), ...(o.local.tally.tokens ? [`${fmtTokens(o.local.tally.tokens, o.w.decimal)} Tokens`] : []), ...(o.local.tally.calls ? [fmtShortDuration(o.local.tally.ms)] : []), ...(o.local.tally.failed ? [o.w.localFails(o.local.tally.failed)] : [])].join(' · ')}`}
           </Text>
         ) : (
           <Text key="usage-local" color={o.palette.dim} wrap="wrap">
