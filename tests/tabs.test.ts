@@ -1,7 +1,7 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import { describe, expect, test } from 'claude-code/testing'
 
-import { completed, createTree, fileNoted, fullText, pathKey, reportAgent, reportLoaded, reportPinned, resolvedPath, selectedSet, stepped, detailOpened, freshTree, hasNewReport, lookOpened, pickerOpened, selectionToggled, spawned, spent, tabChosen, tabOf, TABS } from '../hooks/model.ts'
+import { completed, createTree, fileNoted, fullText, pathKey, reportAgent, reportLoaded, reportPinned, resolvedPath, selectedSet, stepped, detailOpened, freshTree, hasNewReport, lookOpened, pickerOpened, selectionToggled, spawned, spent, lifeSigns, toolStarted, toolEnded, quietFor, QUIET_MS, tabChosen, tabOf, TABS } from '../hooks/model.ts'
 import type { AgentTreeState } from '../types'
 import { drawTree, pressKey } from '../hooks/view.tsx'
 import { usageGroups, usageRows } from '../hooks/tabs.tsx'
@@ -109,6 +109,33 @@ describe('Verbrauch', () => {
     expect(groups.map(g => [g.effort, g.agents, g.tokens])).toEqual([['high', 2, 1500], ['medium', 1, 1000]])
     expect(Math.round((groups[0]?.usd ?? 0) * 100)).toBe(70)
     expect(groups[0]?.ms).toBe(20_000)
+  })
+})
+
+describe('Lebenszeichen', () => {
+  const node = (s: ReturnType<typeof createTree>) => s.agents.find(n => n.id === 'a1')
+  test('still erst nach zwei Minuten ohne Schritt, Werkzeug oder wachsende Tokens', () => {
+    let s = spawned(createTree(0), spawn('a1'), 0)
+    expect(quietFor(node(s)!, QUIET_MS - 1)).toBeUndefined()
+    expect(quietFor(node(s)!, QUIET_MS)).toBe(QUIET_MS)
+    s = lifeSigns(s, [{ id: 'a1', tokenCount: 100 }], 60_000)
+    s = lifeSigns(s, [{ id: 'a1', tokenCount: 900 }], 90_000)
+    expect(quietFor(node(s)!, 90_000 + QUIET_MS - 1)).toBeUndefined()
+    s = lifeSigns(s, [{ id: 'a1', tokenCount: 900 }], 200_000)
+    expect(quietFor(node(s)!, 90_000 + QUIET_MS)).toBe(QUIET_MS)
+  })
+
+  test('ein laufendes Werkzeug zählt nie als still, auch ein langer Testlauf nicht', () => {
+    let s = toolStarted(spawned(createTree(0), spawn('a1'), 0), 'a1', 10)
+    expect(quietFor(node(s)!, 10 * QUIET_MS)).toBeUndefined()
+    s = toolEnded(s, 'a1', 600_000)
+    expect(quietFor(node(s)!, 600_000 + QUIET_MS - 1)).toBeUndefined()
+    expect(quietFor(node(s)!, 600_000 + QUIET_MS)).toBe(QUIET_MS)
+  })
+
+  test('ein fertiger Agent ist nie still', () => {
+    const s = completed(spawned(createTree(0), spawn('a1'), 0), { agentId: 'a1', answer: 'OK', reason: 'answer', isAborted: false, durationMs: 10 }, 5)
+    expect(quietFor(node(s)!, 10 * QUIET_MS)).toBeUndefined()
   })
 })
 

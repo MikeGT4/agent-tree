@@ -5,7 +5,7 @@ import type { AgentTreeLogEntry, AgentTreeLogSource, AgentTreeNode, AgentTreeRep
 import { frameEdges, restyleLine, statusColor } from './looks.ts'
 import type { Glyphs, Palette } from './looks.ts'
 import type { Peer, PeerClash, PeerNews } from './peers.ts'
-import { EFFORT_LEVELS, LOG_SOURCES, MAIN, TABS, clashShown, effortLabel, logTarget, clockTime, contextLevel, contextPercent, cut, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
+import { EFFORT_LEVELS, quietFor, LOG_SOURCES, MAIN, TABS, clashShown, effortLabel, logTarget, clockTime, contextLevel, contextPercent, cut, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
 import { helpItems, logLine } from './words.ts'
 import type { Lang, Words } from './words.ts'
 import { VERSION, newsBetween } from './news.ts'
@@ -405,6 +405,12 @@ export function drawFiles(ui: Ui, o: ViewInput) {
 }
 
 export const USAGE_BAR = 5
+export const USAGE_INDENT = 1
+
+export function fit(text: string, width: number): string {
+  const chars = [...text]
+  return chars.length > width ? `${chars.slice(0, width - 1).join('')}…` : text + ' '.repeat(width - chars.length)
+}
 
 export function usageRows(s: AgentTreeState): AgentTreeNode[] {
   return [...s.agents].sort((a, b) => (b.contextTokens ?? -1) - (a.contextTokens ?? -1))
@@ -452,13 +458,6 @@ export function drawUsage(ui: Ui, o: UsageInput) {
   )
   const groupLine = (g: UsageGroup) =>
     [o.w.usageAgents(g.agents), ...(g.tokens > 0 ? [`${fmtTokens(g.tokens, o.w.decimal)} Tokens`] : []), ...(g.usd !== undefined ? [o.w.cost(g.usd)] : []), fmtShortDuration(g.ms)].join(' · ')
-  const cell = (key: string, width: number, text: string, color?: string) => (
-    <Box key={key} width={width} flexShrink={0}>
-      <Text color={color} wrap="truncate-end">
-        {text}
-      </Text>
-    </Box>
-  )
   return (
     <Box key="usage-view" flexDirection="column" width={o.width} marginTop={1}>
       {rows.length === 0 ? (
@@ -467,18 +466,9 @@ export function drawUsage(ui: Ui, o: UsageInput) {
         </Box>
       ) : (
         <Box key="usage-table" flexDirection="column" width={o.width} marginTop={1}>
-          <Box key="usage-head" flexDirection="row" columnGap={1}>
-            <Box key="usage-head-name" flexGrow={1} flexShrink={1}>
-              <Text color={o.palette.dim} wrap="truncate-end">
-                {o.w.agents}
-              </Text>
-            </Box>
-            {cell('usage-head-model', 12, o.w.model, o.palette.dim)}
-            {cell('usage-head-effort', 7, o.w.usageEffort, o.palette.dim)}
-            {cell('usage-head-context', 14, o.w.context, o.palette.dim)}
-            {cell('usage-head-tools', 10, o.w.tools, o.palette.dim)}
-            {cell('usage-head-time', 8, o.w.duration, o.palette.dim)}
-          </Box>
+          <Text key="usage-head" color={o.palette.dim} wrap="truncate-end">
+            {`${' '.repeat(USAGE_INDENT)}${fit(o.w.model, 11)} ${fit(o.w.usageEffort, 6)} ${fit(o.w.context, 12)} ${fit(o.w.usageTokens, 7)} ${fit(o.w.tools, 9)} ${o.w.duration}`}
+          </Text>
           {rows.map(n => {
             const percent = contextPercent(n.contextTokens, windowOf(o.s, n))
             const context =
@@ -487,16 +477,19 @@ export function drawUsage(ui: Ui, o: UsageInput) {
                 : n.contextTokens !== undefined
                   ? fmtTokens(n.contextTokens, o.w.decimal)
                   : '·'
+            const mark = n.status === 'running' ? (o.glyphs.spinner[0] ?? '·') : o.glyphs.marks[n.status]
             return (
-              <Box key={`usage:${n.id}`} flexDirection="row" columnGap={1}>
-                <Box key={`usage-name:${n.id}`} flexGrow={1} flexShrink={1}>
-                  <Text wrap="truncate-end">{`${n.description} · ${typeLabel(n.type)}`}</Text>
-                </Box>
-                {cell(`usage-model:${n.id}`, 12, modelLabel(n.model) || '·')}
-                {cell(`usage-effort:${n.id}`, 7, n.effort ? effortLabel(n.effort) : '·')}
-                {cell(`usage-context:${n.id}`, 14, context, levelColor(percent))}
-                {cell(`usage-tools:${n.id}`, 10, String(n.toolCount))}
-                {cell(`usage-time:${n.id}`, 8, fmtShortDuration((n.endedAt ?? o.now) - n.startedAt))}
+              <Box key={`usage:${n.id}`} flexDirection="column" width={o.width}>
+                <Text wrap="truncate-end">
+                  <Text color={statusColor(o.palette, n.status)}>{mark}</Text>
+                  {` ${n.description} · ${typeLabel(n.type)}`}
+                </Text>
+                <Text key={`usage-values:${n.id}`} wrap="truncate-end">
+                  {`${' '.repeat(USAGE_INDENT)}${fit(modelLabel(n.model) || '·', 11)} ${fit(n.effort ? effortLabel(n.effort) : '·', 6)} `}
+                  <Text color={levelColor(percent)}>{fit(context, 12)}</Text>
+                  {` ${fit(n.spentTokens ? fmtTokens(n.spentTokens, o.w.decimal) : '·', 7)} ${fit(String(n.toolCount), 9)} `}
+                  <Text color={quietFor(n, o.now) !== undefined ? o.palette.warn : undefined}>{fmtShortDuration((n.endedAt ?? o.now) - n.startedAt)}</Text>
+                </Text>
               </Box>
             )
           })}

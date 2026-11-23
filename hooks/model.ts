@@ -705,6 +705,7 @@ export function stepped(s: AgentTreeState, input: StepInput, now: number): Agent
         effortless: input.effortless ? true : effort !== undefined ? false : n.effortless,
         contextTokens: input.contextTokens ?? n.contextTokens,
         answer: input.answer ? excerpt(input.answer) : n.answer,
+        activeAt: now,
         ...(input.model !== n.model ? { modelSince: now } : {}),
         ...(nextEffort !== n.effort ? { effortSince: now } : {}),
       }
@@ -1125,6 +1126,36 @@ export function synced(s: AgentTreeState, list: readonly { id: string; status: s
 export type ListedAgent = { id: string; description: string; type: string; status: string; parentId?: string }
 
 export type SpentAgent = { id: string; usage?: readonly { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number }[]; cost?: { usd: number } }
+
+export const QUIET_MS = 120_000
+
+export function lifeSigns(s: AgentTreeState, list: readonly { id: string; tokenCount?: number }[], now: number): AgentTreeState {
+  let next = s
+  for (const entry of list) {
+    const node = findAgent(next, entry.id)
+    if (!node || node.status !== 'running' || typeof entry.tokenCount !== 'number' || entry.tokenCount === node.lastTokenCount) continue
+    next = withAgent(next, entry.id, n => ({ ...n, lastTokenCount: entry.tokenCount, ...(n.lastTokenCount !== undefined ? { activeAt: now } : {}) }))
+  }
+  return next
+}
+
+export function toolStarted(s: AgentTreeState, agentId: string, now: number): AgentTreeState {
+  return findAgent(s, agentId) ? withAgent(s, agentId, n => ({ ...n, activeAt: now, toolSince: now })) : s
+}
+
+export function toolEnded(s: AgentTreeState, agentId: string, now: number): AgentTreeState {
+  if (!findAgent(s, agentId)) return s
+  return withAgent(s, agentId, n => {
+    const { toolSince: _since, ...rest } = n
+    return { ...rest, activeAt: now }
+  })
+}
+
+export function quietFor(n: AgentTreeNode, now: number): number | undefined {
+  if (n.status !== 'running' || n.toolSince !== undefined) return undefined
+  const quiet = now - (n.activeAt ?? n.startedAt)
+  return quiet >= QUIET_MS ? quiet : undefined
+}
 
 export function spent(s: AgentTreeState, list: readonly SpentAgent[]): AgentTreeState {
   let next = s

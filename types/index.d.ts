@@ -32,6 +32,9 @@ export type AgentTreeNode = {
   answerTokens?: number
   spentTokens?: number
   costUsd?: number
+  activeAt?: number
+  toolSince?: number
+  lastTokenCount?: number
 }
 
 export type AgentTreeStyle = 'line' | 'pixel' | 'braille' | 'hud' | 'ascii'

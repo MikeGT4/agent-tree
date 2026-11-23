@@ -88,6 +88,9 @@ import {
   stopRequested,
   stopSent,
   spent,
+  lifeSigns,
+  toolStarted,
+  toolEnded,
   synced,
   tabChosen,
   tabOf,
@@ -550,7 +553,8 @@ async function catchUp($: EngineInterface, now: number, keep: number): Promise<v
 
 async function recordSpend($: EngineInterface): Promise<void> {
   const list = await $.agent.list().catch(() => [])
-  await change($, s => spent(s, list))
+  const now = await clock($)
+  await change($, s => lifeSigns(spent(s, list), list, now))
 }
 
 async function peerStart($: EngineInterface, formerId: string | undefined): Promise<void> {
@@ -1345,10 +1349,12 @@ export const register: Register = (on, options) => {
       const known = (await latest($)).agents.some(n => n.id === agentId)
       if (!known) return
       const now = await clock($)
-      await change($, s => toolRan(s, { agentId, label, kind }, now))
+      await change($, s => toolStarted(toolRan(s, { agentId, label, kind }, now), agentId, now))
     })().catch(() => undefined)
     const result = await next(e)
     await noted
+    const toolEndedAt = await clock($)
+    await change($, s => toolEnded(s, agentId, toolEndedAt)).catch(() => undefined)
     if (succeeded(result)) {
       const output = kind === 'read' ? (result as { text?: unknown }).text : undefined
       await change($, s => fileNoted(s, agentId, kind, file, typeof output === 'string' ? output : undefined)).catch(() => undefined)

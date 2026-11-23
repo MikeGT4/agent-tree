@@ -37,6 +37,7 @@ import {
   effortLabel,
   familyLabel,
   fmtShortDuration,
+  quietFor,
   fmtTokens,
   groups,
   modelLabel,
@@ -886,8 +887,8 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       <Text key="box-task" size={SIZE.detail} color={running ? undefined : palette.dim}>
         {centered(n.description || ' ', inner)}
       </Text>,
-      <Text key="box-activity" size={SIZE.detail} color={palette.dim}>
-        {centered(activityText(n.lastTool, lang) ?? `${w.tools}: ${n.toolCount}`, inner)}
+      <Text key="box-activity" size={SIZE.detail} color={quietFor(n, now) !== undefined ? palette.warn : palette.dim}>
+        {centered(quietFor(n, now) !== undefined ? w.quiet(fmtShortDuration(quietFor(n, now) ?? 0)) : (activityText(n.lastTool, lang) ?? `${w.tools}: ${n.toolCount}`), inner)}
       </Text>,
       <Text key="box-status" size={SIZE.detail} color={levelColor(palette, filledShare, statusColor(palette, n.status))}>
         {centered(statusLine, inner)}

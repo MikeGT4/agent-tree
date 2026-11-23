@@ -45,6 +45,8 @@ export type Words = {
   last: string
   duration: string
   usageEffort: string
+  usageTokens: string
+  quiet: (time: string) => string
   usageSummary: string
   usageTotal: string
   usageAgents: (n: number) => string
@@ -263,6 +265,8 @@ export const WORDS: Record<Lang, Words> = {
     last: 'zuletzt',
     duration: 'Dauer',
     usageEffort: 'Stufe',
+    usageTokens: 'Tokens',
+    quiet: time => `still seit ${time}`,
     usageSummary: 'Auswertung',
     usageTotal: 'Zusammen',
     usageAgents: n => (n === 1 ? '1 Agent' : `${n} Agenten`),
@@ -496,6 +500,8 @@ export const WORDS: Record<Lang, Words> = {
     last: 'last',
     duration: 'took',
     usageEffort: 'Effort',
+    usageTokens: 'Tokens',
+    quiet: time => `quiet for ${time}`,
     usageSummary: 'Summary',
     usageTotal: 'Total',
     usageAgents: n => (n === 1 ? '1 agent' : `${n} agents`),

@@ -4555,7 +4555,7 @@ describe('Tab Verbrauch', () => {
     const ui = await $.ui.mount(pane(69))
     await ui.press({ key: 'tab:usage' })
     await ui.redraw()
-    expect(await screen(ui)).toContain('Code lesen · Explore')
+    expect(await screen(ui)).toContain(' Code lesen · Explore')
     await ui.unmount()
   })
 
