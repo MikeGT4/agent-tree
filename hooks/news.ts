@@ -2,7 +2,7 @@
 import { isNewer } from './update.ts'
 import type { Lang } from './words.ts'
 
-export const VERSION = '0.7.17'
+export const VERSION = '0.7.18'
 export const SEEN_VERSION_KEY = 'seenVersion'
 export const NOTICE_MS = 3000
 export const NOTICE_LINES = 3
@@ -50,6 +50,10 @@ export const NEWS: Readonly<Record<string, Readonly<Record<Lang, readonly string
   '0.7.17': {
     de: ['Reiter Kosten mit Denkstufe, Tokens und Kosten je Agent, kürzere Reiternamen'],
     en: ['Cost tab with effort, tokens and cost per agent, shorter tab names'],
+  },
+  '0.7.18': {
+    de: ['Reiter Fenster zeigt deine anderen Terminals', 'Hinweis, wenn ein Agent still wird', 'Limits sagen, wann sie bei diesem Tempo voll sind'],
+    en: ['Terminals tab shows your other terminals', 'A hint when an agent goes quiet', 'Limits tell when they fill up at this pace'],
   },
 }
 

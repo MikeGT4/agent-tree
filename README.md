@@ -6,7 +6,7 @@ A side pane for Claude Code that shows a session's agents as a live tree.
 
 Stop and correct running sub-agents, switch model and effort for them and the main session, toggle the advisor, change the look, watch your limits.
 
-Tabs: each agent's full report, files, log, cost.
+Tabs: full reports, files, log, cost, terminals.
 
 <img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.7.1/readme-agent-tree-6.gif" width="560" alt="Demo of the functions above">
 
@@ -30,6 +30,6 @@ Once a day, in interactive sessions, it runs Claude Code's `plugin list --json`,
 
 Its hooks act only after you act in the pane; typing only ends intro or card.
 
-[Guide](docs/GUIDE.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.17/agent-tree-guide.pdf)
+[Guide](docs/GUIDE.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.18/agent-tree-guide.pdf)
 
 MIT, © 2026 Mike Pollow, [Digitalroots](https://www.digitalroots.de/en/leistungen/software/agent-tree/)

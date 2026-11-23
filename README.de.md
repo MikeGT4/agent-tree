@@ -6,7 +6,7 @@ Seitenleiste für Claude Code, die die Agenten einer Sitzung als lebenden Baum z
 
 Laufende Unteragenten stoppen und korrigieren, Modell und Denkstufe wechseln, auch für die Hauptsitzung, den Berater umschalten, das Aussehen ändern, die Limits sehen.
 
-Tabs: ganzer Bericht jedes Agenten, Dateien, Verlauf, Kosten.
+Tabs: ganzer Bericht jedes Agenten, Dateien, Verlauf, Kosten, andere Terminals.
 
 <img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.7.1/readme-agent-tree-6.gif" width="560" alt="Demo der Funktionen oben">
 
@@ -30,6 +30,6 @@ Einmal am Tag, in Sitzungen mit Bedienung, ruft es Claude Codes `plugin list --j
 
 Seine Hooks greifen nur, wenn du in der Leiste handelst; Tippen beendet nur Intro oder Update-Karte.
 
-[Anleitung](docs/GUIDE.de.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.17/agent-tree-anleitung.pdf)
+[Anleitung](docs/GUIDE.de.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.18/agent-tree-anleitung.pdf)
 
 MIT, © 2026 Mike Pollow, [Digitalroots](https://www.digitalroots.de/leistungen/software/agent-tree/)

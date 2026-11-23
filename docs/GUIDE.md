@@ -16,7 +16,7 @@ One box per sub-agent: task, current step, context (yellow from 70%, red from 85
 
 ![Actions](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-2.png)
 
-Click a box, or ctrl+x tab, Tab, Enter: Stop (s), Write, Model, Effort, Details. Write fills your prompt, read at the agent's next step. e: main session effort, m: new sub-agents, a: look.
+Clicking a box, or ctrl+x tab, Tab and Enter, opens Stop (s), Write, Model, Effort and Details. Write fills your prompt for the agent's next step. e: main session effort, m: new sub-agents, a: look.
 
 ## Tabs
 
@@ -26,7 +26,7 @@ Reports: each agent's task and full answer.
 
 ![Files](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-4.png)
 
-Files: changed and read per agent, shared first. Read files show estimated tokens (~), heaviest first.
+Files: changed and read per agent, shared first. Tokens of read files are estimated (~).
 
 ![Cost](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-5.png)
 
@@ -34,7 +34,7 @@ Cost: effort, tokens, cost, limits.
 
 ![Log](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.11/guide-6.png)
 
-Log: events by source; click › for prompt or report.
+Log: events by source, click › for details.
 
 ![Help](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.2/guide-7.png)
 
@@ -42,4 +42,4 @@ Help: keys, signs, commands, news.
 
 ## New
 
-Limits turn green, yellow, red. Code Mode: title mark.
+Terminals: other open terminals, shared files and Markdown to check.
