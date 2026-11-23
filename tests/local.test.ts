@@ -1,7 +1,7 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import { describe, expect, test } from 'claude-code/testing'
 
-import { LOCAL_DEFAULT_URL, localAnswerOf, localAskOf, localSetup, tallied } from '../hooks/local.ts'
+import { LOCAL_DEFAULT_URL, localAnswerOf, localAskOf, localErrorOf, localSetup, tallied } from '../hooks/local.ts'
 
 describe('Lokales Modell, Bausteine', () => {
   test('ohne Modellname aus, Adresse ohne Schrägstrich und ohne Endpunkt, nur http und https', () => {
@@ -18,6 +18,13 @@ describe('Lokales Modell, Bausteine', () => {
     expect(localAnswerOf('kein json')).toBeUndefined()
     expect(localAnswerOf(JSON.stringify({ choices: [] }))).toBeUndefined()
     expect(localAnswerOf(JSON.stringify({ choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 3, completion_tokens: 4 } }))).toEqual({ text: 'ok', tokens: 7 })
+  })
+
+  test('die Fehlermeldung des Servers wird mitgegeben, im OpenAI- und im einfachen Format', () => {
+    expect(localErrorOf(JSON.stringify({ error: { message: 'model "x" not found' } }))).toBe('model "x" not found')
+    expect(localErrorOf(JSON.stringify({ error: 'kaputt' }))).toBe('kaputt')
+    expect(localErrorOf('<html>')).toBeUndefined()
+    expect(localErrorOf(undefined)).toBeUndefined()
   })
 
   test('die Zählung trennt Aufrufe und Fehler', () => {

@@ -53,7 +53,7 @@ export type Words = {
   localHint: string
   localOff: string
   localNoPrompt: string
-  localFailed: (url: string, status: number | undefined) => string
+  localFailed: (url: string, status: number | undefined, reason?: string) => string
   limitRest: (time: string) => string
   minutes: (n: number) => string
   hoursMinutes: (h: number, m: number) => string
@@ -284,7 +284,7 @@ export const WORDS: Record<Lang, Words> = {
     localHint: 'Lokales Modell aus: in den Plugin-Optionen ein Modell eintragen (Ollama, LM Studio), dann gibt Claude Code ihm einfache Aufgaben',
     localOff: 'Das lokale Modell ist in dieser Sitzung nicht eingeschaltet.',
     localNoPrompt: 'Der Aufruf braucht einen Text im Feld prompt.',
-    localFailed: (url, status) => `Das lokale Modell unter ${url} hat nicht geantwortet${status ? ` (HTTP ${status})` : ''}. Erledige die Aufgabe selbst.`,
+    localFailed: (url, status, reason) => `Das lokale Modell unter ${url} hat nicht geantwortet${status ? ` (HTTP ${status}${reason ? `: ${reason}` : ''})` : ' (Server nicht erreichbar)'}. Erledige die Aufgabe selbst.`,
     limitRest: time => `bei diesem Tempo voll in ~${time}`,
     minutes: n => `${n} min`,
     hoursMinutes: (h, m) => `${h} h ${m} min`,
@@ -530,7 +530,7 @@ export const WORDS: Record<Lang, Words> = {
     localHint: 'Local model off: enter a model in the plugin options (Ollama, LM Studio) and Claude Code hands it simple tasks',
     localOff: 'The local model is not turned on in this session.',
     localNoPrompt: 'The call needs text in the prompt field.',
-    localFailed: (url, status) => `The local model at ${url} did not answer${status ? ` (HTTP ${status})` : ''}. Do the task yourself.`,
+    localFailed: (url, status, reason) => `The local model at ${url} did not answer${status ? ` (HTTP ${status}${reason ? `: ${reason}` : ''})` : ' (server not reachable)'}. Do the task yourself.`,
     limitRest: time => `full in ~${time} at this pace`,
     minutes: n => `${n} min`,
     hoursMinutes: (h, m) => `${h} h ${m} min`,

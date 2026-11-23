@@ -12,7 +12,7 @@ import { introInfo } from './intro-model.ts'
 import { rowsOf, withScrollBar } from './scrollbar.tsx'
 import { PEER_BEAT_MS, changeNoted, crossClashes, folderOf, isForgotten, isMarkdown, isOpen, isPeerKey, peerKey, peerNews, peerOf } from './peers.ts'
 import type { Peer, PeerNews } from './peers.ts'
-import { LOCAL_SCHEMA, LOCAL_TOOL, localAnswerOf, localAskOf, localBody, localDescription, localSetup, tallied } from './local.ts'
+import { LOCAL_SCHEMA, LOCAL_TOOL, localAnswerOf, localErrorOf, localAskOf, localBody, localDescription, localSetup, tallied } from './local.ts'
 import type { LocalSetup, LocalTally } from './local.ts'
 import type { LimitSample } from './model.ts'
 import type { PeerView } from './tabs.tsx'
@@ -1414,7 +1414,7 @@ export const register: Register = (on, options) => {
     const answer = reply?.ok ? localAnswerOf(reply.text) : undefined
     localCount = tallied(localCount, answer, (await clock($)) - startedAt)
     await update($, introBeat, n => (n + 1) % 1_000_000).catch(() => undefined)
-    if (!answer) return { deny: w.localFailed(setup.url, reply?.status) }
+    if (!answer) return { deny: w.localFailed(setup.url, reply?.status, localErrorOf(reply?.text)) }
     return { result: answer.text }
   })
 

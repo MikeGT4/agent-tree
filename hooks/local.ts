@@ -68,6 +68,17 @@ export function localAnswerOf(text: string): LocalAnswer | undefined {
   return { text: content.slice(0, LOCAL_ANSWER_LIMIT), ...(total !== undefined ? { tokens: total } : {}) }
 }
 
+export function localErrorOf(text: string | undefined): string | undefined {
+  if (!text) return undefined
+  try {
+    const d = JSON.parse(text) as { error?: { message?: unknown } | string }
+    const message = typeof d.error === 'string' ? d.error : d.error?.message
+    return typeof message === 'string' && message.trim() ? message.trim().slice(0, 200) : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export function tallied(t: LocalTally, answer: LocalAnswer | undefined, ms: number): LocalTally {
   return answer ? { calls: t.calls + 1, tokens: t.tokens + (answer.tokens ?? 0), ms: t.ms + ms, failed: t.failed } : { ...t, failed: t.failed + 1 }
 }
