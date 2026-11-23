@@ -531,6 +531,9 @@ export function drawHelp(ui: Ui, o: HelpInput) {
           <Text key="help-star:text" wrap="wrap" bold color={o.palette.warn}>
             {o.w.starAsk}
           </Text>
+          <Text key="help-star:url" wrap="truncate-end" color={o.palette.warn}>
+            {o.w.starUrl}
+          </Text>
           {o.starOff ? <Button key="star:off" plain label={`× ${o.w.starAskOff}`} onPress={o.starOff} /> : null}
         </Box>
       ) : null}

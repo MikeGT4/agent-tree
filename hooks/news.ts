@@ -2,7 +2,7 @@
 import { isNewer } from './update.ts'
 import type { Lang } from './words.ts'
 
-export const VERSION = '0.7.14'
+export const VERSION = '0.7.15'
 export const SEEN_VERSION_KEY = 'seenVersion'
 export const NOTICE_MS = 3000
 export const NOTICE_LINES = 3
@@ -39,6 +39,9 @@ export const NEWS: Readonly<Record<string, Readonly<Record<Lang, readonly string
   '0.7.14': {
     de: ['Verschiedene kleine Code-Änderungen'],
     en: ['Various small code changes'],
+  },  '0.7.15': {
+    de: ['Links in der Hilfe mit Strg+Klick öffnen'],
+    en: ['Open the links in Help with Ctrl+click'],
   },
 }
 

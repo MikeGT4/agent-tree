@@ -165,6 +165,7 @@ export type Words = {
   fastUnchanged: string
   starHint: string
   starAsk: string
+  starUrl: string
   starAskOff: string
   updateInstalled: (version: string) => string
   updateFailed: (version: string, command: string) => string
@@ -278,7 +279,7 @@ export const WORDS: Record<Lang, Words> = {
     quoted: text => `„${text}“`,
     helpVersion: 'Zuletzt neu, Stand',
     helpCodeMode: '„CODE MODE“ im Titel: die Sitzung läuft im Code Mode.',
-    guideUrl: 'github.com/MikeGT4/agent-tree/blob/main/docs/GUIDE.de.md',
+    guideUrl: 'https://github.com/MikeGT4/agent-tree/blob/main/docs/GUIDE.de.md',
     filesNone: 'noch keine Dateien',
     filesClash: 'Gleiche Datei',
     logAll: 'alle',
@@ -373,9 +374,10 @@ export const WORDS: Record<Lang, Words> = {
     fastOff: '↯ Fast Mode: aus',
     fastUnavailable: 'Agent Tree: /fast ist in dieser Sitzung nicht verfügbar',
     fastUnchanged: 'Agent Tree: Claude Code hat den Fast Mode nicht umgestellt, der Grund steht im Chat',
-    starHint: 'Gefällt dir Agent Tree? Ein Stern auf GitHub hilft: github.com/MikeGT4/agent-tree',
-    starAsk: '★ Bist du zufrieden mit Agent Tree? Dann freue ich mich über einen Stern auf GitHub: github.com/MikeGT4/agent-tree',
+    starHint: 'Gefällt dir Agent Tree? Ein Stern auf GitHub hilft: https://github.com/MikeGT4/agent-tree',
+    starAsk: '★ Bist du zufrieden mit Agent Tree? Dann freue ich mich über einen Stern auf GitHub:',
     starAskOff: 'Nicht mehr zeigen',
+    starUrl: 'https://github.com/MikeGT4/agent-tree',
     updateInstalled: version => `Agent Tree ${version} ist installiert und lädt beim nächsten Start`,
     updateFailed: (version, command) => `Agent Tree ${version} ist da, aktualisieren mit: ${command}`,
     look: 'Aussehen',
@@ -492,7 +494,7 @@ export const WORDS: Record<Lang, Words> = {
     quoted: text => `"${text}"`,
     helpVersion: 'Recent, as of',
     helpCodeMode: '"CODE MODE" in the title: the session runs in Code Mode.',
-    guideUrl: 'github.com/MikeGT4/agent-tree/blob/main/docs/GUIDE.md',
+    guideUrl: 'https://github.com/MikeGT4/agent-tree/blob/main/docs/GUIDE.md',
     filesNone: 'no files yet',
     filesClash: 'Same file',
     logAll: 'all',
@@ -586,9 +588,10 @@ export const WORDS: Record<Lang, Words> = {
     fastOff: '↯ Fast mode: off',
     fastUnavailable: 'Agent Tree: /fast is not available in this session',
     fastUnchanged: 'Agent Tree: Claude Code did not switch fast mode, the transcript says why',
-    starHint: 'Like Agent Tree? A star on GitHub helps: github.com/MikeGT4/agent-tree',
-    starAsk: '★ Happy with Agent Tree? A star on GitHub would make my day: github.com/MikeGT4/agent-tree',
+    starHint: 'Like Agent Tree? A star on GitHub helps: https://github.com/MikeGT4/agent-tree',
+    starAsk: '★ Happy with Agent Tree? A star on GitHub would make my day:',
     starAskOff: 'Do not show again',
+    starUrl: 'https://github.com/MikeGT4/agent-tree',
     updateInstalled: version => `Agent Tree ${version} is installed and loads at the next start`,
     updateFailed: (version, command) => `Agent Tree ${version} is out, update with: ${command}`,
     look: 'Look',
