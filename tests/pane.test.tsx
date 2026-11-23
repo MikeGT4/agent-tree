@@ -887,7 +887,7 @@ describe('Agent Tree', () => {
     expect(card).toContain(`AGENT TREE ${VERSION}`)
     expect(card).toMatch(/wurde aktualisiert/)
     expect(card).toMatch(/0\.7\.7 /)
-    expect(card).toMatch(/Gleiche Datei: Warnung, bevor der zweite Agent schreibt/)
+    expect(card).toMatch(/Scrollbalken rechts/)
     expect(card).not.toMatch(/Verlauf: Klick zeigt deine Frage oder den Bericht/)
     expect(card).not.toMatch(/Läuft im Code Mode/)
     expect(card).not.toMatch(/Sitzungsprotokoll/)
@@ -903,7 +903,7 @@ describe('Agent Tree', () => {
     const ui = await $.ui.mount(pane(90))
     const card = await screen(ui)
     expect(card).toContain(`AGENT TREE ${VERSION}`)
-    expect(card).toMatch(/Links in der Hilfe mit Strg\+Klick öffnen/)
+    expect(card).toMatch(/Scrollbalken rechts/)
     expect(card).not.toMatch(/Läuft im Code Mode/)
     await ui.press({ key: 'notice:skip' })
     await ui.redraw()
@@ -2584,38 +2584,65 @@ describe('Fast Mode per Knopf', () => {
     await ui.redraw()
     const text = await screen(ui)
     expect(text).toContain(`Zuletzt neu, Stand ${VERSION}`)
-    expect(text).toContain('Links in der Hilfe mit Strg+Klick öffnen')
+    expect(text).toContain('Scrollbalken rechts')
     expect(text).toContain('„CODE MODE“ im Titel: die Sitzung läuft im Code Mode.')
     await ui.unmount()
   })
 
-  test('die Hilfe bittet in jeder vierten Sitzung um einen Stern, bis man ihn wegklickt', de, async ($, on) => {
+  test('die Stern-Bitte kommt in den ersten zwei Sitzungen ohne Kreuz, dann in jeder vierten mit Kreuz, bis man sie wegklickt', de, async ($, on) => {
     engine(on)
-    const helpText = async () => {
-      const ui = await $.ui.mount(pane(90))
+    const help = async () => {
+      await startSession($)
+      const ui = await $.ui.mount(pane(90, 400))
       await ui.press({ key: 'tab:help' })
       await ui.redraw()
-      const text = await screen(ui)
-      return { ui, text }
+      return { ui, text: await screen(ui), off: await ui.find({ key: 'star:off' }) }
     }
-    for (let i = 1; i <= 3; i++) {
-      await startSession($)
-      const { ui, text } = await helpText()
+    for (let i = 1; i <= 2; i++) {
+      const { ui, text, off } = await help()
+      expect(text).toContain('Stern auf GitHub')
+      expect(off).toBeUndefined()
+      await ui.unmount()
+    }
+    {
+      const { ui, text } = await help()
       expect(text).not.toContain('Stern auf GitHub')
       await ui.unmount()
     }
-    await startSession($)
-    const { ui, text } = await helpText()
-    expect(text).toContain('Stern auf GitHub')
-    expect(text).toContain('Nicht mehr zeigen')
-    await ui.press({ key: 'star:off' })
-    await ui.redraw()
-    expect(await screen(ui)).not.toContain('Stern auf GitHub')
-    await ui.unmount()
-    for (let i = 1; i <= 8; i++) await startSession($)
-    const later = await helpText()
+    const fourth = await help()
+    expect(fourth.text).toContain('Stern auf GitHub')
+    expect(fourth.off).toBeDefined()
+    await fourth.ui.press({ key: 'star:off' })
+    await fourth.ui.redraw()
+    expect(await screen(fourth.ui)).not.toContain('Stern auf GitHub')
+    await fourth.ui.unmount()
+    for (let i = 1; i <= 7; i++) await startSession($)
+    const later = await help()
     expect(later.text).not.toContain('Stern auf GitHub')
     await later.ui.unmount()
+  })
+
+  test('passt der Inhalt nicht ins Fenster, steht rechts ein Scrollbalken', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(50, 10))
+    await ui.press({ key: 'tab:help' })
+    await ui.redraw()
+    const bar = await ui.find({ key: 'scrollbar' })
+    expect(bar?.props.height).toBe(10)
+    expect(bar?.props.left).toBe(49)
+    expect(await screen(ui)).toContain('┃')
+    await ui.unmount()
+  })
+
+  test('passt alles ins Fenster, gibt es keinen Scrollbalken', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90, 400))
+    await ui.press({ key: 'tab:help' })
+    await ui.redraw()
+    expect(await ui.find({ key: 'scrollbar' })).toBeUndefined()
+    await ui.unmount()
   })
 
   test('ohne den Knopf führt die Hilfe die Taste f nicht', de, async ($, on) => {
@@ -4551,7 +4578,7 @@ describe('Tab Hilfe', () => {
     await ui.redraw()
     const text = await screen(ui)
     expect(text).toContain('"key":"help-view"')
-    for (const word of ['Tasten', 's: stoppen', 'a: Aussehen', 'Größe', 'Linke Kante der Leiste mit der Maus ziehen', 'Zeichen', 'läuft', 'fehlgeschlagen', 'Befehle', '/agent-tree', 'Anleitung', 'docs/GUIDE.de.md']) expect(text).toContain(word)
+    for (const word of ['Tasten', 's: stoppen', 'a: Aussehen', 'Größe', 'Linke Kante der Leiste mit der Maus ziehen', 'Zeichen', 'läuft', 'fehlgeschlagen', 'Befehle', '/agent-tree', 'Anleitung', 'tree/main/docs']) expect(text).toContain(word)
     await ui.unmount()
   })
 
@@ -4562,7 +4589,7 @@ describe('Tab Hilfe', () => {
     await ui.press({ key: 'tab:help' })
     await ui.redraw()
     const text = await screen(ui)
-    for (const word of ['Keys', 'Size', 'Drag the left edge of the pane with the mouse', 'Signs', 'Commands', 'Guide', 'docs/GUIDE.md']) expect(text).toContain(word)
+    for (const word of ['Keys', 'Size', 'Drag the left edge of the pane with the mouse', 'Signs', 'Commands', 'Guide', 'tree/main/docs']) expect(text).toContain(word)
     await ui.unmount()
   })
 

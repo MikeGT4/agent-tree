@@ -147,6 +147,7 @@ export type TreeLook = {
   questions?: ReadonlyMap<number, string>
   tip?: number
   starAsk?: boolean
+  starAskClosable?: boolean
 }
 
 export function pressKey(actions: TreeActions, key: string): boolean {
@@ -1503,7 +1504,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         {header}
         {tabBar}
         {tab === 'help' ? legend : null}
-        {tab === 'help' ? drawHelp(ui, { s, width, palette, glyphs, w, lang, docked: look.docked, starAsk: look.starAsk === true, ...(actions ? { starOff: () => actions.starOff() } : {}) }) : null}
+        {tab === 'help' ? drawHelp(ui, { s, width, palette, glyphs, w, lang, docked: look.docked, starAsk: look.starAsk === true, ...(actions && look.starAskClosable ? { starOff: () => actions.starOff() } : {}) }) : null}
         {tab === 'reports'
           ? drawReports(ui, {
               s,

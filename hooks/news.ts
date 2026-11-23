@@ -2,7 +2,7 @@
 import { isNewer } from './update.ts'
 import type { Lang } from './words.ts'
 
-export const VERSION = '0.7.15'
+export const VERSION = '0.7.16'
 export const SEEN_VERSION_KEY = 'seenVersion'
 export const NOTICE_MS = 3000
 export const NOTICE_LINES = 3
@@ -42,6 +42,10 @@ export const NEWS: Readonly<Record<string, Readonly<Record<Lang, readonly string
   },  '0.7.15': {
     de: ['Links in der Hilfe mit Strg+Klick öffnen'],
     en: ['Open the links in Help with Ctrl+click'],
+  },
+  '0.7.16': {
+    de: ['Scrollbalken rechts, wenn mehr Inhalt da ist als ins Fenster passt'],
+    en: ['A scroll bar on the right when there is more than fits'],
   },
 }
 

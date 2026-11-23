@@ -9,6 +9,7 @@ import { drawNotice } from './notice.tsx'
 import { NOTICE_MS, SEEN_VERSION_KEY, VERSION, noticeFor } from './news.ts'
 import type { UpdateNotice } from './news.ts'
 import { introInfo } from './intro-model.ts'
+import { rowsOf, withScrollBar } from './scrollbar.tsx'
 import type { IntroInfo } from './intro-model.ts'
 import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES, lookFrom } from './looks.ts'
 import { checkForUpdate, UPDATE_KEY } from './update.ts'
@@ -115,6 +116,8 @@ const STAR_KEY = 'star'
 const TIP_KEY = 'tip'
 const STAR_ASK_KEY = 'starAsk'
 const STAR_ASK_EVERY = 4
+const STAR_ASK_FIRST = 2
+const SCROLLBAR_MIN_COLUMNS = 20
 const MODEL_KEY = 'model'
 const EFFORT_KEY = 'effort'
 const MAIN_EFFORT_KEY = 'mainEffort'
@@ -161,6 +164,7 @@ let lastAdvisor = 'opus'
 let advisorCommand = true
 let tip: number | undefined
 let starAsk = false
+let starAskClosable = false
 type Carried = { tree: AgentTreeState; look: AgentTreeLook; unread: Record<string, string[]>; sessionId?: string }
 type Pin = string | undefined
 type Level = string | number
@@ -833,7 +837,8 @@ async function starAskDue($: EngineInterface): Promise<boolean> {
   const starts = Number(stored ?? 0)
   const count = Number.isInteger(starts) && starts >= 0 ? starts + 1 : 1
   await $.store.set(STAR_ASK_KEY, count).catch(() => undefined)
-  return count % STAR_ASK_EVERY === 0
+  starAskClosable = count > STAR_ASK_FIRST
+  return count <= STAR_ASK_FIRST || count % STAR_ASK_EVERY === 0
 }
 
 async function starAskEnd($: EngineInterface): Promise<void> {
@@ -1319,7 +1324,7 @@ export const register: Register = (on, options) => {
       }
       return drawNotice({ Box, Text, Button } as never, e.props.bodyColumns, newsCard, now - noticeStartedAt, { palette: PALETTES[look.colors], animate, words: wordsFor(lang) }, () => void endNotice($).catch(() => undefined))
     }
-    return drawTree({ Box, Text, Button, Markdown } as never, s, e.props.bodyColumns, e.props.scroll?.bodyRows, {
+    const treeLook = {
       frame: tick,
       animate,
       now,
@@ -1331,8 +1336,18 @@ export const register: Register = (on, options) => {
       questions,
       ...(tip !== undefined ? { tip } : {}),
       ...(starAsk ? { starAsk } : {}),
+      ...(starAsk && starAskClosable ? { starAskClosable } : {}),
       docked: e.props.placement === 'dock',
-    })
+    }
+    const columns = e.props.bodyColumns
+    const rows = e.props.scroll?.bodyRows
+    const full = drawTree({ Box, Text, Button, Markdown } as never, s, columns, rows, treeLook)
+    if (rows === undefined || columns < SCROLLBAR_MIN_COLUMNS) return full
+    const fullRows = rowsOf(full, columns)
+    if (fullRows <= rows) return full
+    const narrow = drawTree({ Box, Text, Button, Markdown } as never, s, columns - 1, rows, treeLook)
+    const palette = PALETTES[look.colors]
+    return withScrollBar({ Box, Text } as never, narrow, columns - 1, { offset: e.props.scroll?.offset ?? 0, rows, total: rowsOf(narrow, columns - 1) }, { track: palette.dim, thumb: palette.main })
   })
 
   on('ui.press', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
