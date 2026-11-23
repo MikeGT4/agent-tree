@@ -4309,7 +4309,7 @@ describe('Tabs', () => {
     const ui = await $.ui.mount(pane(90))
     for (const key of TAB_KEYS) expect(await ui.find({ key })).toBeDefined()
     const text = await screen(ui)
-    for (const word of ['Baum', 'Berichte', 'Dateien', 'Verlauf', 'Verbrauch', 'Hilfe']) expect(text).toContain(word)
+    for (const word of ['Baum', 'Berichte', 'Dateien', 'Verlauf', 'Kosten', '?']) expect(text).toContain(word)
     expect(text).toContain('"key":"tab-tops"')
     expect(text).toContain('"key":"main"')
     await ui.unmount()
@@ -4328,10 +4328,18 @@ describe('Tabs', () => {
     await ui.unmount()
   })
 
+  test('mit den kurzen Namen bleiben die Reiter bis 46 Spalten gerahmt', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(46))
+    expect(await screen(ui)).toContain('"key":"tab-tops"')
+    await ui.unmount()
+  })
+
   test('bei schmaler Leiste wird aus den Reitern ein Streifen', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
-    const ui = await $.ui.mount(pane(46))
+    const ui = await $.ui.mount(pane(44))
     for (const key of TAB_KEYS) expect(await ui.find({ key })).toBeDefined()
     expect(await screen(ui)).not.toContain('"key":"tab-tops"')
     await ui.unmount()

@@ -6,7 +6,7 @@ A side pane for Claude Code that shows a session's agents as a live tree.
 
 Stop and correct running sub-agents, switch model and effort for them and the main session, toggle the advisor, change the look, watch your limits.
 
-Tabs: each agent's full report, files, log, usage.
+Tabs: each agent's full report, files, log, cost.
 
 <img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.7.1/readme-agent-tree-6.gif" width="560" alt="Demo of the functions above">
 

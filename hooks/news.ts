@@ -48,8 +48,8 @@ export const NEWS: Readonly<Record<string, Readonly<Record<Lang, readonly string
     en: ['A scroll bar on the right when there is more than fits'],
   },
   '0.7.17': {
-    de: ['Verbrauch zeigt Denkstufe, Tokens und Kosten je Agent'],
-    en: ['Usage shows effort, tokens and cost per agent'],
+    de: ['Reiter Kosten mit Denkstufe, Tokens und Kosten je Agent, kürzere Reiternamen'],
+    en: ['Cost tab with effort, tokens and cost per agent, shorter tab names'],
   },
 }
 

@@ -28,9 +28,9 @@ Berichte: Aufgabe und ganze Antwort jedes Agenten.
 
 Dateien: geändert und gelesen je Agent, doppelte oben. Gelesene mit geschätzten Tokens (~), die schwerste zuerst.
 
-![Verbrauch](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-de-5.png)
+![Kosten](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-de-5.png)
 
-Verbrauch: Denkstufe, Kontext, Werkzeugaufrufe und Laufzeit je Agent, darunter Tokens und Kosten je Stufe, Hauptsitzung und Limits.
+Kosten: Denkstufe, Tokens, Kosten, Limits.
 
 ![Verlauf](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.11/guide-de-6.png)
 
