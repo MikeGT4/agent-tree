@@ -1,10 +1,10 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import { describe, expect, test } from 'claude-code/testing'
 
-import { completed, createTree, fileNoted, fullText, pathKey, reportAgent, reportLoaded, reportPinned, resolvedPath, selectedSet, stepped, detailOpened, freshTree, hasNewReport, lookOpened, pickerOpened, selectionToggled, spawned, tabChosen, tabOf, TABS } from '../hooks/model.ts'
+import { completed, createTree, fileNoted, fullText, pathKey, reportAgent, reportLoaded, reportPinned, resolvedPath, selectedSet, stepped, detailOpened, freshTree, hasNewReport, lookOpened, pickerOpened, selectionToggled, spawned, spent, tabChosen, tabOf, TABS } from '../hooks/model.ts'
 import type { AgentTreeState } from '../types'
 import { drawTree, pressKey } from '../hooks/view.tsx'
-import { usageRows } from '../hooks/tabs.tsx'
+import { usageGroups, usageRows } from '../hooks/tabs.tsx'
 
 const spawn = (agentId: string) => ({ agentId, agentType: 'Explore', description: `Auftrag ${agentId}`, background: false, fork: false })
 
@@ -92,6 +92,23 @@ describe('Verbrauch', () => {
     s = stepped(s, { agentId: 'a1', model: 'claude-haiku-5-5', contextTokens: 5000 }, 4)
     s = stepped(s, { agentId: 'a2', model: 'claude-haiku-5-5', contextTokens: 90000 }, 5)
     expect(usageRows(s).map(n => n.id)).toEqual(['a2', 'a1', 'a3'])
+  })
+
+  test('die Auswertung fasst die Agenten je Denkstufe zusammen, die höchste zuerst, mit Tokens, Kosten und Laufzeit', () => {
+    let s = spawned(spawned(spawned(createTree(0), spawn('a1'), 0), spawn('a2'), 0), spawn('a3'), 0)
+    s = stepped(s, { agentId: 'a1', model: 'claude-haiku-5-5', effort: 'medium' }, 1)
+    s = stepped(s, { agentId: 'a2', model: 'claude-haiku-5-5', effort: 'high' }, 1)
+    s = stepped(s, { agentId: 'a3', model: 'claude-haiku-5-5', effort: 'high' }, 1)
+    s = spent(s, [
+      { id: 'a1', usage: [{ input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 800, cache_creation_input_tokens: 50 }], cost: { usd: 0.1 } },
+      { id: 'a2', usage: [{ input_tokens: 1000, output_tokens: 500, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }], cost: { usd: 0.5 } },
+      { id: 'a3', cost: { usd: 0.2 } },
+      { id: 'fremd', cost: { usd: 9 } },
+    ])
+    const groups = usageGroups(s, 10_000)
+    expect(groups.map(g => [g.effort, g.agents, g.tokens])).toEqual([['high', 2, 1500], ['medium', 1, 1000]])
+    expect(Math.round((groups[0]?.usd ?? 0) * 100)).toBe(70)
+    expect(groups[0]?.ms).toBe(20_000)
   })
 })
 

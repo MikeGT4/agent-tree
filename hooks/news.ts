@@ -2,7 +2,7 @@
 import { isNewer } from './update.ts'
 import type { Lang } from './words.ts'
 
-export const VERSION = '0.7.16'
+export const VERSION = '0.7.17'
 export const SEEN_VERSION_KEY = 'seenVersion'
 export const NOTICE_MS = 3000
 export const NOTICE_LINES = 3
@@ -46,6 +46,10 @@ export const NEWS: Readonly<Record<string, Readonly<Record<Lang, readonly string
   '0.7.16': {
     de: ['Scrollbalken rechts, wenn mehr Inhalt da ist als ins Fenster passt'],
     en: ['A scroll bar on the right when there is more than fits'],
+  },
+  '0.7.17': {
+    de: ['Verbrauch zeigt Denkstufe, Tokens und Kosten je Agent'],
+    en: ['Usage shows effort, tokens and cost per agent'],
   },
 }
 

@@ -4,7 +4,7 @@ import type { Elements } from 'claude-code'
 import type { AgentTreeLogEntry, AgentTreeLogSource, AgentTreeNode, AgentTreeReport, AgentTreeState, AgentTreeTab } from '../types'
 import { frameEdges, restyleLine, statusColor } from './looks.ts'
 import type { Glyphs, Palette } from './looks.ts'
-import { LOG_SOURCES, MAIN, TABS, clashShown, logTarget, clockTime, contextLevel, contextPercent, cut, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
+import { EFFORT_LEVELS, LOG_SOURCES, MAIN, TABS, clashShown, effortLabel, logTarget, clockTime, contextLevel, contextPercent, cut, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
 import { helpItems, logLine } from './words.ts'
 import type { Lang, Words } from './words.ts'
 import { VERSION, newsBetween } from './news.ts'
@@ -415,6 +415,23 @@ export type UsageInput = ViewInput & {
   mainLine: string
 }
 
+export type UsageGroup = { effort?: string; agents: number; tokens: number; usd?: number; ms: number }
+
+export function usageGroups(s: AgentTreeState, now: number): UsageGroup[] {
+  const groups = new Map<string, UsageGroup>()
+  for (const n of s.agents) {
+    const key = n.effort ?? ''
+    const g = groups.get(key) ?? { ...(n.effort ? { effort: n.effort } : {}), agents: 0, tokens: 0, ms: 0 }
+    g.agents += 1
+    g.tokens += n.spentTokens ?? 0
+    if (n.costUsd !== undefined) g.usd = (g.usd ?? 0) + n.costUsd
+    g.ms += Math.max(0, (n.endedAt ?? now) - n.startedAt)
+    groups.set(key, g)
+  }
+  const rank = (g: UsageGroup) => (g.effort ? (EFFORT_LEVELS as readonly string[]).indexOf(g.effort) : -1)
+  return [...groups.values()].sort((a, b) => rank(b) - rank(a))
+}
+
 export function drawUsage(ui: Ui, o: UsageInput) {
   const { Box, Text } = ui
   const sorted = usageRows(o.s)
@@ -427,6 +444,13 @@ export function drawUsage(ui: Ui, o: UsageInput) {
     const filled = Math.max(0, Math.min(USAGE_BAR, Math.round((percent / 100) * USAGE_BAR)))
     return `${o.glyphs.bar.full.repeat(filled)}${o.glyphs.bar.empty.repeat(USAGE_BAR - filled)}`
   }
+  const groups = usageGroups(o.s, o.now)
+  const total = groups.reduce<UsageGroup>(
+    (sum, g) => ({ agents: sum.agents + g.agents, tokens: sum.tokens + g.tokens, ms: sum.ms + g.ms, ...(g.usd !== undefined || sum.usd !== undefined ? { usd: (sum.usd ?? 0) + (g.usd ?? 0) } : {}) }),
+    { agents: 0, tokens: 0, ms: 0 },
+  )
+  const groupLine = (g: UsageGroup) =>
+    [o.w.usageAgents(g.agents), ...(g.tokens > 0 ? [`${fmtTokens(g.tokens, o.w.decimal)} Tokens`] : []), ...(g.usd !== undefined ? [o.w.cost(g.usd)] : []), fmtShortDuration(g.ms)].join(' · ')
   const cell = (key: string, width: number, text: string, color?: string) => (
     <Box key={key} width={width} flexShrink={0}>
       <Text color={color} wrap="truncate-end">
@@ -436,17 +460,6 @@ export function drawUsage(ui: Ui, o: UsageInput) {
   )
   return (
     <Box key="usage-view" flexDirection="column" width={o.width} marginTop={1}>
-      {o.limits.map((l, i) => (
-        <Text key={`usage-limit:${i}`} color={l.color} wrap="truncate-end">
-          {l.text}
-        </Text>
-      ))}
-      <Text wrap="truncate-end">
-        <Text bold color={o.palette.main}>
-          {o.w.main}
-        </Text>
-        {` · ${o.mainLine}`}
-      </Text>
       {rows.length === 0 ? (
         <Box key="usage-none" marginTop={1}>
           <Text color={o.palette.dim}>{o.w.noAgents}</Text>
@@ -460,6 +473,7 @@ export function drawUsage(ui: Ui, o: UsageInput) {
               </Text>
             </Box>
             {cell('usage-head-model', 12, o.w.model, o.palette.dim)}
+            {cell('usage-head-effort', 7, o.w.usageEffort, o.palette.dim)}
             {cell('usage-head-context', 14, o.w.context, o.palette.dim)}
             {cell('usage-head-tools', 10, o.w.tools, o.palette.dim)}
             {cell('usage-head-time', 8, o.w.duration, o.palette.dim)}
@@ -478,6 +492,7 @@ export function drawUsage(ui: Ui, o: UsageInput) {
                   <Text wrap="truncate-end">{`${n.description} · ${typeLabel(n.type)}`}</Text>
                 </Box>
                 {cell(`usage-model:${n.id}`, 12, modelLabel(n.model) || '·')}
+                {cell(`usage-effort:${n.id}`, 7, n.effort ? effortLabel(n.effort) : '·')}
                 {cell(`usage-context:${n.id}`, 14, context, levelColor(percent))}
                 {cell(`usage-tools:${n.id}`, 10, String(n.toolCount))}
                 {cell(`usage-time:${n.id}`, 8, fmtShortDuration((n.endedAt ?? o.now) - n.startedAt))}
@@ -487,6 +502,34 @@ export function drawUsage(ui: Ui, o: UsageInput) {
           {moreLine(ui, o, sorted.slice(TAB_AGENTS))}
         </Box>
       )}
+      <Box key="usage-summary" flexDirection="column" width={o.width} marginTop={1}>
+        <Text bold color={o.palette.main}>
+          {o.w.usageSummary}
+        </Text>
+        {groups.map(g => (
+          <Text key={`usage-group:${g.effort ?? '-'}`} wrap="truncate-end">
+            <Text bold>{g.effort ? effortLabel(g.effort) : o.w.effortNone}</Text>
+            {` · ${groupLine(g)}`}
+          </Text>
+        ))}
+        {groups.length > 1 ? (
+          <Text key="usage-group:total" wrap="truncate-end">
+            <Text bold>{o.w.usageTotal}</Text>
+            {` · ${groupLine(total)}`}
+          </Text>
+        ) : null}
+        <Text key="usage-main" wrap="truncate-end">
+          <Text bold color={o.palette.main}>
+            {o.w.main}
+          </Text>
+          {` · ${o.mainLine}`}
+        </Text>
+        {o.limits.map((l, i) => (
+          <Text key={`usage-limit:${i}`} color={l.color} wrap="truncate-end">
+            {l.text}
+          </Text>
+        ))}
+      </Box>
     </Box>
   )
 }

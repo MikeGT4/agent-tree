@@ -84,6 +84,7 @@ import {
   stopCancelled,
   stopRequested,
   stopSent,
+  spent,
   synced,
   tabChosen,
   tabOf,
@@ -535,7 +536,12 @@ function noteQuestion(turn: number, text: string): void {
 async function catchUp($: EngineInterface, now: number, keep: number): Promise<void> {
   const list = await $.agent.list().catch(() => [])
   for (const entry of list) seen.add(entry.id)
-  await change($, s => trimmed(synced(adopted(s, list, now), list, now), keep))
+  await change($, s => trimmed(spent(synced(adopted(s, list, now), list, now), list), keep))
+}
+
+async function recordSpend($: EngineInterface): Promise<void> {
+  const list = await $.agent.list().catch(() => [])
+  await change($, s => spent(s, list))
 }
 
 type Found = { task?: string; answer?: string; denied?: boolean }
@@ -1241,6 +1247,7 @@ export const register: Register = (on, options) => {
     if (e.agentId && (await read($, reportTexts).catch(() => undefined))?.[e.agentId]) await loadReport($, e.agentId).catch(() => undefined)
     if (after) await ensureReport($, after).catch(() => undefined)
     if (!e.agentId) await catchUp($, now, keep).catch(() => undefined)
+    else await recordSpend($).catch(() => undefined)
     await dropChanger($, e.agentId ?? MAIN).catch(() => undefined)
     return result
   })

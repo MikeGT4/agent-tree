@@ -30,7 +30,7 @@ Files: changed and read per agent, shared first. Read files show estimated token
 
 ![Usage](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-5.png)
 
-Usage: limits, context, tools, time.
+Usage: effort, context, tools and time per agent, below it tokens and cost per effort level, the main session and limits.
 
 ![Log](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.11/guide-6.png)
 

@@ -44,6 +44,10 @@ export type Words = {
   fromSub: string
   last: string
   duration: string
+  usageEffort: string
+  usageSummary: string
+  usageTotal: string
+  usageAgents: (n: number) => string
   notAsked: string
   writes: [string, string]
   log: string
@@ -244,6 +248,10 @@ export const WORDS: Record<Lang, Words> = {
     fromSub: 'Sub',
     last: 'zuletzt',
     duration: 'Dauer',
+    usageEffort: 'Stufe',
+    usageSummary: 'Auswertung',
+    usageTotal: 'Zusammen',
+    usageAgents: n => (n === 1 ? '1 Agent' : `${n} Agenten`),
     notAsked: 'noch nie gefragt',
     writes: ['schreibt nie', 'selbst Code'],
     log: 'Sitzungsprotokoll',
@@ -459,6 +467,10 @@ export const WORDS: Record<Lang, Words> = {
     fromSub: 'sub',
     last: 'last',
     duration: 'took',
+    usageEffort: 'Effort',
+    usageSummary: 'Summary',
+    usageTotal: 'Total',
+    usageAgents: n => (n === 1 ? '1 agent' : `${n} agents`),
     notAsked: 'not asked yet',
     writes: ['never writes', 'code itself'],
     log: 'Session log',

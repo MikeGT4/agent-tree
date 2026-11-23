@@ -30,6 +30,8 @@ export type AgentTreeNode = {
   task?: string
   answer?: string
   answerTokens?: number
+  spentTokens?: number
+  costUsd?: number
 }
 
 export type AgentTreeStyle = 'line' | 'pixel' | 'braille' | 'hud' | 'ascii'

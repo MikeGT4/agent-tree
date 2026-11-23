@@ -1124,6 +1124,22 @@ export function synced(s: AgentTreeState, list: readonly { id: string; status: s
 
 export type ListedAgent = { id: string; description: string; type: string; status: string; parentId?: string }
 
+export type SpentAgent = { id: string; usage?: readonly { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number }[]; cost?: { usd: number } }
+
+export function spent(s: AgentTreeState, list: readonly SpentAgent[]): AgentTreeState {
+  let next = s
+  for (const entry of list) {
+    if (!entry.usage && !entry.cost) continue
+    if (!findAgent(next, entry.id)) continue
+    const tokens = entry.usage?.reduce((sum, u) => sum + u.input_tokens + u.output_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens, 0)
+    const usd = entry.cost?.usd
+    next = withAgent(next, entry.id, n =>
+      n.spentTokens === tokens && n.costUsd === usd ? n : { ...n, ...(tokens !== undefined ? { spentTokens: tokens } : {}), ...(usd !== undefined ? { costUsd: usd } : {}) },
+    )
+  }
+  return next
+}
+
 const LISTED_STATUS: Record<string, AgentTreeStatus> = {
   pending: 'running',
   running: 'running',
