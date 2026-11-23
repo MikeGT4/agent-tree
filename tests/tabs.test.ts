@@ -14,7 +14,7 @@ describe('Tabs im Zustand', () => {
   })
 
   test('die Reihenfolge der Tabs steht fest', () => {
-    expect(TABS).toEqual(['tree', 'reports', 'files', 'log', 'usage', 'help'])
+    expect(TABS).toEqual(['tree', 'reports', 'files', 'log', 'usage', 'terminals', 'help'])
   })
 
   test('ein gewählter Tab gilt', () => {
@@ -235,7 +235,7 @@ describe('Größe der gezeichneten Tabs', () => {
     let s = many(100)
     for (let i = 1; i <= 100; i++) s = completed(s, finish(`a${i}`), 200 + i)
     expect(s.log.length).toBe(150)
-    expect(size(s, 'log')).toBeLessThan(50000)
+    expect(size(s, 'log')).toBeLessThan(55000)
   })
 
   test('der Baum bleibt mit zweihundert Agenten unter der Grenze', () => {

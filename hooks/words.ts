@@ -48,6 +48,20 @@ export type Words = {
   usageSummary: string
   usageTotal: string
   usageAgents: (n: number) => string
+  peerHere: string
+  peerOthers: string
+  peerNone: string
+  peerClashTitle: string
+  peerNotesTitle: string
+  peerTake: string
+  peerAgents: (n: number) => string
+  peerDirty: (n: number) => string
+  peerAgo: (time: string) => string
+  peerClashLine: (name: string, folder: string) => string
+  peerClashToast: (name: string, folder: string) => string
+  peerNoteToast: (folder: string, name: string) => string
+  peerNotePrompt: (folder: string, path: string) => string
+  peerNoteFilled: string
   notAsked: string
   writes: [string, string]
   log: string
@@ -252,6 +266,20 @@ export const WORDS: Record<Lang, Words> = {
     usageSummary: 'Auswertung',
     usageTotal: 'Zusammen',
     usageAgents: n => (n === 1 ? '1 Agent' : `${n} Agenten`),
+    peerHere: 'Dieses Terminal',
+    peerOthers: 'Andere Terminals',
+    peerNone: 'kein anderes Terminal mit Agent Tree offen',
+    peerClashTitle: 'Gleiche Datei in zwei Terminals',
+    peerNotesTitle: 'Markdown in anderen Terminals geändert',
+    peerTake: 'Hier prüfen',
+    peerAgents: n => (n === 1 ? '1 Agent läuft' : `${n} Agenten laufen`),
+    peerDirty: n => (n === 1 ? '1 Änderung offen' : `${n} Änderungen offen`),
+    peerAgo: time => `vor ${time}`,
+    peerClashLine: (name, folder) => `${name} · hier und in ${folder}`,
+    peerClashToast: (name, folder) => `⚠ ${name} wurde auch im Terminal ${folder} geändert`,
+    peerNoteToast: (folder, name) => `Terminal ${folder} hat ${name} geändert, siehe Reiter Fenster`,
+    peerNotePrompt: (folder, path) => `Im Terminal ${folder} wurde ${path} geändert. Lies die Änderung und prüfe, ob sie auch die Markdown-Dateien dieses Projekts betrifft. Frag mich, bevor du etwas einträgst.`,
+    peerNoteFilled: 'Die Frage steht in der Eingabe, Enter schickt sie ab',
     notAsked: 'noch nie gefragt',
     writes: ['schreibt nie', 'selbst Code'],
     log: 'Sitzungsprotokoll',
@@ -275,7 +303,7 @@ export const WORDS: Record<Lang, Words> = {
       'Tipp: a öffnet das Aussehen: fünf Stile, vier Farbschemata',
       'Tipp: Reiter ? zeigt alle Tasten',
     ],
-    tabs: { tree: 'Baum', reports: 'Berichte', files: 'Dateien', log: 'Verlauf', usage: 'Kosten', help: '?' },
+    tabs: { tree: 'Baum', reports: 'Berichte', files: 'Dateien', log: 'Verlauf', usage: 'Kosten', terminals: 'Fenster', help: '?' },
     fullReport: 'ganzer Bericht ›',
     helpKeys: 'Tasten',
     helpFast: 'f: Fast Mode',
@@ -471,6 +499,20 @@ export const WORDS: Record<Lang, Words> = {
     usageSummary: 'Summary',
     usageTotal: 'Total',
     usageAgents: n => (n === 1 ? '1 agent' : `${n} agents`),
+    peerHere: 'This terminal',
+    peerOthers: 'Other terminals',
+    peerNone: 'no other terminal with Agent Tree open',
+    peerClashTitle: 'Same file in two terminals',
+    peerNotesTitle: 'Markdown changed in other terminals',
+    peerTake: 'Check here',
+    peerAgents: n => (n === 1 ? '1 agent running' : `${n} agents running`),
+    peerDirty: n => (n === 1 ? '1 uncommitted change' : `${n} uncommitted changes`),
+    peerAgo: time => `${time} ago`,
+    peerClashLine: (name, folder) => `${name} · here and in ${folder}`,
+    peerClashToast: (name, folder) => `⚠ ${name} was also changed in the terminal ${folder}`,
+    peerNoteToast: (folder, name) => `The terminal ${folder} changed ${name}, see the Terminals tab`,
+    peerNotePrompt: (folder, path) => `In the terminal ${folder}, ${path} was changed. Read the change and check whether it also concerns the Markdown files of this project. Ask me before you write anything.`,
+    peerNoteFilled: 'The question is in your prompt, Enter sends it',
     notAsked: 'not asked yet',
     writes: ['never writes', 'code itself'],
     log: 'Session log',
@@ -494,7 +536,7 @@ export const WORDS: Record<Lang, Words> = {
       'Tip: a opens the look: five styles, four color schemes',
       'Tip: the ? tab lists every key',
     ],
-    tabs: { tree: 'Tree', reports: 'Reports', files: 'Files', log: 'Log', usage: 'Cost', help: '?' },
+    tabs: { tree: 'Tree', reports: 'Reports', files: 'Files', log: 'Log', usage: 'Cost', terminals: 'Terminals', help: '?' },
     fullReport: 'full report ›',
     helpKeys: 'Keys',
     helpFast: 'f: fast mode',

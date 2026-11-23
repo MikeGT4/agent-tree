@@ -4,6 +4,7 @@ import type { Elements } from 'claude-code'
 import type { AgentTreeLogEntry, AgentTreeLogSource, AgentTreeNode, AgentTreeReport, AgentTreeState, AgentTreeTab } from '../types'
 import { frameEdges, restyleLine, statusColor } from './looks.ts'
 import type { Glyphs, Palette } from './looks.ts'
+import type { Peer, PeerClash, PeerNews } from './peers.ts'
 import { EFFORT_LEVELS, LOG_SOURCES, MAIN, TABS, clashShown, effortLabel, logTarget, clockTime, contextLevel, contextPercent, cut, fmtShortDuration, fmtTokens, modelLabel, typeLabel, windowOf } from './model.ts'
 import { helpItems, logLine } from './words.ts'
 import type { Lang, Words } from './words.ts'
@@ -530,6 +531,84 @@ export function drawUsage(ui: Ui, o: UsageInput) {
           </Text>
         ))}
       </Box>
+    </Box>
+  )
+}
+
+export type PeerView = { self: Peer; others: readonly Peer[]; clashes: readonly PeerClash[]; news: readonly PeerNews[] }
+
+export type TerminalsInput = ViewInput & {
+  now: number
+  peers?: PeerView
+  take?: (index: number) => void
+  drop?: (index: number) => void
+}
+
+export function drawTerminals(ui: Ui, o: TerminalsInput) {
+  const { Box, Text, Button } = ui
+  const view = o.peers
+  const line = (p: Peer, here: boolean) => {
+    const parts = [
+      ...(p.branch ? [p.branch] : []),
+      ...(p.dirty ? [o.w.peerDirty(p.dirty)] : []),
+      ...(p.running ? [o.w.peerAgents(p.running)] : []),
+      ...(p.costUsd !== undefined ? [o.w.cost(p.costUsd)] : []),
+      ...(here ? [] : [o.w.peerAgo(fmtShortDuration(Math.max(0, o.now - p.at)))]),
+    ]
+    return (
+      <Text key={`peer:${p.id}`} wrap="truncate-end">
+        <Text bold color={here ? o.palette.main : o.palette.agent}>
+          {p.folder}
+        </Text>
+        {parts.length ? ` · ${parts.join(' · ')}` : ''}
+      </Text>
+    )
+  }
+  if (!view) {
+    return (
+      <Box key="terminals-view" flexDirection="column" width={o.width} marginTop={1}>
+        <Text color={o.palette.dim}>{o.w.peerNone}</Text>
+      </Box>
+    )
+  }
+  return (
+    <Box key="terminals-view" flexDirection="column" width={o.width} marginTop={1}>
+      <Text bold color={o.palette.main}>
+        {o.w.peerHere}
+      </Text>
+      {line(view.self, true)}
+      <Box key="peer-others" flexDirection="column" width={o.width} marginTop={1}>
+        <Text bold color={o.palette.main}>
+          {o.w.peerOthers}
+        </Text>
+        {view.others.length === 0 ? <Text color={o.palette.dim}>{o.w.peerNone}</Text> : [...view.others].sort((a, b) => b.at - a.at).map(p => line(p, false))}
+      </Box>
+      {view.clashes.length ? (
+        <Box key="peer-clashes" flexDirection="column" width={o.width} marginTop={1}>
+          <Text bold color={o.palette.warn}>{`⚠ ${o.w.peerClashTitle}`}</Text>
+          {view.clashes.map((c, i) => (
+            <Text key={`peer-clash:${i}`} color={o.palette.warn} wrap="truncate-end">
+              {o.w.peerClashLine(c.name, c.folder)}
+            </Text>
+          ))}
+        </Box>
+      ) : null}
+      {view.news.length ? (
+        <Box key="peer-notes" flexDirection="column" width={o.width} marginTop={1}>
+          <Text bold color={o.palette.main}>
+            {o.w.peerNotesTitle}
+          </Text>
+          {view.news.map((n, i) => (
+            <Box key={`peer-note:${i}`} flexDirection="row" columnGap={1} width={o.width}>
+              <Box key={`peer-note-text:${i}`} flexGrow={1} flexShrink={1}>
+                <Text wrap="truncate-end">{`${n.folder} · ${n.name} · ${o.w.peerAgo(fmtShortDuration(Math.max(0, o.now - n.at)))}`}</Text>
+              </Box>
+              {o.take ? <Button key={`notetake:${i}`} label={o.w.peerTake} onPress={() => o.take?.(i)} /> : null}
+              {o.drop ? <Button key={`notedrop:${i}`} plain label="×" onPress={() => o.drop?.(i)} /> : null}
+            </Box>
+          ))}
+        </Box>
+      ) : null}
     </Box>
   )
 }

@@ -5,7 +5,7 @@ import type { On } from 'claude-code'
 
 import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES } from '../hooks/looks.ts'
 import { LOGO_COLORS, LOGO_EMPTY, LOGO_FLASH } from '../hooks/logo.ts'
-import { createTree } from '../hooks/model.ts'
+import { createTree, pathKey } from '../hooks/model.ts'
 import { VERSION } from '../hooks/news.ts'
 import { wordsFor } from '../hooks/words.ts'
 import type { AgentTreeState } from '../types'
@@ -30,6 +30,16 @@ function engine(on: On, listed: unknown[] = [], refuse: { send?: boolean; comman
     stored[key] = value
     storeSets.push({ key, value })
     return { value: undefined } as never
+  })
+  on('store.keys', () => ({ value: Object.keys(stored) }) as never)
+  on('store.delete', (_, e) => {
+    delete stored[(e as { key: string }).key]
+    return { value: undefined } as never
+  })
+  on('process.run', (_, e) => {
+    const argv = (e as { argv: string[] }).argv
+    if (argv[0] !== 'git') throw new Error('nicht erlaubt')
+    return { value: { exitCode: 0, stdout: argv[1] === 'rev-parse' ? 'main\n' : ' M a.md\n', stderr: '' } } as never
   })
   const settings: Record<string, unknown> = {}
   const commands: { command: string; args: string }[] = []
@@ -4301,15 +4311,15 @@ describe('Platz und Hebel in der Leiste', () => {
 })
 
 describe('Tabs', () => {
-  const TAB_KEYS = ['tab:tree', 'tab:reports', 'tab:files', 'tab:log', 'tab:usage', 'tab:help']
+  const TAB_KEYS = ['tab:tree', 'tab:reports', 'tab:files', 'tab:log', 'tab:usage', 'tab:terminals', 'tab:help']
 
-  test('die Leiste zeigt sechs Tabs als Reiter, der Baum ist gewählt', de, async ($, on) => {
+  test('die Leiste zeigt sieben Tabs als Reiter, der Baum ist gewählt', de, async ($, on) => {
     engine(on)
     await oneAgentWithAdvisor($)
     const ui = await $.ui.mount(pane(90))
     for (const key of TAB_KEYS) expect(await ui.find({ key })).toBeDefined()
     const text = await screen(ui)
-    for (const word of ['Baum', 'Berichte', 'Dateien', 'Verlauf', 'Kosten', '?']) expect(text).toContain(word)
+    for (const word of ['Baum', 'Berichte', 'Dateien', 'Verlauf', 'Kosten', 'Fenster', '?']) expect(text).toContain(word)
     expect(text).toContain('"key":"tab-tops"')
     expect(text).toContain('"key":"main"')
     await ui.unmount()
@@ -4328,10 +4338,10 @@ describe('Tabs', () => {
     await ui.unmount()
   })
 
-  test('mit den kurzen Namen bleiben die Reiter bis 46 Spalten gerahmt', de, async ($, on) => {
+  test('mit den kurzen Namen bleiben alle sieben Reiter bis 55 Spalten gerahmt', de, async ($, on) => {
     engine(on)
     await startSession($)
-    const ui = await $.ui.mount(pane(46))
+    const ui = await $.ui.mount(pane(55))
     expect(await screen(ui)).toContain('"key":"tab-tops"')
     await ui.unmount()
   })
@@ -4589,6 +4599,68 @@ describe('Tab Verbrauch', () => {
     await ui.press({ key: 'tab:usage' })
     await ui.redraw()
     expect(await screen(ui)).toMatch(/noch keine Unteragenten/)
+    await ui.unmount()
+  })
+})
+
+describe('Tab Fenster', () => {
+  const otherPeer = (at: number) => ({
+    id: 'other',
+    folder: 'claude_hermes',
+    rootKey: 'fremd',
+    branch: 'main',
+    running: 1,
+    costUsd: 0.42,
+    at,
+    changed: [{ key: pathKey('/x/auth.ts'), name: 'auth.ts', at }],
+    notes: [{ path: '/home/u/claude_hermes/CLAUDE.md', name: 'CLAUDE.md', at }],
+  })
+
+  test('zeigt dieses und die anderen offenen Terminals, eine Markdown-Änderung von dort und legt die Frage in die Eingabe', de, async ($, on) => {
+    const t = engine(on)
+    mock.clock(on, { now: 5_000_000 })
+    t.stored['peer:other'] = otherPeer(5_000_000)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:terminals' })
+    await ui.redraw()
+    const text = await screen(ui)
+    for (const word of ['Dieses Terminal', 'Andere Terminals', 'claude_hermes', 'main', '1 Agent läuft', '0,42 $', 'Markdown in anderen Terminals geändert', 'CLAUDE.md', 'Hier prüfen']) expect(text).toContain(word)
+    expect(Object.keys(t.stored).filter(k => k.startsWith('peer:')).length).toBe(2)
+    expect(t.toasts.some(x => x.includes('claude_hermes hat CLAUDE.md geändert'))).toBe(true)
+    await ui.press({ key: 'notetake:0' })
+    await ui.redraw()
+    expect(t.fills.at(-1)).toContain('/home/u/claude_hermes/CLAUDE.md')
+    expect(await screen(ui)).not.toContain('Hier prüfen')
+    await ui.unmount()
+  })
+
+  test('warnt, wenn ein anderes Terminal dieselbe Datei geändert hat, und vergisst alte Einträge', de, async ($, on) => {
+    const t = engine(on)
+    const now = 5_000_000
+    mock.clock(on, { now })
+    t.stored['peer:other'] = otherPeer(now)
+    t.stored['peer:alt'] = { ...otherPeer(now - 2 * 60 * 60_000), id: 'alt' }
+    await oneAgentWithAdvisor($)
+    await $.tool.call({ tool: 'Edit', file_path: '/x/auth.ts', old_string: 'a', new_string: 'b' } as never)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:terminals' })
+    await ui.redraw()
+    const text = await screen(ui)
+    expect(text).toContain('Gleiche Datei in zwei Terminals')
+    expect(text).toContain('auth.ts · hier und in claude_hermes')
+    expect(t.stored['peer:alt']).toBeUndefined()
+    expect(t.toasts.some(x => x.includes('auth.ts wurde auch im Terminal claude_hermes geändert'))).toBe(true)
+    await ui.unmount()
+  })
+
+  test('ohne andere Terminals steht dort, dass keins offen ist', de, async ($, on) => {
+    engine(on)
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'tab:terminals' })
+    await ui.redraw()
+    expect(await screen(ui)).toContain('kein anderes Terminal mit Agent Tree offen')
     await ui.unmount()
   })
 })

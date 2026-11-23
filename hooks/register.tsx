@@ -10,6 +10,9 @@ import { NOTICE_MS, SEEN_VERSION_KEY, VERSION, noticeFor } from './news.ts'
 import type { UpdateNotice } from './news.ts'
 import { introInfo } from './intro-model.ts'
 import { rowsOf, withScrollBar } from './scrollbar.tsx'
+import { PEER_BEAT_MS, changeNoted, crossClashes, folderOf, isForgotten, isMarkdown, isOpen, isPeerKey, peerKey, peerNews, peerOf } from './peers.ts'
+import type { Peer, PeerNews } from './peers.ts'
+import type { PeerView } from './tabs.tsx'
 import type { IntroInfo } from './intro-model.ts'
 import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES, lookFrom } from './looks.ts'
 import { checkForUpdate, UPDATE_KEY } from './update.ts'
@@ -178,6 +181,12 @@ let generation = 0
 let handing: Promise<void> | undefined
 let carried: Carried | undefined
 let reportRequest = 0
+let selfPeer: Peer | undefined
+let peers: Peer[] = []
+let peerBeat: Timer | undefined
+let peerPublishedAt = 0
+const droppedNotes: Set<string> = new Set()
+const toldPeers: Set<string> = new Set()
 
 async function takeOver($: EngineInterface): Promise<void> {
   if (handing) return handing
@@ -544,6 +553,120 @@ async function recordSpend($: EngineInterface): Promise<void> {
   await change($, s => spent(s, list))
 }
 
+async function peerStart($: EngineInterface, formerId: string | undefined): Promise<void> {
+  const id = await $.session.id()
+  const root = await $.session.root().catch(() => '')
+  if (formerId && formerId !== id) await $.store.delete(peerKey(formerId)).catch(() => undefined)
+  const now = await clock($)
+  selfPeer = { id, folder: folderOf(root), rootKey: pathKey(resolvedPath(root, '')), running: 0, at: now, changed: [], notes: [] }
+  toldPeers.clear()
+  await peerTick($)
+  peerBeat?.cancel()
+  try {
+    peerBeat = $.clock.every(PEER_BEAT_MS, () => {
+      void peerTick($).catch(() => undefined)
+    })
+  } catch {
+    peerBeat = undefined
+  }
+}
+
+async function peerTick($: EngineInterface): Promise<void> {
+  await gitNoted($)
+  await recordSpend($).catch(() => undefined)
+  await peerPublish($, true)
+  await peerRefresh($)
+}
+
+async function gitNoted($: EngineInterface): Promise<void> {
+  if (!selfPeer) return
+  const head = await $.process.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], { timeoutMs: 5000 }).catch(() => undefined)
+  const status = await $.process.run(['git', 'status', '--porcelain'], { timeoutMs: 5000 }).catch(() => undefined)
+  const { branch: _branch, dirty: _dirty, ...rest } = selfPeer
+  selfPeer = {
+    ...rest,
+    ...(head?.exitCode === 0 && head.stdout.trim() ? { branch: head.stdout.trim() } : {}),
+    ...(status?.exitCode === 0 ? { dirty: status.stdout.split('\n').filter(line => line.trim() !== '').length } : {}),
+  }
+}
+
+async function peerPublish($: EngineInterface, force: boolean): Promise<void> {
+  if (!selfPeer) return
+  const now = await clock($)
+  if (!force && now - peerPublishedAt < 5000) return
+  const s = await latest($).catch(() => undefined)
+  const { costUsd: _cost, ...rest } = selfPeer
+  selfPeer = { ...rest, at: now, running: s ? counts(s).running : 0, ...(s?.main.costUsd !== undefined ? { costUsd: s.main.costUsd } : {}) }
+  peerPublishedAt = now
+  await $.store.set(peerKey(selfPeer.id), selfPeer).catch(() => undefined)
+}
+
+async function peerRefresh($: EngineInterface): Promise<void> {
+  if (!selfPeer) return
+  const own = peerKey(selfPeer.id)
+  const keys = (await $.store.keys().catch(() => [] as string[])).filter(key => isPeerKey(key) && key !== own)
+  const now = await clock($)
+  const found: Peer[] = []
+  for (const key of keys) {
+    const peer = peerOf(await $.store.get(key).catch(() => undefined))
+    if (isForgotten(peer, now)) {
+      await $.store.delete(key).catch(() => undefined)
+      continue
+    }
+    if (peer && isOpen(peer, now)) found.push(peer)
+  }
+  peers = found
+  const w = wordsFor(lang)
+  for (const clash of crossClashes(selfPeer, peers, now)) {
+    const mark = `clash|${clash.id}|${clash.name}`
+    if (toldPeers.has(mark)) continue
+    toldPeers.add(mark)
+    $.ui.toast(w.peerClashToast(clash.name, clash.folder))
+  }
+  for (const news of peerNews(selfPeer, peers, droppedNotes, now)) {
+    if (toldPeers.has(news.mark)) continue
+    toldPeers.add(news.mark)
+    $.ui.toast(w.peerNoteToast(news.folder, news.name))
+  }
+  await update($, introBeat, n => (n + 1) % 1_000_000).catch(() => undefined)
+}
+
+async function peerChanged($: EngineInterface, path: string): Promise<void> {
+  if (!selfPeer) return
+  const cwd = await $.session.cwd().catch(() => '')
+  const whole = resolvedPath(path, cwd)
+  const now = await clock($)
+  const name = fileNameOf({ file_path: path }) ?? whole
+  selfPeer = changeNoted(selfPeer, { key: pathKey(whole), name, at: now }, isMarkdown(whole) ? { path: whole, name, at: now } : undefined)
+  await peerPublish($, true)
+  await peerRefresh($)
+}
+
+function peerViewNow(now: number): PeerView | undefined {
+  return selfPeer ? { self: selfPeer, others: peers, clashes: crossClashes(selfPeer, peers, now), news: peerNews(selfPeer, peers, droppedNotes, now) } : undefined
+}
+
+function peerNewsNow(now: number): PeerNews[] {
+  return selfPeer ? peerNews(selfPeer, peers, droppedNotes, now) : []
+}
+
+async function noteTake($: EngineInterface, index: number): Promise<void> {
+  const news = peerNewsNow(await clock($))[index]
+  if (!news) return
+  const w = wordsFor(lang)
+  const filled = await $.prompt.fill({ text: w.peerNotePrompt(news.folder, news.path) }).catch(() => undefined)
+  droppedNotes.add(news.mark)
+  $.ui.toast(filled?.isFilled ? w.peerNoteFilled : w.writeNoPrompt)
+  await update($, introBeat, n => (n + 1) % 1_000_000).catch(() => undefined)
+}
+
+async function noteDrop($: EngineInterface, index: number): Promise<void> {
+  const news = peerNewsNow(await clock($))[index]
+  if (!news) return
+  droppedNotes.add(news.mark)
+  await update($, introBeat, n => (n + 1) % 1_000_000).catch(() => undefined)
+}
+
 type Found = { task?: string; answer?: string; denied?: boolean }
 
 function handedBack(uses: unknown): string | undefined {
@@ -809,6 +932,8 @@ function actionsFor($: EngineInterface): TreeActions {
     advisor: () => void toggleAdvisor($).catch(ignore),
     fast: () => void toggleFast($).catch(ignore),
     starOff: () => void starAskEnd($).catch(ignore),
+    noteTake: index => void noteTake($, index).catch(ignore),
+    noteDrop: index => void noteDrop($, index).catch(ignore),
     deselect: () => void change($, t => deselected(t)).catch(ignore),
     look: () => void change($, t => (t.lookOpen ? closed(t) : lookOpened(t))).catch(ignore),
     restyle: (row, id) => void applyLook($, row, id).catch(ignore),
@@ -911,6 +1036,7 @@ export const register: Register = (on, options) => {
   lang = resolveLang(options.language, undefined)
 
   on('session.start', async ($, e, next) => {
+    const formerId = carried?.sessionId
     carried = undefined
     handing = undefined
     generation += 1
@@ -947,6 +1073,7 @@ export const register: Register = (on, options) => {
     if (e.isInteractive !== false) await prepareNotice($).catch(() => undefined)
     tip = tipsOn && e.isInteractive !== false ? await nextTip($).catch(() => undefined) : undefined
     starAsk = e.isInteractive !== false ? await starAskDue($).catch(() => false) : false
+    if (e.isInteractive !== false) await peerStart($, formerId).catch(() => undefined)
     await maybeStartIntro($, e.isInteractive !== false).catch(() => undefined)
     if (!introTicker) startNotice($, await clock($))
     if (openOnStart) await $.ui.open({ id: PANE, title: TITLE, columns, rows: INLINE_ROWS }).catch(() => undefined)
@@ -1176,6 +1303,7 @@ export const register: Register = (on, options) => {
       if (held) return { deny: held }
       const result = await next(e)
       if (path && succeeded(result)) await noteChange($, MAIN, path).catch(() => undefined)
+      if (path && succeeded(result)) await peerChanged($, path).catch(() => undefined)
       return result
     }
     const stopping = stoppingIds.has(agentId)
@@ -1225,6 +1353,7 @@ export const register: Register = (on, options) => {
       const output = kind === 'read' ? (result as { text?: unknown }).text : undefined
       await change($, s => fileNoted(s, agentId, kind, file, typeof output === 'string' ? output : undefined)).catch(() => undefined)
       if (path) await noteChange($, agentId, path).catch(() => undefined)
+      if (path) await peerChanged($, path).catch(() => undefined)
     }
     return result
   }).catch(($, e, next) => next(e))
@@ -1247,6 +1376,7 @@ export const register: Register = (on, options) => {
     if (e.agentId && (await read($, reportTexts).catch(() => undefined))?.[e.agentId]) await loadReport($, e.agentId).catch(() => undefined)
     if (after) await ensureReport($, after).catch(() => undefined)
     if (!e.agentId) await catchUp($, now, keep).catch(() => undefined)
+    if (!e.agentId) await peerPublish($, false).catch(() => undefined)
     else await recordSpend($).catch(() => undefined)
     await dropChanger($, e.agentId ?? MAIN).catch(() => undefined)
     return result
@@ -1270,7 +1400,12 @@ export const register: Register = (on, options) => {
   })
 
   on('session.end', async ($, e, next) => {
-    if (e.reason !== 'clear' && e.reason !== 'resume') return next(e)
+    if (e.reason !== 'clear' && e.reason !== 'resume') {
+      peerBeat?.cancel()
+      peerBeat = undefined
+      if (selfPeer) await $.store.delete(peerKey(selfPeer.id)).catch(() => undefined)
+      return next(e)
+    }
     try {
       return await next(e)
     } finally {
@@ -1343,7 +1478,7 @@ export const register: Register = (on, options) => {
       questions,
       ...(tip !== undefined ? { tip } : {}),
       ...(starAsk ? { starAsk } : {}),
-      ...(starAsk && starAskClosable ? { starAskClosable } : {}),
+      ...(starAsk && starAskClosable ? { starAskClosable } : {}), ...(peerViewNow(now) ? { peers: peerViewNow(now) } : {}),
       docked: e.props.placement === 'dock',
     }
     const columns = e.props.bodyColumns

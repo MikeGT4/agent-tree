@@ -137,7 +137,7 @@ export type AgentTreeReport = {
   answer?: string
 }
 
-export type AgentTreeTab = 'tree' | 'reports' | 'files' | 'log' | 'usage' | 'help'
+export type AgentTreeTab = 'tree' | 'reports' | 'files' | 'log' | 'usage' | 'terminals' | 'help'
 
 export type AgentTreeState = {
   startedAt: number

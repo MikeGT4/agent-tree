@@ -54,7 +54,8 @@ import { LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, li
 import type { Glyphs, LookRow, Palette } from './looks.ts'
 import { WORDS, activityText, familyOr, helpItems, logLine, lookOptionLabel, toolText, wordsFor } from './words.ts'
 import type { Lang, Words } from './words.ts'
-import { drawFiles, drawHelp, drawLog, drawReports, drawTabBar, drawUsage, tabNames, tabRows } from './tabs.tsx'
+import { drawFiles, drawHelp, drawLog, drawReports, drawTabBar, drawTerminals, drawUsage, tabNames, tabRows } from './tabs.tsx'
+import type { PeerView } from './tabs.tsx'
 
 export { WORDS, logLine, wordsFor }
 export type { Lang }
@@ -132,6 +133,8 @@ export type TreeActions = {
   logOpen: (turn: number) => void
   report: (agentId: string) => void
   starOff: () => void
+  noteTake: (index: number) => void
+  noteDrop: (index: number) => void
 }
 
 export type TreeLook = {
@@ -148,6 +151,7 @@ export type TreeLook = {
   tip?: number
   starAsk?: boolean
   starAskClosable?: boolean
+  peers?: PeerView
 }
 
 export function pressKey(actions: TreeActions, key: string): boolean {
@@ -159,6 +163,8 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   else if (key === 'advisor:toggle') actions.advisor()
   else if (key === 'fast:toggle') actions.fast()
   else if (key === 'star:off') actions.starOff()
+  else if (kind === 'notetake' && /^\d+$/.test(rest)) actions.noteTake(Number(rest))
+  else if (kind === 'notedrop' && /^\d+$/.test(rest)) actions.noteDrop(Number(rest))
   else if (key === 'actions:close') actions.deselect()
   else if (kind === 'tab' && TABS.some(t => t === rest)) actions.tab(rest as AgentTreeTab)
   else if (kind === 'logfilter') actions.logFilter(rest)
@@ -586,7 +592,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const tight = height !== undefined && height < TIGHT_BELOW
   const wide = width >= WIDE_FROM && !tight
   const tab = tabOf(s)
-  const names = tabNames(w.tabs, { ...(hasClash(s) ? { files: '⚠' } : {}), ...(hasNewReport(s) ? { reports: glyphs.marks.done } : {}) })
+  const names = tabNames(w.tabs, { ...(hasClash(s) ? { files: '⚠' } : {}), ...(hasNewReport(s) ? { reports: glyphs.marks.done } : {}), ...(look.peers?.clashes.length ? { terminals: '⚠' } : look.peers?.news.length ? { terminals: '●' } : {}) })
   const treeWidth = Math.max(1, oddFloor(wide ? width - ADVISOR_WIDTH - 2 : width))
   const perRow = Math.max(1, Math.floor((treeWidth + AGENT_GAP) / (AGENT_WIDTH + AGENT_GAP)))
   const asRows = tight || perRow < 2
@@ -1520,6 +1526,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             })
           : null}
         {tab === 'files' ? drawFiles(ui, { s, width, palette, glyphs, w, lang }) : null}
+        {tab === 'terminals' ? drawTerminals(ui, { s, width, palette, glyphs, w, lang, now, ...(look.peers ? { peers: look.peers } : {}), ...(actions ? { take: (index: number) => actions.noteTake(index), drop: (index: number) => actions.noteDrop(index) } : {}) }) : null}
         {tab === 'usage'
           ? drawUsage(ui, {
               s,

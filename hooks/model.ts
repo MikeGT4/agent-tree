@@ -120,7 +120,7 @@ export function closed(s: AgentTreeState): AgentTreeState {
   return { ...s, detail: undefined, lookOpen: undefined, choices: { ...choicesOf(s), picker: undefined } }
 }
 
-export const TABS: readonly AgentTreeTab[] = ['tree', 'reports', 'files', 'log', 'usage', 'help']
+export const TABS: readonly AgentTreeTab[] = ['tree', 'reports', 'files', 'log', 'usage', 'terminals', 'help']
 
 export function tabOf(s: AgentTreeState): AgentTreeTab {
   return s.tab ?? 'tree'
