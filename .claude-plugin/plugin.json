@@ -92,7 +92,7 @@
     "localModel": {
       "type": "string",
       "title": "Local model",
-      "description": "Name of a model on your own server (for example qwen2.5-coder:7b in Ollama); Claude can then hand it simple tasks. Empty turns it off",
+      "description": "Name of a model on your own server (for example qwen2.5-coder:7b in Ollama); Claude Code can then hand it simple tasks. Empty turns it off",
       "default": ""
     },
     "localUrl": {

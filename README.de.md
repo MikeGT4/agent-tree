@@ -8,7 +8,7 @@ Laufende Unteragenten stoppen und korrigieren, Modell und Denkstufe wechseln, au
 
 Tabs: ganzer Bericht jedes Agenten, Dateien, Verlauf, Kosten, andere Terminals.
 
-Wahlweise gibt Claude einfache Aufgaben an dein lokales Modell (Ollama, LM Studio) und spart Tokens.
+Wahlweise gibt Claude Code einfache Aufgaben an dein lokales Modell (Ollama, LM Studio) und spart Tokens.
 
 <img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.7.1/readme-agent-tree-6.gif" width="560" alt="Demo der Funktionen oben">
 
