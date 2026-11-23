@@ -8,6 +8,8 @@ Laufende Unteragenten stoppen und korrigieren, Modell und Denkstufe wechseln, au
 
 Tabs: ganzer Bericht jedes Agenten, Dateien, Verlauf, Kosten, andere Terminals.
 
+Wahlweise gibt Claude einfache Aufgaben an dein lokales Modell (Ollama, LM Studio) und spart Tokens.
+
 <img src="https://github.com/MikeGT4/agent-tree/releases/download/v0.7.1/readme-agent-tree-6.gif" width="560" alt="Demo der Funktionen oben">
 
 ## Installation
@@ -26,10 +28,8 @@ Braucht Claude Code 2.1.292+, getestet mit 2.1.328.
 
 ## Was es ausführt
 
-Einmal am Tag, in Sitzungen mit Bedienung, ruft es Claude Codes `plugin list --json` auf, liest seine Version von raw.githubusercontent.com und startet bei einer neueren `plugin update agent-tree`. Sonst sendet es nichts ([PRIVACY.md](PRIVACY.md)).
+Einmal am Tag liest es die neueste Version von raw.githubusercontent.com und startet bei einer neueren `plugin update agent-tree`. Sonst sendet es nur die Aufgaben an ein lokales Modell, das du einträgst ([PRIVACY.md](PRIVACY.md)).
 
-Seine Hooks greifen nur, wenn du in der Leiste handelst; Tippen beendet nur Intro oder Update-Karte.
-
-[Anleitung](docs/GUIDE.de.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.18/agent-tree-anleitung.pdf)
+[Anleitung](docs/GUIDE.de.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.19/agent-tree-anleitung.pdf)
 
 MIT, © 2026 Mike Pollow, [Digitalroots](https://www.digitalroots.de/leistungen/software/agent-tree/)
