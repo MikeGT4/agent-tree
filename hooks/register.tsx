@@ -12,6 +12,7 @@ import { introInfo } from './intro-model.ts'
 import { rowsOf, withScrollBar } from './scrollbar.tsx'
 import { PEER_BEAT_MS, changeNoted, crossClashes, folderOf, isForgotten, isMarkdown, isOpen, isPeerKey, peerKey, peerNews, peerOf } from './peers.ts'
 import type { Peer, PeerNews } from './peers.ts'
+import type { LimitSample } from './model.ts'
 import type { PeerView } from './tabs.tsx'
 import type { IntroInfo } from './intro-model.ts'
 import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES, lookFrom } from './looks.ts'
@@ -88,6 +89,8 @@ import {
   stopRequested,
   stopSent,
   spent,
+  limitRest,
+  samplesKept,
   lifeSigns,
   toolStarted,
   toolEnded,
@@ -190,6 +193,7 @@ let peerBeat: Timer | undefined
 let peerPublishedAt = 0
 const droppedNotes: Set<string> = new Set()
 const toldPeers: Set<string> = new Set()
+const limitSamples: Map<string, LimitSample[]> = new Map()
 
 async function takeOver($: EngineInterface): Promise<void> {
   if (handing) return handing
@@ -1392,13 +1396,20 @@ export const register: Register = (on, options) => {
     await takeOver($).catch(() => undefined)
     const result = await next(e)
     if (e.changed.includes('context') || e.changed.includes('cost') || e.changed.includes('rateLimits')) {
+      const measuredAt = await clock($)
+      const limits = limitsFrom(e.rateLimits).map(l => {
+        const samples = samplesKept(limitSamples.get(l.kind) ?? [], { at: measuredAt, percent: l.percent })
+        limitSamples.set(l.kind, samples)
+        const rest = limitRest(samples, measuredAt, l.resetsAt)
+        return rest === undefined ? l : { ...l, restMs: rest }
+      })
       await change($, s =>
         measured(s, {
           tokens: e.context.tokens,
           window: e.context.window,
           percent: e.context.percent,
           costUsd: e.cost?.usd,
-          limits: limitsFrom(e.rateLimits),
+          limits,
         }),
       ).catch(() => undefined)
     }

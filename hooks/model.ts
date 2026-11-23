@@ -1061,6 +1061,31 @@ export function measured(
 
 export const LIMIT_ORDER = ['five_hour', 'seven_day']
 
+export const RATE_MIN_SPAN_MS = 10 * 60_000
+export const RATE_WINDOW_MS = 30 * 60_000
+export const RATE_MIN_RISE = 2
+
+export type LimitSample = { at: number; percent: number }
+
+export function samplesKept(samples: readonly LimitSample[], sample: LimitSample): LimitSample[] {
+  const last = samples.at(-1)
+  if (last && sample.percent < last.percent) return [sample]
+  const kept = samples.filter(x => sample.at - x.at <= RATE_WINDOW_MS)
+  return last && last.percent === sample.percent && kept.length > 1 ? kept : [...kept, sample]
+}
+
+export function limitRest(samples: readonly LimitSample[], now: number, resetsAt?: string): number | undefined {
+  const recent = samples.filter(x => now - x.at <= RATE_WINDOW_MS)
+  const first = recent[0]
+  const last = recent.at(-1)
+  if (!first || !last || last.at - first.at < RATE_MIN_SPAN_MS) return undefined
+  const rise = last.percent - first.percent
+  if (rise < RATE_MIN_RISE) return undefined
+  const rest = Math.max(0, ((100 - last.percent) / rise) * (last.at - first.at) - (now - last.at))
+  const reset = resetsAt ? Date.parse(resetsAt) : Number.NaN
+  return Number.isFinite(reset) && now + rest >= reset ? undefined : rest
+}
+
 export function limitsFrom(value: unknown): AgentTreeLimit[] {
   if (!Array.isArray(value)) return []
   const rank = (kind: string) => (LIMIT_ORDER.includes(kind) ? LIMIT_ORDER.indexOf(kind) : LIMIT_ORDER.length)

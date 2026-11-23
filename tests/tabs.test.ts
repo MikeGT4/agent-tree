@@ -1,7 +1,7 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
 import { describe, expect, test } from 'claude-code/testing'
 
-import { completed, createTree, fileNoted, fullText, pathKey, reportAgent, reportLoaded, reportPinned, resolvedPath, selectedSet, stepped, detailOpened, freshTree, hasNewReport, lookOpened, pickerOpened, selectionToggled, spawned, spent, lifeSigns, toolStarted, toolEnded, quietFor, QUIET_MS, tabChosen, tabOf, TABS } from '../hooks/model.ts'
+import { completed, createTree, fileNoted, fullText, pathKey, reportAgent, reportLoaded, reportPinned, resolvedPath, selectedSet, stepped, detailOpened, freshTree, hasNewReport, lookOpened, pickerOpened, selectionToggled, spawned, spent, lifeSigns, toolStarted, toolEnded, quietFor, QUIET_MS, limitRest, samplesKept, tabChosen, tabOf, TABS } from '../hooks/model.ts'
 import type { AgentTreeState } from '../types'
 import { drawTree, pressKey } from '../hooks/view.tsx'
 import { usageGroups, usageRows } from '../hooks/tabs.tsx'
@@ -136,6 +136,27 @@ describe('Lebenszeichen', () => {
   test('ein fertiger Agent ist nie still', () => {
     const s = completed(spawned(createTree(0), spawn('a1'), 0), { agentId: 'a1', answer: 'OK', reason: 'answer', isAborted: false, durationMs: 10 }, 5)
     expect(quietFor(node(s)!, 10 * QUIET_MS)).toBeUndefined()
+  })
+})
+
+describe('Verbrauchstempo', () => {
+  const minute = 60_000
+  test('eine Schätzung erst nach zehn Minuten und zwei Punkten Anstieg', () => {
+    let samples = samplesKept([], { at: 0, percent: 50 })
+    samples = samplesKept(samples, { at: 5 * minute, percent: 60 })
+    expect(limitRest(samples, 5 * minute)).toBeUndefined()
+    samples = samplesKept(samples, { at: 10 * minute, percent: 70 })
+    expect(limitRest(samples, 10 * minute)).toBe(15 * minute)
+    expect(limitRest(samples, 12 * minute)).toBe(13 * minute)
+  })
+
+  test('ohne Anstieg, nach dem Zurücksetzen und wenn der Reset früher kommt, keine Schätzung', () => {
+    const flat = samplesKept(samplesKept([], { at: 0, percent: 50 }), { at: 20 * minute, percent: 51 })
+    expect(limitRest(flat, 20 * minute)).toBeUndefined()
+    const reset = samplesKept(samplesKept([], { at: 0, percent: 90 }), { at: 20 * minute, percent: 3 })
+    expect(reset).toEqual([{ at: 20 * minute, percent: 3 }])
+    const rising = samplesKept(samplesKept([], { at: 0, percent: 50 }), { at: 10 * minute, percent: 70 })
+    expect(limitRest(rising, 10 * minute, new Date(10 * minute + 5 * minute).toISOString())).toBeUndefined()
   })
 })
 

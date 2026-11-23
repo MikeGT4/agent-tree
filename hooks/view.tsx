@@ -295,11 +295,16 @@ function levelColor(palette: Palette, percent: number | undefined, otherwise: st
   return level === 'alert' ? palette.failed : level === 'warn' ? palette.warn : otherwise
 }
 
+function restText(ms: number, w: Words): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000))
+  return minutes < 60 ? w.minutes(minutes) : w.hoursMinutes(Math.floor(minutes / 60), minutes % 60)
+}
+
 export function limitSegments(limits: readonly AgentTreeLimit[], w: Words, glyphs: Glyphs, width: number): string[] {
   const build = (bars: boolean) =>
     limits.map((l, i) => {
       const reset = resetTime(l.kind, l.resetsAt, w.locale)
-      const parts = [w.limitKind(l.kind), ...(bars ? [limitBar(l.percent, glyphs.bar)] : []), w.percent(Math.round(l.percent)), ...(reset ? [w.limitReset(reset)] : [])]
+      const parts = [w.limitKind(l.kind), ...(bars ? [limitBar(l.percent, glyphs.bar)] : []), w.percent(Math.round(l.percent)), ...(reset ? [w.limitReset(reset)] : []), ...(l.restMs !== undefined ? [w.limitRest(restText(l.restMs, w))] : [])]
       return `${i ? ' · ' : ''}${parts.join(' ')}`
     })
   const full = build(true)
