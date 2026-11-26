@@ -998,7 +998,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const arrowRow = (key: string, boxWidth: number, box: RenderChildren) => {
     const side = Math.max(0, (treeWidth - boxWidth) / 2)
-    const arrow = wide && side >= 3 ? `${glyphs.rail.h.repeat(side - 2)}${glyphs.rail.head} ` : ' '
+    const arrow = wide && showAdvisor && side >= 3 ? `${glyphs.rail.h.repeat(side - 2)}${glyphs.rail.head} ` : ' '
     return (
       <Box key={key} flexDirection="row" width={treeWidth}>
         <Box width={side} flexShrink={0} flexDirection="column" justifyContent="center" alignItems="flex-end">

@@ -2,7 +2,7 @@
 import { isNewer } from './update.ts'
 import type { Lang } from './words.ts'
 
-export const VERSION = '0.7.19'
+export const VERSION = '0.7.20'
 export const SEEN_VERSION_KEY = 'seenVersion'
 export const NOTICE_LINES = 3
 
@@ -57,6 +57,10 @@ export const NEWS: Readonly<Record<string, Readonly<Record<Lang, readonly string
   '0.7.19': {
     de: ['Wahlweise ein lokales Modell für einfache Aufgaben (Ollama, LM Studio)'],
     en: ['Optional local model for simple tasks (Ollama, LM Studio)'],
+  },
+  '0.7.20': {
+    de: ['Berater-Modell per Drop-down, Modelle mit 1M Kontext', 'Teile der Leiste ein- und ausblenden', 'Diese Karte bleibt, bis du OK drückst'],
+    en: ['Advisor model drop-down, models with 1M context', 'Show or hide parts of the pane', 'This card stays until you press OK'],
   },
 }
 
