@@ -30,6 +30,6 @@ Needs Claude Code 2.1.292+, tested with 2.1.328.
 
 Once a day it reads the latest version from raw.githubusercontent.com and, if newer, runs `plugin update agent-tree`. Beyond that it sends only the tasks for a local model you set ([PRIVACY.md](PRIVACY.md)).
 
-[Guide](docs/GUIDE.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.19/agent-tree-guide.pdf)
+[Guide](docs/GUIDE.md) · [PDF](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.20/agent-tree-guide.pdf)
 
 MIT, © 2026 Mike Pollow, [Digitalroots](https://www.digitalroots.de/en/leistungen/software/agent-tree/)
