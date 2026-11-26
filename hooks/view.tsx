@@ -9,6 +9,7 @@ import type {
   AgentTreeLogSource,
   AgentTreeLook,
   AgentTreeNode,
+  AgentTreePart,
   AgentTreeReport,
   AgentTreeState,
   AgentTreeStatus,
@@ -52,7 +53,7 @@ import {
   TABS,
 } from './model.ts'
 import type { Feedback } from './model.ts'
-import { LOOK_OPTIONS, LOOK_ROWS, PALETTES, STYLES, frameEdges, isLookChoice, lightColor, lookFrom, restyleLine, statusColor } from './looks.ts'
+import { LOOK_OPTIONS, LOOK_ROWS, PALETTES, PARTS, STYLES, frameEdges, isLookChoice, isPart, lightColor, lookFrom, partShown, restyleLine, statusColor } from './looks.ts'
 import type { Glyphs, LookRow, Palette } from './looks.ts'
 import { WORDS, activityText, familyOr, helpItems, logLine, lookOptionLabel, toolText, wordsFor } from './words.ts'
 import type { Lang, Words } from './words.ts'
@@ -127,6 +128,9 @@ export type TreeActions = {
   stop: (agentId: string) => void
   write: (agentId: string) => void
   advisor: () => void
+  advisorMenu: () => void
+  part: (part: AgentTreePart) => void
+  advisorPick: (name: string) => void
   fast: () => void
   look: () => void
   restyle: (row: LookRow, id: string) => void
@@ -151,6 +155,8 @@ export type TreeLook = {
   actions?: TreeActions
   appearance?: AgentTreeLook
   canAdvise?: boolean
+  advisorMenu?: AdvisorMenu
+  theme?: 'light' | 'dark'
   docked?: boolean
   reports?: Record<string, AgentTreeReport>
   questions?: ReadonlyMap<number, string>
@@ -161,6 +167,8 @@ export type TreeLook = {
   local?: LocalView
 }
 
+export type AdvisorMenu = { open: boolean; offer: readonly string[]; pick: string }
+
 export function pressKey(actions: TreeActions, key: string): boolean {
   const colon = key.indexOf(':')
   if (colon < 0) return false
@@ -168,6 +176,9 @@ export function pressKey(actions: TreeActions, key: string): boolean {
   const rest = key.slice(colon + 1)
   if (key === 'picker:close' || key === 'detail:close' || key === 'look:close') actions.close()
   else if (key === 'advisor:toggle') actions.advisor()
+  else if (key === 'advisor:menu') actions.advisorMenu()
+  else if (kind === 'advisorpick' && rest) actions.advisorPick(rest)
+  else if (kind === 'lookpart' && isPart(rest)) actions.part(rest)
   else if (key === 'fast:toggle') actions.fast()
   else if (key === 'star:off') actions.starOff()
   else if (kind === 'notetake' && rest) actions.noteTake(rest)
@@ -267,6 +278,8 @@ export type RowPlanInput = {
   perRow: number
   total: number
   advisorRows: number
+  advisorHeld?: boolean
+  logHidden?: boolean
   earlier: boolean
   pickerRows?: number
   detailRows?: number
@@ -359,9 +372,9 @@ function leanest(o: RowPlanInput, cap: number): number {
 
 export function planRows(o: RowPlanInput): RowPlan {
   const cap = Math.min(o.total, o.asRows ? MAX_ROWS : MAX_GROUPS)
-  if (o.height === undefined) return { shown: cap, logRows: LOG_ROWS }
+  if (o.height === undefined) return { shown: cap, logRows: o.logHidden ? 0 : LOG_ROWS }
   const height = o.height
-  const withLog = !o.detailRows
+  const withLog = !o.detailRows && !o.logHidden
   let shown = 0
   for (let candidate = cap; candidate >= 1 && !shown; candidate--) {
     if (usedRows(o, candidate, withLog ? MIN_LOG_ROWS : undefined) <= height) shown = candidate
@@ -369,7 +382,7 @@ export function planRows(o: RowPlanInput): RowPlan {
   if (!shown) shown = leanest(o, cap)
   const rest = height - usedRows(o, shown, undefined)
   const logRows = withLog && rest > LOG_FRAME_ROWS ? Math.min(LOG_ROWS, rest - LOG_FRAME_ROWS) : 0
-  if (!o.wide && !logRows && usedRows(o, shown, undefined) > height) return { shown, logRows, advisor: false }
+  if (!o.wide && !o.advisorHeld && !logRows && usedRows(o, shown, undefined) > height) return { shown, logRows, advisor: false }
   return { shown, logRows }
 }
 
@@ -538,7 +551,7 @@ export function mainPickerLines(width: number, lang: Lang = 'de', offer?: readon
 }
 
 function lookLabelWidth(w: Words): number {
-  return Math.max(...LOOK_ROWS.map(row => w.lookRow[row].length))
+  return Math.max(w.lookParts.length, ...LOOK_ROWS.map(row => w.lookRow[row].length))
 }
 
 export function lookLines(width: number, lang: Lang = 'de'): number {
@@ -554,7 +567,8 @@ export function lookLines(width: number, lang: Lang = 'de'): number {
       width,
     ),
   )
-  return 2 + rows.reduce((sum, n) => sum + n, 0) + wrappedLines([`[ ${w.lookReset} ]`, '[ × ]'], width)
+  const parts = wrappedLines([label, ...PARTS.map(part => `[ ${w.part[part]} ]`)], width)
+  return 2 + rows.reduce((sum, n) => sum + n, 0) + parts + wrappedLines([`[ ${w.lookReset} ]`, '[ × ]'], width)
 }
 
 function wrappedLines(parts: readonly string[], width: number, gap = 1): number {
@@ -614,9 +628,12 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   const detail = s.detail
   const tight = height !== undefined && height < TIGHT_BELOW
   const wide = width >= WIDE_FROM && !tight
+  const showAdvisor = partShown(appearance, 'advisor')
+  const showLocal = partShown(appearance, 'local')
+  const showSide = showAdvisor || (showLocal && look.local !== undefined && actions !== undefined)
   const tab = tabOf(s)
   const names = tabNames(w.tabs, { ...(hasClash(s) ? { files: '⚠' } : {}), ...(hasNewReport(s) ? { reports: glyphs.marks.done } : {}), ...(look.peers?.clashes.length ? { terminals: '⚠' } : look.peers?.news.length ? { terminals: '●' } : {}) })
-  const treeWidth = Math.max(1, oddFloor(wide ? width - ADVISOR_WIDTH - 2 : width))
+  const treeWidth = Math.max(1, oddFloor(wide && showSide ? width - ADVISOR_WIDTH - 2 : width))
   const perRow = Math.max(1, Math.floor((treeWidth + AGENT_GAP) / (AGENT_WIDTH + AGENT_GAP)))
   const asRows = tight || perRow < 2
   const mainWidth = Math.min(MAIN_WIDTH, treeWidth)
@@ -712,12 +729,14 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     asRows,
     perRow,
     total: current.length,
-    advisorRows: (wide ? ADVISOR_BASE_ROWS + recentCalls.length : ADVISOR_COMPACT_ROWS) + localRowsOf(look.local, actions !== undefined, wide),
+    advisorRows: (showAdvisor ? (wide ? ADVISOR_BASE_ROWS + recentCalls.length : ADVISOR_COMPACT_ROWS) + (actions && look.advisorMenu?.open ? (wide ? look.advisorMenu.offer.length : 1) : 0) : 0) + (showLocal ? localRowsOf(look.local, actions !== undefined, wide) : 0),
+    logHidden: !partShown(appearance, 'log'),
+    advisorHeld: actions !== undefined && (look.local?.open === true || look.advisorMenu?.open === true),
     earlier: earlier > 0,
     pickerRows: (pickerTarget && actions ? 1 + (pickerTarget === MAIN ? mainPickerLines(width, lang, s.main.modelOffer) : pickerLines(pickerName, width, lang, pickerTarget !== NEW_AGENTS)) : 0) + (s.lookOpen && actions ? lookLines(width, lang) : 0),
     detailRows: detailNode && actions ? DETAIL_ROWS : 0,
     helpRows: tight ? 0 : 1,
-    limitRows: s.main.limits?.length ? 1 : 0,
+    limitRows: s.main.limits?.length && partShown(appearance, 'limits') ? 1 : 0,
     actionRows,
     hintRows,
     tabRows: tabRows(names, width, tight),
@@ -910,7 +929,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
         {centered(n.description || ' ', inner)}
       </Text>,
       <Text key="box-activity" size={SIZE.detail} color={quietFor(n, now) !== undefined ? palette.warn : palette.dim}>
-        {centered(quietFor(n, now) !== undefined ? w.quiet(fmtShortDuration(quietFor(n, now) ?? 0)) : (activityText(n.lastTool, lang) ?? `${w.tools}: ${n.toolCount}`), inner)}
+        {centered(n.waiting && n.status === 'running' ? w.waitingForMessage : quietFor(n, now) !== undefined ? w.quiet(fmtShortDuration(quietFor(n, now) ?? 0)) : (activityText(n.lastTool, lang) ?? `${w.tools}: ${n.toolCount}`), inner)}
       </Text>,
       <Text key="box-status" size={SIZE.detail} color={levelColor(palette, filledShare, statusColor(palette, n.status))}>
         {centered(statusLine, inner)}
@@ -1247,6 +1266,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
   )
 
   const advisorState = advisorModel ? advisorModel : w.off
+  const menu = look.advisorMenu
 
   const railLine = (key: string, text: string, plain = false) => (
     <Text key={key} size={SIZE.detail} wrap="truncate-end">
@@ -1260,9 +1280,21 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       <Text bold size={SIZE.title} color={palette.advisor} wrap="truncate-end">
         {w.advisorTitle}
       </Text>
-      <Text size={SIZE.detail} color={palette.advisor} wrap="truncate-end">
-        {advisorState}
-      </Text>
+      {actions && look.canAdvise !== false && menu ? (
+        <Box key="advisor-menu-row" flexDirection="row">
+          {advisorModel ? null : <Text color={palette.advisor}>{`${w.off} · `}</Text>}
+          <Button key="advisor:menu" plain label={`${familyLabel(menu.pick)} ▾`} onPress={() => actions.advisorMenu()} />
+        </Box>
+      ) : (
+        <Text size={SIZE.detail} color={palette.advisor} wrap="truncate-end">
+          {advisorState}
+        </Text>
+      )}
+      {actions && menu?.open ? menu.offer.map(name => (
+        <Box key={`advisor-pick-row:${name}`} flexDirection="row">
+          <Button key={`advisorpick:${name}`} label={familyLabel(name)} variant={name === menu.pick && advisorModel ? 'primary' : undefined} onPress={() => actions.advisorPick(name)} />
+        </Box>
+      )) : null}
       {actions && look.canAdvise !== false ? (
         <Box key="advisor-toggle-row" flexDirection="row">
           <Button key="advisor:toggle" plain label={advisorModel ? w.advisorOff : w.advisorOn} onPress={() => actions.advisor()} />
@@ -1296,7 +1328,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const localView = look.local
   const localBox = (boxWidth: number) => {
-    if (!localView || !actions) return null
+    if (!localView || !actions || !showLocal) return null
     const lv = localView
     const chosen = lv.choice.model
     const picks = lv.open ? lv.picks : []
@@ -1368,10 +1400,20 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             {`${w.advisor} · ${advisorModel ? `${advisorModel} · ${w.onCall}` : w.off} · ${w.calls} ${s.advisor.total}`}
           </Text>
         </Box>
+        {actions && look.canAdvise !== false && menu ? (
+          <Button key="advisor:menu" plain label={`${familyLabel(menu.pick)} ▾`} onPress={() => actions.advisorMenu()} />
+        ) : null}
         {actions && look.canAdvise !== false ? (
           <Button key="advisor:toggle" plain label={advisorModel ? w.advisorOff : w.advisorOn} onPress={() => actions.advisor()} />
         ) : null}
       </Box>
+      {actions && menu?.open ? (
+        <Box key="advisor-picks" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          {menu.offer.map(name => (
+            <Button key={`advisorpick:${name}`} label={familyLabel(name)} variant={name === menu.pick && advisorModel ? 'primary' : undefined} onPress={() => actions.advisorPick(name)} />
+          ))}
+        </Box>
+      ) : null}
       <Text size={SIZE.detail} color={palette.dim} wrap="truncate-end">
         {lastCall ? `${w.fromMain} ${s.advisor.fromMain} · ${w.fromSub} ${s.advisor.fromAgents} · ${w.last} ${clockTime(lastCall.at)}` : w.notAsked}
       </Text>
@@ -1553,7 +1595,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
 
   const limits = s.main.limits ?? []
   const limitTexts = limitSegments(limits, w, glyphs, width, now)
-  const limitRow = limits.length ? (
+  const limitRow = limits.length && partShown(appearance, 'limits') ? (
     <Box key="limits" flexDirection="row" width={width}>
       {limits.map((l, i) => (
         <Text key={`limit:${l.kind}`} size={SIZE.note} color={limitColor(palette, l.percent)} wrap="truncate-end">
@@ -1568,7 +1610,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     s.lookOpen && actions ? (
       <Box key="look" flexDirection="column" width={width} marginTop={1}>
         <Text color={palette.agent} wrap="truncate-end">
-          {w.look}
+          {look.theme ? `${w.look} · ${w.lookThemeNote(look.theme)}` : w.look}
         </Text>
         {LOOK_ROWS.map(row => (
           <Box key={`look-row:${row}`} flexDirection="row" flexWrap="wrap" columnGap={1} width={width}>
@@ -1586,6 +1628,14 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
             {row === 'light' ? <Box key="look-light-sample">{streakLine(glyphs.bar.full.repeat(LIGHT_SAMPLE), palette.agent, 5)}</Box> : null}
           </Box>
         ))}
+        <Box key="look-row:parts" flexDirection="row" flexWrap="wrap" columnGap={1} width={width}>
+          <Box key="look-label:parts" width={labelWidth} flexShrink={0}>
+            <Text color={palette.dim}>{w.lookParts}</Text>
+          </Box>
+          {PARTS.map(part => (
+            <Button key={`lookpart:${part}`} label={w.part[part]} variant={partShown(appearance, part) ? 'primary' : undefined} onPress={() => actions.part(part)} />
+          ))}
+        </Box>
         <Box key="look-end" flexDirection="row" columnGap={1}>
           <Button key="look:default" hotkey="0" label={w.lookReset} onPress={() => actions.restyleDefault()} />
           <Button key="look:close" hotkey="x" label="×" onPress={() => actions.close()} />
@@ -1643,15 +1693,17 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
       {lookRow}
       {wide ? (
         <Box key="body" flexDirection="row" columnGap={2} marginTop={1}>
-          <Box key="side" flexDirection="column" width={ADVISOR_WIDTH} flexShrink={0}>
-            {advisorColumn}
-            {localBox(ADVISOR_WIDTH)}
-          </Box>
+          {showSide ? (
+            <Box key="side" flexDirection="column" width={ADVISOR_WIDTH} flexShrink={0}>
+              {showAdvisor ? advisorColumn : null}
+              {localBox(ADVISOR_WIDTH)}
+            </Box>
+          ) : null}
           {tree}
         </Box>
       ) : (
         <Box key="body" flexDirection="column" marginTop={1}>
-          {plan.advisor === false ? null : advisorCompact}
+          {plan.advisor === false || !showAdvisor ? null : advisorCompact}
           {plan.advisor === false ? null : localBox(width)}
           {tree}
         </Box>

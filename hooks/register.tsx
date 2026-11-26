@@ -2,11 +2,11 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { AgentTreeLook, AgentTreeReport, AgentTreeState } from '../types'
+import type { AgentTreeLook, AgentTreePart, AgentTreeReport, AgentTreeState } from '../types'
 import { INTRO_MS } from './logo.ts'
 import { drawIntro } from './intro.tsx'
-import { drawNotice } from './notice.tsx'
-import { NOTICE_MS, SEEN_VERSION_KEY, VERSION, noticeFor } from './news.ts'
+import { NOTICE_GROW_MS, drawNotice } from './notice.tsx'
+import { SEEN_VERSION_KEY, VERSION, noticeFor } from './news.ts'
 import type { UpdateNotice } from './news.ts'
 import { introInfo } from './intro-model.ts'
 import { rowsOf, withScrollBar } from './scrollbar.tsx'
@@ -17,7 +17,7 @@ import type { LocalChoice, LocalFound, LocalSetup, LocalTally, LocalView } from 
 import type { LimitSample } from './model.ts'
 import type { PeerView } from './tabs.tsx'
 import type { IntroInfo } from './intro-model.ts'
-import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES, lookFrom } from './looks.ts'
+import { DEFAULT_LOOK, LOOK_OPTIONS, PALETTES, lookFrom, partToggled } from './looks.ts'
 import { checkForUpdate, UPDATE_KEY } from './update.ts'
 import type { UpdateHost } from './update.ts'
 import type { LookRow } from './looks.ts'
@@ -112,10 +112,12 @@ import {
   withMainModel,
   withMainModels,
   withLimits,
+  advisorFamily,
+  advisorOffer,
 } from './model.ts'
 import type { MainModels } from './model.ts'
 import { drawTree, pressKey, statusText } from './view.tsx'
-import type { TreeActions } from './view.tsx'
+import type { AdvisorMenu, TreeActions } from './view.tsx'
 import { familyOr, lookChoice, lookOptionLabel, resolveLang, wordsFor } from './words.ts'
 import type { Lang } from './words.ts'
 
@@ -125,6 +127,7 @@ const TITLE = 'Agent Tree'
 const SHAPE = 'agent-tree-1'
 const LOOK_SHAPE = 'agent-tree-look-1'
 const LOOK_KEY = 'look'
+const LIGHT_LOOK_KEY = 'look:light'
 const STAR_KEY = 'star'
 const TIP_KEY = 'tip'
 const STAR_ASK_KEY = 'starAsk'
@@ -174,6 +177,9 @@ let stoppingIds = new Set<string>()
 let codeMode = false
 let stopSentIds = new Set<string>()
 let lastAdvisor = 'opus'
+let advisorMenuOpen = false
+let saveWarned = false
+let theme: 'light' | 'dark' | undefined
 let advisorCommand = true
 let tip: number | undefined
 let starAsk = false
@@ -418,9 +424,11 @@ async function prepareNotice($: EngineInterface): Promise<void> {
 async function noticeTick($: EngineInterface, run: number): Promise<void> {
   const now = await clock($)
   if (run !== noticeRun) return
-  const over = noticeStartedAt === undefined ? now - (noticeOpenedAt ?? now) >= INTRO_WAIT_MS : now - noticeStartedAt >= NOTICE_MS
-  if (over) await endNotice($)
-  else await update($, introBeat, n => (n + 1) % 1_000_000)
+  if (noticeStartedAt === undefined) {
+    if (now - (noticeOpenedAt ?? now) >= INTRO_WAIT_MS) await endNotice($)
+    return
+  }
+  if (now - noticeStartedAt <= NOTICE_GROW_MS + INTRO_FRAME_MS) await update($, introBeat, n => (n + 1) % 1_000_000)
 }
 
 async function endNotice($: EngineInterface): Promise<void> {
@@ -502,30 +510,65 @@ async function forget($: EngineInterface, agentId: string): Promise<void> {
   await update($, unreadTexts, texts => withoutTexts(texts, id => id === agentId))
 }
 
-async function applyLook($: EngineInterface, row: LookRow, id: string): Promise<void> {
-  const saved = await $.store.get(LOOK_KEY).then(
+async function saveSetting($: EngineInterface, key: string, value: unknown): Promise<void> {
+  const saved = await $.store.set(key, value).then(
+    () => true,
+    () => false,
+  )
+  if (saved || saveWarned) return
+  saveWarned = true
+  $.ui.toast(wordsFor(lang).saveFailed)
+}
+
+function lookKeyNow(): string {
+  return theme === 'light' ? LIGHT_LOOK_KEY : LOOK_KEY
+}
+
+async function readTheme($: EngineInterface): Promise<void> {
+  const rows = await $.config.list().catch(() => [])
+  const value = rows.find(row => row.key === 'theme')?.value
+  theme = typeof value === 'string' && value ? (value.toLowerCase().startsWith('light') ? 'light' : 'dark') : undefined
+}
+
+async function storedLook($: EngineInterface): Promise<{ value: unknown } | undefined> {
+  const own = await $.store.get(lookKeyNow()).then(
     value => ({ value }),
     () => undefined,
   )
+  if (own?.value !== undefined || lookKeyNow() === LOOK_KEY) return own
+  return $.store.get(LOOK_KEY).then(
+    value => ({ value }),
+    () => undefined,
+  )
+}
+
+async function applyLook($: EngineInterface, row: LookRow, id: string): Promise<void> {
+  await changeLook($, look => ({ ...look, [row]: id }))
+}
+
+async function togglePart($: EngineInterface, part: AgentTreePart): Promise<void> {
+  await changeLook($, look => partToggled(look, part))
+}
+
+async function changeLook($: EngineInterface, apply: (look: AgentTreeLook) => AgentTreeLook): Promise<void> {
+  const saved = await storedLook($)
   const stored = lookFrom(saved ? saved.value : await read($, appearance))
-  await $.store.set(LOOK_KEY, lookFrom({ ...stored, [row]: id })).catch(() => undefined)
-  await update($, appearance, look => lookFrom({ ...lookFrom(look), [row]: id }))
+  await saveSetting($, lookKeyNow(), lookFrom(apply(stored)))
+  await update($, appearance, look => lookFrom(apply(lookFrom(look))))
 }
 
 async function resetLook($: EngineInterface): Promise<void> {
-  await $.store.set(LOOK_KEY, DEFAULT_LOOK).catch(() => undefined)
+  await saveSetting($, lookKeyNow(), DEFAULT_LOOK)
   await update($, appearance, () => DEFAULT_LOOK)
 }
 
 async function restoreLook($: EngineInterface): Promise<void> {
-  const look = await $.store.get(LOOK_KEY).then(
-    value => ({ value }),
-    () => undefined,
-  )
-  if (look) await update($, appearance, () => lookFrom(look.value))
+  const look = await storedLook($)
+  if (look && look.value !== undefined) await update($, appearance, () => lookFrom(look.value))
 }
 
 async function restoreChoices($: EngineInterface, interactive: boolean): Promise<boolean> {
+  await readTheme($)
   await restoreLook($)
   if (!interactive || choicesOf(await latest($)).restored) return false
   const model = await $.store.get(MODEL_KEY).catch(() => undefined)
@@ -539,19 +582,19 @@ async function restoreChoices($: EngineInterface, interactive: boolean): Promise
 async function chooseModel($: EngineInterface, target: string, family: string | undefined): Promise<void> {
   const now = await clock($)
   await change($, t => chosen(t, target, family, now))
-  if (target === NEW_AGENTS) await $.store.set(MODEL_KEY, family ?? null).catch(() => undefined)
+  if (target === NEW_AGENTS) await saveSetting($, MODEL_KEY, familyFrom(family) ?? null)
 }
 
 async function chooseEffort($: EngineInterface, target: string, effort: string | undefined): Promise<void> {
   const now = await clock($)
   await change($, t => effortChosen(t, target, effort, now))
-  if (target === NEW_AGENTS) await $.store.set(EFFORT_KEY, effort ?? null).catch(() => undefined)
-  if (target === MAIN) await $.store.set(MAIN_EFFORT_KEY, effort ?? null).catch(() => undefined)
+  if (target === NEW_AGENTS) await saveSetting($, EFFORT_KEY, effortFrom(effort) ?? null)
+  if (target === MAIN) await saveSetting($, MAIN_EFFORT_KEY, effortFrom(effort) ?? null)
 }
 
 async function chooseLogFilter($: EngineInterface, source: string): Promise<void> {
   const next = await change($, t => logFiltered(t, source))
-  await $.store.set(LOG_FILTER_KEY, next.logFilter ?? null).catch(() => undefined)
+  await saveSetting($, LOG_FILTER_KEY, logSourceFrom(next.logFilter) ?? null)
 }
 
 function noteQuestion(turn: number, text: string): void {
@@ -593,7 +636,7 @@ async function localApply($: EngineInterface): Promise<void> {
 }
 
 async function localSave($: EngineInterface): Promise<void> {
-  await $.store.set(LOCAL_KEY, localChoice).catch(() => undefined)
+  await saveSetting($, LOCAL_KEY, choiceOf(localChoice, undefined))
   await localApply($)
   await localRedraw($)
 }
@@ -898,7 +941,8 @@ async function startWrite($: EngineInterface, agentId: string): Promise<void> {
 async function readAdvisor($: EngineInterface): Promise<void> {
   const model = await $.settings.read({ key: 'advisorModel' }).catch(() => undefined)
   const name = typeof model === 'string' && model ? model : undefined
-  if (name) lastAdvisor = name
+  const family = advisorFamily(name)
+  if (family) lastAdvisor = family
   await change($, s => withAdvisorModel(s, name))
 }
 
@@ -912,7 +956,29 @@ async function advisorSettled($: EngineInterface, wanted: boolean): Promise<bool
 }
 
 async function toggleAdvisor($: EngineInterface): Promise<void> {
-  const args = (await latest($)).advisor.model ? 'off' : lastAdvisor
+  await runAdvisor($, (await latest($)).advisor.model ? 'off' : lastAdvisor)
+}
+
+async function toggleAdvisorMenu($: EngineInterface): Promise<void> {
+  advisorMenuOpen = !advisorMenuOpen
+  await localRedraw($)
+}
+
+async function pickAdvisor($: EngineInterface, name: string): Promise<void> {
+  advisorMenuOpen = false
+  if (!advisorOffer((await latest($)).main.modelOffer).includes(name)) {
+    await localRedraw($)
+    return
+  }
+  lastAdvisor = name
+  await runAdvisor($, name)
+}
+
+function advisorMenuNow(s: AgentTreeState): AdvisorMenu {
+  return { open: advisorMenuOpen, offer: advisorOffer(s.main.modelOffer), pick: advisorFamily(s.advisor.model) ?? lastAdvisor }
+}
+
+async function runAdvisor($: EngineInterface, args: string): Promise<void> {
   const ran = await $.command.run({ command: 'advisor', args }).then(
     () => true,
     () => false,
@@ -1030,6 +1096,9 @@ function actionsFor($: EngineInterface): TreeActions {
     },
     write: agentId => void startWrite($, agentId).catch(ignore),
     advisor: () => void toggleAdvisor($).catch(ignore),
+    advisorMenu: () => void toggleAdvisorMenu($).catch(ignore),
+    part: part => void togglePart($, part).catch(ignore),
+    advisorPick: name => void pickAdvisor($, name).catch(ignore),
     fast: () => void toggleFast($).catch(ignore),
     starOff: () => void starAskEnd($).catch(ignore),
     noteTake: mark => void peerNoteTaken($, mark).catch(ignore),
@@ -1256,6 +1325,7 @@ export const register: Register = (on, options) => {
     if (!e.agentId) await readAdvisor($).catch(() => undefined)
     if (!e.agentId) await readFast($).catch(() => undefined)
     if (!e.agentId) await readMainModels($).catch(() => undefined)
+    if (!e.agentId) await readTheme($).catch(() => undefined)
     if (!e.agentId) await restoreLook($).catch(() => undefined)
     return result
   })
@@ -1614,6 +1684,8 @@ export const register: Register = (on, options) => {
       actions: actionsFor($),
       appearance: look,
       canAdvise: advisorCommand,
+      advisorMenu: advisorMenuNow(s),
+      ...(theme ? { theme } : {}),
       reports,
       questions,
       ...(tip !== undefined ? { tip } : {}),

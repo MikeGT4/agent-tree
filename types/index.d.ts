@@ -35,6 +35,7 @@ export type AgentTreeNode = {
   activeAt?: number
   toolSince?: number
   lastTokenCount?: number
+  waiting?: boolean
 }
 
 export type AgentTreeStyle = 'line' | 'pixel' | 'braille' | 'hud' | 'ascii'
@@ -43,7 +44,9 @@ export type AgentTreeColors = 'original' | 'light' | 'retro' | 'mono'
 
 export type AgentTreeLight = 'standard' | 'white' | 'gold' | 'cyan' | 'magenta'
 
-export type AgentTreeLook = { style: AgentTreeStyle; colors: AgentTreeColors; light: AgentTreeLight }
+export type AgentTreePart = 'advisor' | 'local' | 'log' | 'limits'
+
+export type AgentTreeLook = { style: AgentTreeStyle; colors: AgentTreeColors; light: AgentTreeLight; hidden?: AgentTreePart[] }
 
 export type AgentTreeCorrectionState = 'sent' | 'read' | 'failed'
 

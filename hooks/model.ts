@@ -99,8 +99,13 @@ export function choicesOf(s: AgentTreeState): AgentTreeChoices {
   return s.choices ?? { agents: {} }
 }
 
+export const LONG_CONTEXT = '[1m]'
+
 export function familyLabel(family: string | undefined): string {
-  return family ? family.charAt(0).toUpperCase() + family.slice(1) : 'Standard'
+  if (!family) return 'Standard'
+  const long = family.endsWith(LONG_CONTEXT)
+  const name = long ? family.slice(0, -LONG_CONTEXT.length) : family
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)}${long ? ' 1M' : ''}`
 }
 
 export function pickerOpened(s: AgentTreeState, target: string | undefined): AgentTreeState {
@@ -610,6 +615,18 @@ export function withAdvisorModel(s: AgentTreeState, model: string | undefined): 
 
 export type MainModels = { offer: string[]; held: string | undefined }
 
+export const ADVISOR_MODELS = ['sonnet', 'opus', 'fable'] as const
+
+export function advisorOffer(mainOffer: readonly string[] | undefined): string[] {
+  return ADVISOR_MODELS.filter(name => !mainOffer?.length || mainOffer.includes(name))
+}
+
+export function advisorFamily(model: string | undefined): string | undefined {
+  if (!model) return undefined
+  const plain = model.toLowerCase()
+  return ADVISOR_MODELS.find(name => plain === name || plain.startsWith(`${name}[`) || plain.includes(`-${name}-`) || plain.endsWith(`-${name}`))
+}
+
 export type ModelMenuRow = { kind?: unknown; value?: unknown; options?: readonly string[]; isLocked?: unknown }
 
 export const MENU_DEFAULT = 'default'
@@ -617,10 +634,10 @@ export const MENU_DEFAULT = 'default'
 export function mainModelsFrom(row: ModelMenuRow | undefined): MainModels | undefined {
   if (!row || row.isLocked === true || row.kind !== 'choice' || !row.options) return undefined
   const options = row.options
-  const offer = MODEL_FAMILIES.filter(family => options.includes(family))
-  if (offer.length === 0) return undefined
+  if (!MODEL_FAMILIES.some(family => options.includes(family))) return undefined
+  const offer = MODEL_FAMILIES.flatMap(family => [family, `${family}${LONG_CONTEXT}`]).filter(name => options.includes(name))
   const value = typeof row.value === 'string' ? row.value : ''
-  const held = options.includes(value) ? offer.find(family => value === family || value === `${family}[1m]`) : MENU_DEFAULT
+  const held = options.includes(value) ? offer.find(name => value === name) : MENU_DEFAULT
   return { offer, held }
 }
 
@@ -1163,11 +1180,20 @@ export type SpentAgent = { id: string; usage?: readonly { input_tokens: number; 
 
 export const QUIET_MS = 120_000
 
-export function lifeSigns(s: AgentTreeState, list: readonly { id: string; tokenCount?: number }[], now: number): AgentTreeState {
+export function lifeSigns(s: AgentTreeState, list: readonly { id: string; tokenCount?: number; status?: string }[], now: number): AgentTreeState {
   let next = s
   for (const entry of list) {
     const node = findAgent(next, entry.id)
-    if (!node || node.status !== 'running' || typeof entry.tokenCount !== 'number' || entry.tokenCount === node.lastTokenCount) continue
+    if (!node || node.status !== 'running') continue
+    const waiting = entry.status === 'idle'
+    if (waiting !== (node.waiting === true)) {
+      next = withAgent(next, entry.id, n => {
+        if (waiting) return { ...n, waiting: true }
+        const { waiting: _was, ...rest } = n
+        return { ...rest, activeAt: now }
+      })
+    }
+    if (typeof entry.tokenCount !== 'number' || entry.tokenCount === node.lastTokenCount) continue
     next = withAgent(next, entry.id, n => ({ ...n, lastTokenCount: entry.tokenCount, ...(n.lastTokenCount !== undefined ? { activeAt: now } : {}) }))
   }
   return next
@@ -1187,6 +1213,7 @@ export function toolEnded(s: AgentTreeState, agentId: string, now: number): Agen
 
 export function quietFor(n: AgentTreeNode, now: number): number | undefined {
   if (n.status !== 'running' || n.toolSince !== undefined) return undefined
+  if (n.waiting) return undefined
   const quiet = now - (n.activeAt ?? n.startedAt)
   return quiet >= QUIET_MS ? quiet : undefined
 }

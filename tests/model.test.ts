@@ -385,6 +385,9 @@ describe('Datenmodell', () => {
       detail: (agentId: string) => void calls.push(`detail ${agentId}`),
       stop: (agentId: string) => void calls.push(`stop ${agentId}`),
       advisor: () => undefined,
+      advisorMenu: () => undefined,
+      advisorPick: () => undefined,
+      part: () => undefined,
       fast: () => undefined,
       look: () => undefined,
       restyle: () => undefined,
@@ -435,7 +438,7 @@ describe('Datenmodell', () => {
   test('der Fast-Mode-Knopf zählt beim Umbruch der Zeile „an Unteragenten“ mit', () => {
     const ui = { Box: 'Box', Text: 'Text', Button: 'Button' } as never
     const noop = () => {}
-    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, fast: noop, starOff: noop, noteTake: noop, noteDrop: noop, local: noop, localPick: noop, look: noop, restyle: noop, restyleDefault: noop, deselect: noop, write: noop, tab: noop, logFilter: noop, logOpen: noop, report: noop }
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, advisorMenu: noop, advisorPick: noop, part: noop, fast: noop, starOff: noop, noteTake: noop, noteDrop: noop, local: noop, localPick: noop, look: noop, restyle: noop, restyleDefault: noop, deselect: noop, write: noop, tab: noop, logFilter: noop, logOpen: noop, report: noop }
     let s = createTree(0)
     for (let i = 0; i < 8; i++) s = turnStarted(s, { text: `Runde ${i}` }, 1000 + i)
     const logRows = (t: typeof s, height: number) => (JSON.stringify(drawTree(ui, t, 77, height, { frame: 0, animate: false, now: 5000, actions })).match(/"key":"log:\d+:/g) ?? []).length
@@ -750,7 +753,7 @@ describe('Korrekturen', () => {
 describe('Stopp am Kasten', () => {
   test('pressKey kennt halt', () => {
     const stopped: string[] = []
-    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), advisor: () => {}, fast: () => {}, starOff: () => {}, noteTake: () => {}, noteDrop: () => {}, local: () => {}, localPick: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, deselect: () => {}, write: () => {}, tab: () => {}, logFilter: () => {}, logOpen: () => {}, report: () => {} }
+    const actions = { select: () => {}, pick: () => {}, choose: () => {}, effort: () => {}, close: () => {}, detail: () => {}, stop: (id: string) => void stopped.push(id), advisor: () => {}, advisorMenu: () => {}, advisorPick: () => {}, part: () => {}, fast: () => {}, starOff: () => {}, noteTake: () => {}, noteDrop: () => {}, local: () => {}, localPick: () => {}, look: () => {}, restyle: () => {}, restyleDefault: () => {}, deselect: () => {}, write: () => {}, tab: () => {}, logFilter: () => {}, logOpen: () => {}, report: () => {} }
     expect(pressKey(actions, 'halt:sub-1')).toBe(true)
     expect(stopped).toEqual(['sub-1'])
   })
@@ -863,14 +866,14 @@ describe('Aussehen', () => {
   })
 
   test('die Auswahl zählt die Licht-Vorschau mit', () => {
-    expect([lookLines(60, 'de'), lookLines(90, 'de')]).toEqual([7, 6])
+    expect([lookLines(60, 'de'), lookLines(90, 'de')]).toEqual([8, 7])
   })
 
   test('ohne Input zeichnet der Detailkasten kein Textfeld und stürzt nicht ab', () => {
     const ui = { Box: 'Box', Text: 'Text', Button: 'Button' } as never
     const s = detailOpened(spawned(createTree(0), spawn('sub-1'), 1), 'sub-1')
     const noop = () => {}
-    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, fast: noop, starOff: noop, noteTake: noop, noteDrop: noop, local: noop, localPick: noop, look: noop, restyle: noop, restyleDefault: noop, deselect: noop, write: noop, tab: noop, logFilter: noop, logOpen: noop, report: noop }
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, advisorMenu: noop, advisorPick: noop, part: noop, fast: noop, starOff: noop, noteTake: noop, noteDrop: noop, local: noop, localPick: noop, look: noop, restyle: noop, restyleDefault: noop, deselect: noop, write: noop, tab: noop, logFilter: noop, logOpen: noop, report: noop }
     const text = JSON.stringify(drawTree(ui, s, 90, 60, { frame: 0, animate: false, now: 5000, actions }))
     expect(text).not.toMatch(/say:sub-1/)
   })
@@ -1301,6 +1304,11 @@ describe('Zeilenplan bei wenig Höhe', () => {
     expect(planRows({ ...narrow, height: 47 })).toEqual({ shown: 3, logRows: 0 })
   })
 
+  test('ein geöffneter Lokal-Kasten bleibt mit dem Berater stehen, auch wenn es eng wird', () => {
+    expect(planRows({ ...narrow, height: 40, advisorRows: 12 }).advisor).toBe(false)
+    expect(planRows({ ...narrow, height: 40, advisorRows: 12, advisorHeld: true })).toEqual({ shown: 3, logRows: 0 })
+  })
+
   test('Details stehen anstelle des Protokolls', () => {
     expect(planRows({ ...narrow, height: 60, detailRows: 11 })).toEqual({ shown: 3, logRows: 0 })
   })
@@ -1325,7 +1333,7 @@ describe('Aktionszeile schließen', () => {
   test('pressKey kennt das Schließen der Aktionszeile', () => {
     const calls: string[] = []
     const noop = () => {}
-    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, fast: noop, starOff: noop, noteTake: noop, noteDrop: noop, local: noop, localPick: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop, tab: noop, logFilter: noop, logOpen: noop, report: noop, deselect: () => void calls.push('deselect') }
+    const actions = { select: noop, pick: noop, choose: noop, effort: noop, close: noop, detail: noop, stop: noop, advisor: noop, advisorMenu: noop, advisorPick: noop, part: noop, fast: noop, starOff: noop, noteTake: noop, noteDrop: noop, local: noop, localPick: noop, look: noop, restyle: noop, restyleDefault: noop, write: noop, tab: noop, logFilter: noop, logOpen: noop, report: noop, deselect: () => void calls.push('deselect') }
     expect(pressKey(actions, 'actions:close')).toBe(true)
     expect(calls).toEqual(['deselect'])
   })
@@ -1379,10 +1387,16 @@ describe('Modell der Hauptsitzung', () => {
   const row = (value: string, extra: Record<string, unknown> = {}) => ({ kind: 'choice', value, options: ['default', 'sonnet', 'opus', 'haiku', 'fable', 'best', 'fable[1m]'], isLocked: false, ...extra })
 
   test('die Menüzeile ergibt die angebotenen Familien in fester Reihenfolge und den gehaltenen Stand', () => {
-    expect(mainModelsFrom(row('Default (recommended)'))).toEqual({ offer: ['haiku', 'sonnet', 'opus', 'fable'], held: 'default' })
-    expect(mainModelsFrom(row('sonnet'))).toEqual({ offer: ['haiku', 'sonnet', 'opus', 'fable'], held: 'sonnet' })
-    expect(mainModelsFrom(row('fable[1m]'))).toEqual({ offer: ['haiku', 'sonnet', 'opus', 'fable'], held: 'fable' })
-    expect(mainModelsFrom(row('best'))).toEqual({ offer: ['haiku', 'sonnet', 'opus', 'fable'], held: undefined })
+    const offer = ['haiku', 'sonnet', 'opus', 'fable', 'fable[1m]']
+    expect(mainModelsFrom(row('Default (recommended)'))).toEqual({ offer, held: 'default' })
+    expect(mainModelsFrom(row('sonnet'))).toEqual({ offer, held: 'sonnet' })
+    expect(mainModelsFrom(row('fable[1m]'))).toEqual({ offer, held: 'fable[1m]' })
+    expect(mainModelsFrom(row('best'))).toEqual({ offer, held: undefined })
+  })
+
+  test('die Fassung mit großem Kontextfenster heißt 1M', () => {
+    expect(familyLabel('opus[1m]')).toBe('Opus 1M')
+    expect(familyLabel('opus')).toBe('Opus')
   })
 
   test('gesperrt, ohne Wahlliste oder ohne bekannte Familie gibt es kein Angebot', () => {

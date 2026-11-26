@@ -125,6 +125,17 @@ describe('Lebenszeichen', () => {
     expect(quietFor(node(s)!, 90_000 + QUIET_MS)).toBe(QUIET_MS)
   })
 
+  test('ein Teammate, das auf eine Nachricht wartet, gilt nicht als still', () => {
+    let s = spawned(createTree(0), spawn('a1'), 0)
+    s = lifeSigns(s, [{ id: 'a1', status: 'idle' }], 10_000)
+    expect(node(s)?.waiting).toBe(true)
+    expect(quietFor(node(s)!, 10 * QUIET_MS)).toBeUndefined()
+    s = lifeSigns(s, [{ id: 'a1', status: 'running' }], 900_000)
+    expect(node(s)?.waiting).toBeUndefined()
+    expect(quietFor(node(s)!, 900_000 + QUIET_MS - 1)).toBeUndefined()
+    expect(quietFor(node(s)!, 900_000 + QUIET_MS)).toBe(QUIET_MS)
+  })
+
   test('ein laufendes Werkzeug zählt nie als still, auch ein langer Testlauf nicht', () => {
     let s = toolStarted(spawned(createTree(0), spawn('a1'), 0), 'a1', 10)
     expect(quietFor(node(s)!, 10 * QUIET_MS)).toBeUndefined()

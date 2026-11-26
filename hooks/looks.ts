@@ -1,5 +1,5 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
-import type { AgentTreeColors, AgentTreeLight, AgentTreeLook, AgentTreeStatus, AgentTreeStyle } from '../types'
+import type { AgentTreeColors, AgentTreeLight, AgentTreeLook, AgentTreePart, AgentTreeStatus, AgentTreeStyle } from '../types'
 
 export type Palette = { main: string; agent: string; advisor: string; done: string; dim: string; failed: string; warn: string }
 
@@ -138,13 +138,30 @@ function oneOf<T extends string>(value: unknown, options: readonly T[], fallback
   return typeof value === 'string' && (options as readonly string[]).includes(value) ? (value as T) : fallback
 }
 
+export const PARTS: readonly AgentTreePart[] = ['advisor', 'local', 'log', 'limits']
+
 export function lookFrom(value: unknown): AgentTreeLook {
   const raw = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  const hidden = Array.isArray(raw.hidden) ? PARTS.filter(part => (raw.hidden as unknown[]).includes(part)) : []
   return {
     style: oneOf(raw.style, LOOK_OPTIONS.style, DEFAULT_LOOK.style),
     colors: oneOf(raw.colors, LOOK_OPTIONS.colors, DEFAULT_LOOK.colors),
     light: oneOf(raw.light, LOOK_OPTIONS.light, DEFAULT_LOOK.light),
+    ...(hidden.length ? { hidden } : {}),
   }
+}
+
+export function isPart(value: string): value is AgentTreePart {
+  return (PARTS as readonly string[]).includes(value)
+}
+
+export function partShown(look: AgentTreeLook, part: AgentTreePart): boolean {
+  return !look.hidden?.includes(part)
+}
+
+export function partToggled(look: AgentTreeLook, part: AgentTreePart): AgentTreeLook {
+  const hidden = partShown(look, part) ? [...(look.hidden ?? []), part] : (look.hidden ?? []).filter(p => p !== part)
+  return lookFrom({ ...look, hidden })
 }
 
 function luminance(hex: string): number {

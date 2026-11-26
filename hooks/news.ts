@@ -4,7 +4,6 @@ import type { Lang } from './words.ts'
 
 export const VERSION = '0.7.19'
 export const SEEN_VERSION_KEY = 'seenVersion'
-export const NOTICE_MS = 3000
 export const NOTICE_LINES = 3
 
 export const NEWS: Readonly<Record<string, Readonly<Record<Lang, readonly string[]>>>> = {

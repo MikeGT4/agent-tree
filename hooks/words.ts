@@ -1,5 +1,5 @@
 // © 2026 Mike Pollow, Digitalroots. MIT-Lizenz.
-import type { AgentTreeCorrectionState, AgentTreeLogEntry, AgentTreeLogSource, AgentTreePhase, AgentTreeStatus, AgentTreeTab } from '../types'
+import type { AgentTreeCorrectionState, AgentTreeLogEntry, AgentTreeLogSource, AgentTreePart, AgentTreePhase, AgentTreeStatus, AgentTreeTab } from '../types'
 import type { LookRow } from './looks.ts'
 import { DEFAULT_LOOK, LOOK_OPTIONS } from './looks.ts'
 import { effortLabel, familyLabel, fmtDuration, fmtTokens, toolKind } from './model.ts'
@@ -217,6 +217,11 @@ export type Words = {
   lookRow: Record<LookRow, string>
   lookOption: { [R in LookRow]: Record<(typeof LOOK_OPTIONS)[R][number], string> }
   lookReset: string
+  lookParts: string
+  part: Record<AgentTreePart, string>
+  lookThemeNote: (theme: string) => string
+  saveFailed: string
+  waitingForMessage: string
   lookSet: (row: string, option: string) => string
   lookUnknown: (name: string, row: string, options: string) => string
   commandDescription: string
@@ -409,7 +414,7 @@ export const WORDS: Record<Lang, Words> = {
     introPlaying: 'Intro läuft',
     introSkip: 'überspringen',
     noticeUpdated: 'wurde aktualisiert',
-    noticeContinue: 'weiter',
+    noticeContinue: 'OK',
     correctionFrame: (text, tool) =>
       `Nachricht des Nutzers über Agent Tree: ${text}\n\nSie gilt ab jetzt für deinen Auftrag. Berücksichtige sie bei der weiteren Arbeit und in deinem Bericht über ${tool}.`,
     correctionFrameCode: text =>
@@ -477,6 +482,11 @@ export const WORDS: Record<Lang, Words> = {
       light: { standard: 'Standard', white: 'Weiß', gold: 'Gold', cyan: 'Cyan', magenta: 'Magenta' },
     },
     lookReset: 'zurück auf Standard',
+    lookParts: 'Teile',
+    part: { advisor: 'Berater', local: 'Lokal', log: 'Protokoll', limits: 'Limits' },
+    lookThemeNote: theme => `gilt für das ${theme === 'light' ? 'helle' : 'dunkle'} Farbthema von Claude Code`,
+    saveFailed: 'Agent Tree konnte die Einstellung nicht speichern, sie gilt nur bis zum Ende der Sitzung',
+    waitingForMessage: 'wartet auf Nachricht',
     lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
     lookUnknown: (name, row, options) => `Agent Tree: ${name ? `„${name}“ gibt es nicht. ` : ''}${row}: ${options}`,
     commandDescription: 'Agentenbaum der Sitzung als Kästen (an, stop, clear, intro, stil, farben, licht)',
@@ -669,7 +679,7 @@ export const WORDS: Record<Lang, Words> = {
     introPlaying: 'Intro playing',
     introSkip: 'skip',
     noticeUpdated: 'was updated',
-    noticeContinue: 'continue',
+    noticeContinue: 'OK',
     correctionFrame: (text, tool) =>
       `Message from the user via Agent Tree: ${text}\n\nIt applies to your task from now on. Take it into account in your remaining work and in your report via ${tool}.`,
     correctionFrameCode: text =>
@@ -736,6 +746,11 @@ export const WORDS: Record<Lang, Words> = {
       light: { standard: 'Default', white: 'White', gold: 'Gold', cyan: 'Cyan', magenta: 'Magenta' },
     },
     lookReset: 'Reset',
+    lookParts: 'Parts',
+    part: { advisor: 'Advisor', local: 'Local', log: 'Log', limits: 'Limits' },
+    lookThemeNote: theme => `applies to Claude Code's ${theme === 'light' ? 'light' : 'dark'} theme`,
+    saveFailed: 'Agent Tree could not save the setting, it holds until the session ends',
+    waitingForMessage: 'waits for a message',
     lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
     lookUnknown: (name, row, options) => `Agent Tree: ${name ? `"${name}" is not a choice. ` : ''}${row}: ${options}`,
     commandDescription: "The session's agent tree as boxes (to, stop, clear, intro, style, colors, glow)",

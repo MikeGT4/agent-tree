@@ -15,7 +15,7 @@ const answering = (model: string) => ({ sonnet: 'claude-sonnet-5-5' } as Record<
 
 type Appended = { agentId?: string; message: { type: string; content: { type: string; text: string }[] } }
 
-function engine(on: On, listed: unknown[] = [], refuse: { send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; denyHandback?: boolean; fast?: boolean; fastFails?: boolean; model?: string; modelOptions?: string[]; modelFails?: boolean; modelLocked?: boolean; codeMode?: boolean; stepTools?: string[]; mainStepTools?: string[] } = {}, saved: Record<string, unknown> = {}) {
+function engine(on: On, listed: unknown[] = [], refuse: { send?: boolean; command?: boolean; lag?: boolean; noAdvisor?: boolean; storeGet?: boolean; onSend?: () => Promise<unknown>; clearResets?: boolean; advisorFails?: string; fillFails?: boolean; denyEdit?: boolean; failEdit?: boolean; denyHandback?: boolean; fast?: boolean; fastFails?: boolean; model?: string; modelOptions?: string[]; modelFails?: boolean; modelLocked?: boolean; codeMode?: boolean; stepTools?: string[]; mainStepTools?: string[]; theme?: string; storeSet?: boolean } = {}, saved: Record<string, unknown> = {}) {
   const status: string[] = []
   const stored: Record<string, unknown> = { ...saved }
   const storeSets: { key: string; value: unknown }[] = []
@@ -26,6 +26,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { send?: boolean; comman
     return { value: stored[(e as { key: string }).key] } as never
   })
   on('store.set', (_, e) => {
+    if (refuse.storeSet) throw new Error('store')
     const { key, value } = e as { key: string; value: unknown }
     stored[key] = value
     storeSets.push({ key, value })
@@ -60,6 +61,7 @@ function engine(on: On, listed: unknown[] = [], refuse: { send?: boolean; comman
     refuse.fast === undefined
       ? []
       : [{ key: 'fast', label: 'Fast mode (Opus 5.5)', kind: 'boolean', value: refuse.fast, provider: { plugin: 'engine', tier: 'core' }, isLocked: false }]
+  if (refuse.theme !== undefined) rows.push({ key: 'theme', label: 'Theme', kind: 'choice', value: refuse.theme, options: ['dark', 'light'], provider: { plugin: 'engine', tier: 'core' }, isLocked: false })
   const menuDefault = 'Default (recommended)'
   const modelIds: Record<string, string> = { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5', fable: 'claude-fable-5-2' }
   if (refuse.model !== undefined) {
@@ -887,7 +889,7 @@ describe('Agent Tree', () => {
     await ui.unmount()
   })
 
-  test('nach einem Update steht nach dem Intro 3 s die Karte mit dem Neuen, dann die Leiste', introOn, async ($, on) => {
+  test('nach einem Update steht nach dem Intro die Karte mit dem Neuen, bis OK gedrückt wird', introOn, async ($, on) => {
     const { clock } = await introStart($, on, { seenVersion: '0.7.7' })
     await startSession($)
     const ui = await $.ui.mount(pane(90))
@@ -901,7 +903,11 @@ describe('Agent Tree', () => {
     expect(card).not.toMatch(/Verlauf: Klick zeigt deine Frage oder den Bericht/)
     expect(card).not.toMatch(/Läuft im Code Mode/)
     expect(card).not.toMatch(/Sitzungsprotokoll/)
-    await clock.advance(3100)
+    expect(card).toMatch(/\bOK\b/)
+    await clock.advance(60_000)
+    await ui.redraw()
+    expect(await screen(ui)).toContain(`AGENT TREE ${VERSION}`)
+    await ui.press({ key: 'notice:skip' })
     await ui.redraw()
     expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
     await ui.unmount()
@@ -2426,6 +2432,51 @@ describe('Berater per Knopf', () => {
     await ui.unmount()
   })
 
+  test('das Modell des Beraters lässt sich über ein Drop-down wählen', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'advisor:menu' })
+    await ui.redraw()
+    for (const name of ['sonnet', 'opus', 'fable']) expect(await ui.find({ key: `advisorpick:${name}` })).toBeDefined()
+    expect(await ui.find({ key: 'advisorpick:haiku' })).toBeUndefined()
+    await ui.press({ key: 'advisorpick:sonnet' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.commands.at(-1)).toEqual({ command: 'advisor', args: 'sonnet' })
+    expect(await ui.find({ key: 'advisorpick:sonnet' })).toBeUndefined()
+    expect((await ui.find({ key: 'advisor:menu' }))?.props.label).toBe('Sonnet ▾')
+    await ui.press({ key: 'advisor:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.commands.at(-1)).toEqual({ command: 'advisor', args: 'off' })
+    await ui.press({ key: 'advisor:toggle' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.commands.at(-1)).toEqual({ command: 'advisor', args: 'sonnet' })
+    await ui.unmount()
+  })
+
+  test('auch in der schmalen Leiste gibt es die Modellwahl des Beraters', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(62))
+    await ui.press({ key: 'advisor:menu' })
+    await ui.redraw()
+    await ui.press({ key: 'advisorpick:fable' })
+    for (let i = 0; i < 3; i++) await ui.redraw()
+    expect(seen.commands.at(-1)).toEqual({ command: 'advisor', args: 'fable' })
+    await ui.unmount()
+  })
+
+  test('nur Modelle aus Claude Codes Menü stehen zur Wahl', de, async ($, on) => {
+    engine(on, [], { model: 'default', modelOptions: ['default', 'sonnet', 'opus'] })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'advisor:menu' })
+    await ui.redraw()
+    expect(await ui.find({ key: 'advisorpick:fable' })).toBeUndefined()
+    expect(await ui.find({ key: 'advisorpick:opus' })).toBeDefined()
+    await ui.unmount()
+  })
+
   test('kommt die Einstellung verzögert an, wartet die Leiste darauf und zeigt dann den neuen Stand', de, async ($, on) => {
     engine(on, [], { lag: true })
     await oneAgentWithAdvisor($)
@@ -2729,6 +2780,68 @@ describe('Aussehen in der Leiste', () => {
     await ui.unmount()
   })
 
+  test('Teile lassen sich aus- und wieder einblenden, die Wahl wird gespeichert', de, async ($, on) => {
+    const seen = engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await openLook($)
+    for (const part of ['advisor', 'local', 'log', 'limits']) expect((await ui.find({ key: `lookpart:${part}` }))?.props.variant).toBe('primary')
+    expect(await ui.find({ key: 'advisor:toggle' })).toBeDefined()
+    await ui.press({ key: 'lookpart:advisor' })
+    await ui.press({ key: 'lookpart:log' })
+    await ui.redraw()
+    expect(await ui.find({ key: 'advisor:toggle' })).toBeUndefined()
+    expect(await screen(ui)).not.toMatch(/Sitzungsprotokoll/)
+    expect((await ui.find({ key: 'lookpart:advisor' }))?.props.variant).toBeUndefined()
+    expect(seen.storeSets.at(-1)).toEqual({ key: 'look', value: { ...DEFAULT_LOOK, hidden: ['advisor', 'log'] } })
+    await ui.press({ key: 'lookpart:advisor' })
+    await ui.redraw()
+    expect(await ui.find({ key: 'advisor:toggle' })).toBeDefined()
+    expect(seen.storeSets.at(-1)).toEqual({ key: 'look', value: { ...DEFAULT_LOOK, hidden: ['log'] } })
+    await ui.unmount()
+  })
+
+  test('ausgeblendete Teile bleiben beim nächsten Start aus', de, async ($, on) => {
+    engine(on, [], {}, { look: { ...DEFAULT_LOOK, hidden: ['advisor', 'log'] } })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await ui.find({ key: 'advisor:toggle' })).toBeUndefined()
+    expect(await screen(ui)).not.toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('im hellen Farbthema hat die Leiste ein eigenes Aussehen, das dunkle bleibt', de, async ($, on) => {
+    const seen = engine(on, [], { theme: 'light' }, { look: { ...DEFAULT_LOOK, colors: 'retro' } })
+    await oneAgentWithAdvisor($)
+    const ui = await openLook($)
+    expect(await screen(ui)).toContain('helle Farbthema')
+    expect(await screen(ui)).toContain(PALETTES.retro.agent)
+    await ui.press({ key: 'look:colors:light' })
+    await ui.redraw()
+    expect(seen.storeSets.at(-1)).toEqual({ key: 'look:light', value: { ...DEFAULT_LOOK, colors: 'light' } })
+    expect(seen.stored.look).toEqual({ ...DEFAULT_LOOK, colors: 'retro' })
+    await ui.unmount()
+  })
+
+  test('im dunklen Farbthema gilt das dunkle Aussehen, nicht das helle', de, async ($, on) => {
+    engine(on, [], { theme: 'dark' }, { look: { ...DEFAULT_LOOK, colors: 'retro' }, 'look:light': { ...DEFAULT_LOOK, colors: 'light' } })
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    expect(await screen(ui)).toContain(PALETTES.retro.agent)
+    await ui.unmount()
+  })
+
+  test('lässt sich eine Einstellung nicht speichern, sagt die Leiste das einmal', de, async ($, on) => {
+    const seen = engine(on, [], { storeSet: true })
+    await oneAgentWithAdvisor($)
+    const ui = await openLook($)
+    await ui.press({ key: 'look:style:hud' })
+    await ui.press({ key: 'look:colors:mono' })
+    await ui.redraw()
+    expect(seen.toasts.filter(t => t.includes('nicht speichern'))).toHaveLength(1)
+    expect(await screen(ui)).toContain(PALETTES.mono.agent)
+    await ui.unmount()
+  })
+
   test('eine gespeicherte Wahl gilt beim Start', de, async ($, on) => {
     engine(on, [], {}, { look: { style: 'ascii', colors: 'retro' } })
     await oneAgentWithAdvisor($)
@@ -3011,15 +3124,31 @@ describe('Modell der Hauptsitzung', () => {
     expect(await ui.find({ key: 'choose:main:opus' })).toBeDefined()
     expect(await ui.find({ key: 'choose:main:haiku' })).toBeUndefined()
     expect(await ui.find({ key: 'choose:main:fable' })).toBeUndefined()
+    expect((await ui.find({ key: 'choose:main:opus[1m]' }))?.props.label).toBe('Opus 1M')
     await ui.unmount()
   })
 
-  test('eine Fassung mit großem Kontextfenster hebt ihre Familie hervor', de, async ($, on) => {
+  test('die 1M-Fassung lässt sich wählen und wird über /model gesetzt', de, async ($, on) => {
+    const seen = engine(on, [], { model: 'default' })
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await steer(ui, 'pick:main')
+    await ui.press({ key: 'choose:main:opus[1m]' })
+    await settle(ui)
+    expect(seen.commands.at(-1)).toEqual({ command: 'model', args: 'opus[1m]' })
+    await steer(ui, 'pick:main')
+    expect((await ui.find({ key: 'choose:main:opus[1m]' }))?.props.variant).toBe('primary')
+    expect((await ui.find({ key: 'choose:main:opus' }))?.props.variant).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('eine Fassung mit großem Kontextfenster ist selbst hervorgehoben', de, async ($, on) => {
     engine(on, [], { model: 'fable[1m]' })
     await startSession($)
     const ui = await $.ui.mount(pane(90))
     await steer(ui, 'pick:main')
-    expect((await ui.find({ key: 'choose:main:fable' }))?.props.variant).toBe('primary')
+    expect((await ui.find({ key: 'choose:main:fable[1m]' }))?.props.variant).toBe('primary')
+    expect((await ui.find({ key: 'choose:main:fable' }))?.props.variant).toBeUndefined()
     expect((await ui.find({ key: 'choose:main:default' }))?.props.variant).toBeUndefined()
     await ui.unmount()
   })
@@ -4800,6 +4929,23 @@ describe('Lokales Modell', () => {
     for (const word of ['kein lokaler Server gefunden', 'erneut suchen', 'Anleitung', 'Einrichten lassen']) expect(text).toContain(word)
     await ui.unmount()
   })
+
+  for (const [columns, rows] of [[56, 43], [67, 58], [90, 58]] as const) {
+    test(`bei wenig Höhe und laufenden Agenten bleibt der geöffnete Kasten stehen (${columns} × ${rows})`, de, async ($, on) => {
+      engine(on)
+      on('http.fetch', () => {
+        throw new Error('kein Server')
+      })
+      await agents($, 3)
+      const ui = await $.ui.mount(pane(columns, rows))
+      expect(has(await screen(ui), 'local:open')).toBe(true)
+      await ui.press({ key: 'local:open' })
+      await ui.redraw()
+      const text = await screen(ui)
+      expect(has(text, 'local:setup')).toBe(true)
+      await ui.unmount()
+    })
+  }
 
   test('antwortet der Server nicht, bekommt Claude eine Absage mit der Bitte, es selbst zu tun', localOn, async ($, on) => {
     engine(on)
