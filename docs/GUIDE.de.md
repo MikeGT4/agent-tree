@@ -26,7 +26,7 @@ Berichte: Aufgabe und ganze Antwort jedes Agenten.
 
 ![Dateien](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-de-4.png)
 
-Dateien: geändert und gelesen je Agent, doppelte oben. Gelesene mit geschätzten Tokens (~).
+Dateien: geändert und gelesen je Agent, doppelte oben, Tokens geschätzt (~).
 
 ![Kosten](https://github.com/MikeGT4/agent-tree/releases/download/v0.7.0/guide-de-5.png)
 
@@ -42,4 +42,4 @@ Hilfe: Tasten, Zeichen, Befehle, Neues.
 
 ## Neu
 
-Fenster: deine anderen offenen Terminals, Dateien, die zwei davon ändern, und Markdown zum Prüfen.
+Neu: Im Berater-Kasten wählst du sein Modell, und unter a blendest du Teile der Leiste aus.
