@@ -179,7 +179,8 @@ let stopSentIds = new Set<string>()
 let lastAdvisor = 'opus'
 let advisorMenuOpen = false
 let saveWarned = false
-let theme: 'light' | 'dark' | undefined
+let colorScheme: 'light' | 'dark' | undefined
+let noticeShowing = false
 let advisorCommand = true
 let tip: number | undefined
 let starAsk = false
@@ -390,7 +391,8 @@ async function replayIntro($: EngineInterface): Promise<void> {
 }
 
 function startNotice($: EngineInterface, now: number): void {
-  if (!newsCard || noticeTicker) return
+  if (!newsCard || noticeShowing) return
+  noticeShowing = true
   const run = ++noticeRun
   noticeOpenedAt = now
   noticeStartedAt = undefined
@@ -400,6 +402,7 @@ function startNotice($: EngineInterface, now: number): void {
     })
   } catch {
     noticeTicker = undefined
+    noticeShowing = false
     newsCard = undefined
   }
 }
@@ -428,13 +431,18 @@ async function noticeTick($: EngineInterface, run: number): Promise<void> {
     if (now - (noticeOpenedAt ?? now) >= INTRO_WAIT_MS) await endNotice($)
     return
   }
-  if (now - noticeStartedAt <= NOTICE_GROW_MS + INTRO_FRAME_MS) await update($, introBeat, n => (n + 1) % 1_000_000)
+  await update($, introBeat, n => (n + 1) % 1_000_000)
+  if (now - noticeStartedAt > NOTICE_GROW_MS + INTRO_FRAME_MS) {
+    noticeTicker?.cancel()
+    noticeTicker = undefined
+  }
 }
 
 async function endNotice($: EngineInterface): Promise<void> {
   newsCard = undefined
-  if (!noticeTicker) return
-  noticeTicker.cancel()
+  if (!noticeShowing) return
+  noticeShowing = false
+  noticeTicker?.cancel()
   noticeTicker = undefined
   noticeRun++
   await update($, introBeat, n => (n + 1) % 1_000_000)
@@ -521,13 +529,14 @@ async function saveSetting($: EngineInterface, key: string, value: unknown): Pro
 }
 
 function lookKeyNow(): string {
-  return theme === 'light' ? LIGHT_LOOK_KEY : LOOK_KEY
+  return colorScheme === 'light' ? LIGHT_LOOK_KEY : LOOK_KEY
 }
 
-async function readTheme($: EngineInterface): Promise<void> {
+async function readColorScheme($: EngineInterface): Promise<void> {
   const rows = await $.config.list().catch(() => [])
   const value = rows.find(row => row.key === 'theme')?.value
-  theme = typeof value === 'string' && value ? (value.toLowerCase().startsWith('light') ? 'light' : 'dark') : undefined
+  const name = typeof value === 'string' ? value.toLowerCase() : ''
+  colorScheme = name.startsWith('light') ? 'light' : name.startsWith('dark') ? 'dark' : undefined
 }
 
 async function storedLook($: EngineInterface): Promise<{ value: unknown } | undefined> {
@@ -536,10 +545,11 @@ async function storedLook($: EngineInterface): Promise<{ value: unknown } | unde
     () => undefined,
   )
   if (own?.value !== undefined || lookKeyNow() === LOOK_KEY) return own
-  return $.store.get(LOOK_KEY).then(
+  const shared = await $.store.get(LOOK_KEY).then(
     value => ({ value }),
     () => undefined,
   )
+  return shared
 }
 
 async function applyLook($: EngineInterface, row: LookRow, id: string): Promise<void> {
@@ -568,7 +578,7 @@ async function restoreLook($: EngineInterface): Promise<void> {
 }
 
 async function restoreChoices($: EngineInterface, interactive: boolean): Promise<boolean> {
-  await readTheme($)
+  await readColorScheme($)
   await restoreLook($)
   if (!interactive || choicesOf(await latest($)).restored) return false
   const model = await $.store.get(MODEL_KEY).catch(() => undefined)
@@ -1086,7 +1096,10 @@ function actionsFor($: EngineInterface): TreeActions {
     pick: target => void change($, t => pickerOpened(t, target)).catch(ignore),
     choose: (target, family) => void (target === MAIN ? chooseMainModel($, family) : chooseModel($, target, family)).catch(ignore),
     effort: (target, effort) => void chooseEffort($, target, effort).catch(ignore),
-    close: () => void change($, t => closed(t)).catch(ignore),
+    close: () => {
+      advisorMenuOpen = false
+      void change($, t => closed(t)).catch(ignore)
+    },
     detail: agentId => void openDetail($, agentId).catch(ignore),
     stop: agentId => {
       void forget($, agentId)
@@ -1325,7 +1338,7 @@ export const register: Register = (on, options) => {
     if (!e.agentId) await readAdvisor($).catch(() => undefined)
     if (!e.agentId) await readFast($).catch(() => undefined)
     if (!e.agentId) await readMainModels($).catch(() => undefined)
-    if (!e.agentId) await readTheme($).catch(() => undefined)
+    if (!e.agentId) await readColorScheme($).catch(() => undefined)
     if (!e.agentId) await restoreLook($).catch(() => undefined)
     return result
   })
@@ -1669,7 +1682,7 @@ export const register: Register = (on, options) => {
       )
       if (intro) return intro
     }
-    if (noticeTicker && newsCard) {
+    if (noticeShowing && newsCard) {
       if (noticeStartedAt === undefined) {
         noticeStartedAt = now
         await $.store.set(SEEN_VERSION_KEY, VERSION).catch(() => undefined)
@@ -1685,7 +1698,7 @@ export const register: Register = (on, options) => {
       appearance: look,
       canAdvise: advisorCommand,
       advisorMenu: advisorMenuNow(s),
-      ...(theme ? { theme } : {}),
+      ...(colorScheme ? { colorScheme } : {}),
       reports,
       questions,
       ...(tip !== undefined ? { tip } : {}),
@@ -1720,7 +1733,7 @@ export const register: Register = (on, options) => {
   on('prompt.edit', async ($, e, next) => {
     const result = await next(e)
     if (introTicker) void endIntro($).catch(() => undefined)
-    else if (noticeTicker) void endNotice($).catch(() => undefined)
+    else if (noticeShowing) void endNotice($).catch(() => undefined)
     return result
   })
 }

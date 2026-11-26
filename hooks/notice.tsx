@@ -61,7 +61,7 @@ export function drawNotice(
         ))}
         <Text key="notice-gap-3"> </Text>
         <Box key="notice-skip-row" justifyContent="center">
-          <Button key="notice:skip" variant="primary" label={words.noticeContinue} onPress={onSkip} />
+          <Button key="notice:skip" variant="primary" hotkey="o" label={words.noticeContinue} onPress={onSkip} />
         </Box>
       </Box>
     </Box>

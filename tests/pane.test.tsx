@@ -2830,6 +2830,30 @@ describe('Aussehen in der Leiste', () => {
     await ui.unmount()
   })
 
+  test('steht das Farbthema auf auto, gilt ein gemeinsames Aussehen ohne Hinweis', de, async ($, on) => {
+    const seen = engine(on, [], { theme: 'auto' })
+    await oneAgentWithAdvisor($)
+    const ui = await openLook($)
+    expect(await screen(ui)).not.toContain('Farbthema')
+    await ui.press({ key: 'look:colors:mono' })
+    expect(seen.storeSets.at(-1)).toEqual({ key: 'look', value: { ...DEFAULT_LOOK, colors: 'mono' } })
+    await ui.unmount()
+  })
+
+  test('× schließt auch die Modellwahl des Beraters', de, async ($, on) => {
+    engine(on)
+    await oneAgentWithAdvisor($)
+    const ui = await $.ui.mount(pane(90))
+    await ui.press({ key: 'advisor:menu' })
+    await ui.redraw()
+    expect(await ui.find({ key: 'advisorpick:opus' })).toBeDefined()
+    await ui.press({ key: 'look:open' })
+    await ui.press({ key: 'look:close' })
+    await ui.redraw()
+    expect(await ui.find({ key: 'advisorpick:opus' })).toBeUndefined()
+    await ui.unmount()
+  })
+
   test('lässt sich eine Einstellung nicht speichern, sagt die Leiste das einmal', de, async ($, on) => {
     const seen = engine(on, [], { storeSet: true })
     await oneAgentWithAdvisor($)

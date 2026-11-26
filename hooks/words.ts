@@ -219,7 +219,7 @@ export type Words = {
   lookReset: string
   lookParts: string
   part: Record<AgentTreePart, string>
-  lookThemeNote: (theme: string) => string
+  lookThemeNote: (scheme: string) => string
   saveFailed: string
   waitingForMessage: string
   lookSet: (row: string, option: string) => string
@@ -484,7 +484,7 @@ export const WORDS: Record<Lang, Words> = {
     lookReset: 'zurück auf Standard',
     lookParts: 'Teile',
     part: { advisor: 'Berater', local: 'Lokal', log: 'Protokoll', limits: 'Limits' },
-    lookThemeNote: theme => `gilt für das ${theme === 'light' ? 'helle' : 'dunkle'} Farbthema von Claude Code`,
+    lookThemeNote: scheme => `gilt für das ${scheme === 'light' ? 'helle' : 'dunkle'} Farbthema von Claude Code`,
     saveFailed: 'Agent Tree konnte die Einstellung nicht speichern, sie gilt nur bis zum Ende der Sitzung',
     waitingForMessage: 'wartet auf Nachricht',
     lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,
@@ -748,7 +748,7 @@ export const WORDS: Record<Lang, Words> = {
     lookReset: 'Reset',
     lookParts: 'Parts',
     part: { advisor: 'Advisor', local: 'Local', log: 'Log', limits: 'Limits' },
-    lookThemeNote: theme => `applies to Claude Code's ${theme === 'light' ? 'light' : 'dark'} theme`,
+    lookThemeNote: scheme => `applies to Claude Code's ${scheme === 'light' ? 'light' : 'dark'} theme`,
     saveFailed: 'Agent Tree could not save the setting, it holds until the session ends',
     waitingForMessage: 'waits for a message',
     lookSet: (row, option) => `Agent Tree · ${row}: ${option}`,

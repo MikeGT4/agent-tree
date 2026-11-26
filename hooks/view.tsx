@@ -156,7 +156,7 @@ export type TreeLook = {
   appearance?: AgentTreeLook
   canAdvise?: boolean
   advisorMenu?: AdvisorMenu
-  theme?: 'light' | 'dark'
+  colorScheme?: 'light' | 'dark'
   docked?: boolean
   reports?: Record<string, AgentTreeReport>
   questions?: ReadonlyMap<number, string>
@@ -1610,7 +1610,7 @@ export function drawTree(ui: Ui, s: AgentTreeState, width: number, height?: numb
     s.lookOpen && actions ? (
       <Box key="look" flexDirection="column" width={width} marginTop={1}>
         <Text color={palette.agent} wrap="truncate-end">
-          {look.theme ? `${w.look} · ${w.lookThemeNote(look.theme)}` : w.look}
+          {look.colorScheme ? `${w.look} · ${w.lookThemeNote(look.colorScheme)}` : w.look}
         </Text>
         {LOOK_ROWS.map(row => (
           <Box key={`look-row:${row}`} flexDirection="row" flexWrap="wrap" columnGap={1} width={width}>
