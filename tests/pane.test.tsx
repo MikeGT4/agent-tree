@@ -857,8 +857,9 @@ describe('Agent Tree', () => {
 
   const introOn = { options: { language: 'de', intro: true, tips: false } }
   const plantDots = /[█▀]/
-  const introStart = async ($: Engine, on: On, saved: Record<string, unknown> = {}) => {
-    const clock = mock.clock(on, { now: 1_000_000 })
+  const plainDay = new Date(2026, 5, 15, 12).getTime()
+  const introStart = async ($: Engine, on: On, saved: Record<string, unknown> = {}, now = plainDay) => {
+    const clock = mock.clock(on, { now })
     const seen = engine(on, [], {}, saved)
     return { clock, seen }
   }
@@ -982,6 +983,34 @@ describe('Agent Tree', () => {
     await host.edit({ origin: { kind: 'composer' }, text: '', cursor: 0, start: 0, end: 0, inputText: 'h' })
     await ui.redraw()
     expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('an Weihnachten kommt das Logo mit Schmuck und Gruß, nach 3 s steht die Leiste', introOn, async ($, on) => {
+    const { clock } = await introStart($, on, {}, new Date(2026, 11, 24, 18).getTime())
+    await startSession($)
+    const ui = await $.ui.mount(pane(90))
+    await clock.advance(2600)
+    await ui.redraw()
+    const festive = await screen(ui)
+    expect(festive).toMatch(plantDots)
+    expect(festive).toMatch(/AGENT TREE/)
+    expect(festive).toMatch(/Frohe Weihnachten!/)
+    expect(festive).not.toMatch(/Sitzungsprotokoll/)
+    await clock.advance(600)
+    await ui.redraw()
+    expect(await screen(ui)).toMatch(/Sitzungsprotokoll/)
+    await ui.unmount()
+  })
+
+  test('an Neujahr in einer schmalen Leiste das normale Logo ohne Gruß', introOn, async ($, on) => {
+    const { clock } = await introStart($, on, {}, new Date(2026, 11, 31, 20).getTime())
+    await startSession($)
+    const ui = await $.ui.mount(pane(36, 40))
+    await clock.advance(1200)
+    await ui.redraw()
+    const shown = await screen(ui)
+    expect(shown).not.toMatch(/neues Jahr/)
     await ui.unmount()
   })
 
@@ -3550,7 +3579,7 @@ describe('Zweites /clear, Intro, Aussehen und Eingaben', () => {
   })
 
   test('nach /clear und einem Neuladen spielt das Intro nicht mitten in der Unterhaltung', { options: { language: 'de', intro: true, tips: false } }, async ($, on) => {
-    const clock = mock.clock(on, { now: 1_000_000 })
+    const clock = mock.clock(on, { now: new Date(2026, 5, 15, 12).getTime() })
     const seen = engine(on, [], { clearResets: true })
     await startSession($)
     const first = await $.ui.mount(pane(90))

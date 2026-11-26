@@ -32,6 +32,11 @@ export function drawIntro(ui: IntroUi, width: number, height: number | undefined
       <Text key="intro-title" bold color={LOGO_TITLE}>
         {frame.title || ' '}
       </Text>
+      {frame.greeting !== undefined ? (
+        <Text key="intro-greeting" bold>
+          {frame.greeting || ' '}
+        </Text>
+      ) : null}
       {frame.lines.map((line, i) => (
         <Text key={`intro-line:${i}`} color={look.palette.dim}>
           {line || ' '}

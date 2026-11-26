@@ -2,7 +2,7 @@
 import { isNewer } from './update.ts'
 import type { Lang } from './words.ts'
 
-export const VERSION = '0.7.20'
+export const VERSION = '0.7.21'
 export const SEEN_VERSION_KEY = 'seenVersion'
 export const NOTICE_LINES = 3
 
@@ -61,6 +61,10 @@ export const NEWS: Readonly<Record<string, Readonly<Record<Lang, readonly string
   '0.7.20': {
     de: ['Berater-Modell per Drop-down, Modelle mit 1M Kontext', 'Teile der Leiste ein- und ausblenden', 'Diese Karte bleibt, bis du OK drückst'],
     en: ['Advisor model drop-down, models with 1M context', 'Show or hide parts of the pane', 'This card stays until you press OK'],
+  },
+  '0.7.21': {
+    de: ['Festliches Start-Intro an Weihnachten, Neujahr, Halloween und Ostern'],
+    en: ['A festive start intro at Christmas, New Year, Halloween and Easter'],
   },
 }
 

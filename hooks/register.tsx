@@ -4,6 +4,8 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentTreeLook, AgentTreePart, AgentTreeReport, AgentTreeState } from '../types'
 import { INTRO_MS } from './logo.ts'
+import { HOLIDAY_MS, holidayAt, newYearOf } from './holiday.ts'
+import type { Holiday } from './holiday.ts'
 import { drawIntro } from './intro.tsx'
 import { NOTICE_GROW_MS, drawNotice } from './notice.tsx'
 import { SEEN_VERSION_KEY, VERSION, noticeFor } from './news.ts'
@@ -165,6 +167,8 @@ const cautioned: Set<string> = new Set()
 const questions: Map<number, string> = new Map()
 let introRun = 0
 let introShown: IntroInfo | undefined
+let introHoliday: Holiday | undefined
+let introYear = 0
 let introModelSetting: string | undefined
 let newsCard: UpdateNotice | undefined
 let noticeTicker: Timer | undefined
@@ -350,6 +354,8 @@ function startIntro($: EngineInterface, now: number): void {
   const run = ++introRun
   introOpenedAt = now
   introStartedAt = undefined
+  introHoliday = holidayAt(now)
+  introYear = newYearOf(now)
   introShown = undefined
   try {
     introTicker = $.clock.every(INTRO_FRAME_MS, () => {
@@ -363,7 +369,7 @@ function startIntro($: EngineInterface, now: number): void {
 async function introTick($: EngineInterface, run: number): Promise<void> {
   const now = await clock($)
   if (run !== introRun) return
-  const over = introStartedAt === undefined ? now - (introOpenedAt ?? now) >= INTRO_WAIT_MS : now - introStartedAt >= INTRO_MS
+  const over = introStartedAt === undefined ? now - (introOpenedAt ?? now) >= INTRO_WAIT_MS : now - introStartedAt >= (introHoliday ? HOLIDAY_MS : INTRO_MS)
   if (over) await endIntro($)
   else await update($, introBeat, n => (n + 1) % 1_000_000)
 }
@@ -1662,11 +1668,11 @@ export const register: Register = (on, options) => {
     const draft = carried
     const now = await clock($)
     const stored = await read($, tree)
-    const storedLook = await read($, appearance)
+    const lookInStore = await read($, appearance)
     await read($, introBeat)
     const tick = animate ? await read($, frame) : 0
     const s = draft ? freshTree(draft.tree, now) : stored
-    const look = draft ? draft.look : storedLook
+    const look = draft ? draft.look : lookInStore
     if (introTicker) {
       introStartedAt ??= now
       introShown ??= introInfo(s, wordsFor(lang), introModelSetting)
@@ -1677,7 +1683,7 @@ export const register: Register = (on, options) => {
         e.props.bodyColumns,
         e.props.placement === 'inline' ? Math.min(rows ?? INTRO_INLINE_ROWS, INTRO_INLINE_ROWS) : rows,
         now - introStartedAt,
-        { palette, lang, info: introShown },
+        { palette, lang, info: introShown, ...(introHoliday ? { holiday: introHoliday, year: introYear } : {}) },
         () => void endIntro($).catch(() => undefined),
       )
       if (intro) return intro

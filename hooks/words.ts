@@ -3,6 +3,7 @@ import type { AgentTreeCorrectionState, AgentTreeLogEntry, AgentTreeLogSource, A
 import type { LookRow } from './looks.ts'
 import { DEFAULT_LOOK, LOOK_OPTIONS } from './looks.ts'
 import { effortLabel, familyLabel, fmtDuration, fmtTokens, toolKind } from './model.ts'
+import type { Holiday } from './holiday.ts'
 
 export type Lang = 'de' | 'en'
 
@@ -156,6 +157,7 @@ export type Words = {
   introLimits: (limits: string) => string
   introPlaying: string
   introSkip: string
+  holidayGreeting: (holiday: Holiday, year: number) => string
   noticeUpdated: string
   noticeContinue: string
   correctionFrame: (text: string, tool: string) => string
@@ -413,6 +415,8 @@ export const WORDS: Record<Lang, Words> = {
     introLimits: limits => `Limits ${limits}`,
     introPlaying: 'Intro läuft',
     introSkip: 'überspringen',
+    holidayGreeting: (holiday, year) =>
+      holiday === 'christmas' ? 'Frohe Weihnachten!' : holiday === 'newyear' ? `Frohes neues Jahr ${year}!` : holiday === 'halloween' ? 'Fröhliches Halloween!' : 'Frohe Ostern!',
     noticeUpdated: 'wurde aktualisiert',
     noticeContinue: 'OK',
     correctionFrame: (text, tool) =>
@@ -678,6 +682,8 @@ export const WORDS: Record<Lang, Words> = {
     introLimits: limits => `limits ${limits}`,
     introPlaying: 'Intro playing',
     introSkip: 'skip',
+    holidayGreeting: (holiday, year) =>
+      holiday === 'christmas' ? 'Merry Christmas!' : holiday === 'newyear' ? `Happy New Year ${year}!` : holiday === 'halloween' ? 'Happy Halloween!' : 'Happy Easter!',
     noticeUpdated: 'was updated',
     noticeContinue: 'OK',
     correctionFrame: (text, tool) =>
